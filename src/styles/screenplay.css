@@ -18,7 +18,7 @@
   overflow-y: auto;
   overflow-x: auto;
   padding: 40px 20px;
-  background: #e8e8e8;
+  background: #f5f1e8;
 }
 
 .paginated-editor-wrapper {
@@ -39,9 +39,9 @@
 .paginated-editor-page {
   position: absolute;
   left: 0;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  border-radius: 2px;
+  background: #f5f1e8;
+  box-shadow: none;
+  border-radius: 0;
 }
 
 .paginated-editor-page-number {
@@ -105,10 +105,10 @@
   transform: translate(-50%, -50%);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 10px;
-  color: #999;
+  color: #c4b89e;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  background: #e8e8e8;
+  background: #f5f1e8;
   padding: 2px 8px;
   border-radius: 3px;
 }
@@ -137,10 +137,10 @@
   content: 'Manual Page Break';
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 10px;
-  color: #666;
+  color: #c4b89e;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  background: #d0d0d0;
+  background: #ebe5d8;
   padding: 2px 8px;
   border-radius: 3px;
 }
@@ -180,7 +180,7 @@
 /* Character Name - centered, standard screenplay format */
 .character {
   text-transform: uppercase;
-  margin-top: 2em;
+  margin-top: 1em;
   margin-bottom: 0;
   margin-left: auto;
   margin-right: auto;
@@ -328,7 +328,7 @@
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  background: #e8e8e8;
+  background: #f5f1e8;
 }
 
 .editor-container {
