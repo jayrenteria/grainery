@@ -1,0 +1,482 @@
+/* Screenplay Editor Styles */
+
+/* Page dimensions for US Letter (8.5 x 11 inches) */
+:root {
+  --page-width: 8.5in;
+  --page-height: 11in;
+  --page-margin-top: 1in;
+  --page-margin-bottom: 1in;
+  --page-margin-left: 1.5in;
+  --page-margin-right: 1in;
+  --page-content-height: calc(var(--page-height) - var(--page-margin-top) - var(--page-margin-bottom));
+  --page-gap: 40px;
+}
+
+/* Paginated Editor Container */
+.paginated-editor-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  padding: 40px 20px;
+  background: #e8e8e8;
+}
+
+.paginated-editor-wrapper {
+  position: relative;
+  margin: 0 auto;
+}
+
+/* Background paper pages */
+.paginated-editor-pages {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.paginated-editor-page {
+  position: absolute;
+  left: 0;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
+}
+
+.paginated-editor-page-number {
+  position: absolute;
+  top: 0.5in;
+  right: 0.75in;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12pt;
+  color: #333;
+}
+
+/* Editor content layer */
+.paginated-editor-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Main screenplay editor */
+.screenplay-editor {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12pt;
+  line-height: 1;
+  width: var(--page-width);
+  min-height: var(--page-height);
+  margin: 0 auto;
+  padding: var(--page-margin-top) var(--page-margin-right) var(--page-margin-bottom) var(--page-margin-left);
+  box-sizing: border-box;
+  position: relative;
+  background: transparent;
+}
+
+.screenplay-editor:focus {
+  outline: none;
+}
+
+/* Automatic page break decoration */
+.page-break-auto {
+  position: relative;
+  width: 100%;
+  height: var(--page-gap);
+  margin: 0;
+  pointer-events: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Account for the editor padding */
+  margin-left: calc(-1 * var(--page-margin-left));
+  margin-right: calc(-1 * var(--page-margin-right));
+  width: calc(100% + var(--page-margin-left) + var(--page-margin-right));
+  /* Add the bottom/top margin gap for the page break */
+  padding-top: var(--page-margin-bottom);
+  padding-bottom: var(--page-margin-top);
+  box-sizing: content-box;
+}
+
+.page-break-auto .page-break-label {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 10px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: #e8e8e8;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+
+/* Manual page break node */
+.page-break-manual {
+  position: relative;
+  width: 100%;
+  height: var(--page-gap);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Account for the editor padding */
+  margin-left: calc(-1 * var(--page-margin-left));
+  margin-right: calc(-1 * var(--page-margin-right));
+  width: calc(100% + var(--page-margin-left) + var(--page-margin-right));
+  /* Add the bottom/top margin gap for the page break */
+  padding-top: var(--page-margin-bottom);
+  padding-bottom: var(--page-margin-top);
+  box-sizing: content-box;
+  cursor: pointer;
+}
+
+.page-break-manual::before {
+  content: 'Manual Page Break';
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 10px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: #d0d0d0;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+
+.page-break-manual.ProseMirror-selectednode::before {
+  background: #007AFF;
+  color: white;
+}
+
+/* Scene Heading */
+.scene-heading {
+  text-transform: uppercase;
+  margin-top: 2em;
+  margin-bottom: 0;
+  font-weight: bold;
+}
+
+.scene-heading:first-child {
+  margin-top: 0;
+}
+
+/* Action */
+.action {
+  margin-top: 1em;
+  margin-bottom: 0;
+}
+
+.action:first-child {
+  margin-top: 0;
+}
+
+/* Action following scene heading has less spacing */
+.scene-heading + .action {
+  margin-top: 1em;
+}
+
+/* Character Name - centered, standard screenplay format */
+.character {
+  text-transform: uppercase;
+  margin-top: 2em;
+  margin-bottom: 0;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+.character-name {
+  /* Inherits uppercase from parent */
+}
+
+.character-extension {
+  text-transform: uppercase;
+  font-weight: normal;
+}
+
+/* Dialogue - centered, standard screenplay format */
+.dialogue {
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 4in;
+}
+
+/* Dialogue following character has minimal spacing */
+.character + .dialogue {
+  margin-top: 0;
+}
+
+/* Parenthetical - centered, narrower than dialogue */
+.parenthetical {
+  margin-top: 0;
+  margin-bottom: 0;
+  width: 5in;
+  max-width: 5in;
+  text-align: center;
+}
+
+.parenthetical:not(.is-empty)::before {
+  content: '(';
+}
+
+.parenthetical:not(.is-empty)::after {
+  content: ')';
+}
+
+/* Dialogue following parenthetical has minimal spacing */
+.parenthetical + .dialogue {
+  margin-top: 0;
+}
+
+/* Transition */
+.transition {
+  text-transform: uppercase;
+  text-align: right;
+  margin-top: 2em;
+  margin-bottom: 0;
+}
+
+/* Placeholder styling */
+.screenplay-editor p.is-editor-empty:first-child::before {
+  color: #adb5bd;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Empty block placeholders */
+.scene-heading.is-empty::before {
+  content: 'INT./EXT. LOCATION - TIME';
+  color: #adb5bd;
+  pointer-events: none;
+}
+
+.action.is-empty::before {
+  content: 'Action...';
+  color: #adb5bd;
+  pointer-events: none;
+}
+
+.character.is-empty::before {
+  content: 'CHARACTER NAME';
+  color: #adb5bd;
+  pointer-events: none;
+}
+
+.dialogue.is-empty::before {
+  content: 'Dialogue...';
+  color: #adb5bd;
+  pointer-events: none;
+}
+
+.parenthetical.is-empty::before {
+  content: '()';
+  color: #adb5bd;
+  pointer-events: none;
+}
+
+.transition.is-empty::before {
+  content: 'CUT TO:';
+  color: #adb5bd;
+  pointer-events: none;
+}
+
+/* Selection styling */
+.screenplay-editor ::selection {
+  background: #b4d5fe;
+}
+
+/* Element type indicator - minimal design */
+.element-type-indicator {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  z-index: 100;
+}
+
+.element-type-label {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+  color: #666;
+}
+
+.element-type-hint {
+  font-size: 10px;
+  color: #aaa;
+  margin-top: 2px;
+}
+
+/* App container - minimal Typora-like design */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #e8e8e8;
+}
+
+.editor-container {
+  flex: 1;
+  overflow-y: scroll;
+  overflow-x: auto;
+  /* Add padding for macOS traffic light buttons and page spacing */
+  padding: 28px 20px 40px 20px;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  padding: 0;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: #333;
+}
+
+.title-page-modal form {
+  padding: 20px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+  margin-bottom: 6px;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #007AFF;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+}
+
+.form-group textarea {
+  resize: vertical;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+}
+
+.form-row .form-group {
+  flex: 1;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+
+.modal-actions-right {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-primary,
+.btn-secondary {
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-primary {
+  background: #007AFF;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #0066DD;
+}
+
+.btn-secondary {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.btn-secondary:hover {
+  background: #e0e0e0;
+}
