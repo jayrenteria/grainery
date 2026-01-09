@@ -1,7 +1,12 @@
+#[cfg(target_os = "macos")]
+#[macro_use]
+extern crate objc;
+
 use std::fs;
 use std::path::Path;
-use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{Emitter, Manager};
+use tauri::menu::{
+    MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::{Emitter, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 
 mod pdf;
 
@@ -118,6 +123,45 @@ pub fn run() {
                     let _ = window.emit("menu-event", event_id);
                 }
             });
+
+            let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+                .title("Untitled")
+                .inner_size(800.0, 600.0);
+
+            // set transparent title bar only when building for macOS
+            #[cfg(target_os = "macos")]
+            let win_builder = win_builder.title_bar_style(TitleBarStyle::Transparent);
+
+            let window = win_builder.build().unwrap();
+
+            // set background color and title color only when building for macOS
+            #[cfg(target_os = "macos")]
+            {
+                use cocoa::appkit::{NSColor, NSWindow, NSWindowTitleVisibility};
+                use cocoa::base::{id, nil};
+                use cocoa::foundation::NSString;
+
+                let ns_window = window.ns_window().unwrap() as id;
+                unsafe {
+                    let bg_color = NSColor::colorWithRed_green_blue_alpha_(
+                        nil,
+                        245.0 / 255.0,
+                        241.0 / 255.0,
+                        232.0 / 255.0,
+                        1.0
+                    );
+                    ns_window.setBackgroundColor_(bg_color);
+                    
+                    // Use light appearance to get black title text
+                    let appearance_name = cocoa::foundation::NSString::alloc(nil)
+                        .init_str("NSAppearanceNameAqua");
+                    let appearance: id = msg_send![class!(NSAppearance), appearanceNamed: appearance_name];
+                    let () = msg_send![ns_window, setAppearance: appearance];
+                    
+                    // Ensure title is visible
+                    ns_window.setTitleVisibility_(NSWindowTitleVisibility::NSWindowTitleVisible);
+                }
+            }
 
             Ok(())
         })

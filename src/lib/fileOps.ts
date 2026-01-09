@@ -1,8 +1,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open, save, ask } from '@tauri-apps/plugin-dialog';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { ScreenplayDocument, TitlePageData } from './types';
 import type { JSONContent } from '@tiptap/react';
 import { exportToFountain } from './fountain';
+
+export async function updateWindowTitle(filename: string | null, isDirty: boolean = false): Promise<void> {
+  const title = (filename || 'Untitled') + (isDirty ? ' - Edited' : '');
+  await getCurrentWebviewWindow().setTitle(title);
+}
 
 const FILE_EXTENSION = 'screenplay';
 const APP_NAME = 'Screenwrite';

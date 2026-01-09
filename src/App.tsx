@@ -9,21 +9,50 @@ import {
   exportAsFountain,
   exportAsPdf,
   confirmUnsavedChanges,
+  updateWindowTitle,
 } from './lib/fileOps';
 import type { ScreenplayDocument, TitlePageData } from './lib/types';
 import type { JSONContent } from '@tiptap/react';
 import './styles/screenplay.css';
+
+const AUTO_SAVE_DELAY_MS = 30000;
 
 function App() {
   const [document, setDocument] = useState<ScreenplayDocument>(createNewDocument);
   const [isDirty, setIsDirty] = useState(false);
   const [showTitlePageEditor, setShowTitlePageEditor] = useState(false);
   const editorContentRef = useRef<JSONContent>(document.document);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const performAutoSave = useCallback(async () => {
+    if (!isDirty) return;
+    
+    try {
+      const savedDoc = await saveFile(document, editorContentRef.current);
+      if (savedDoc) {
+        setDocument(savedDoc);
+        setIsDirty(false);
+        await updateWindowTitle(savedDoc.meta.filename);
+      }
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+    }
+  }, [document, isDirty]);
 
   const handleEditorChange = useCallback((content: JSONContent) => {
     editorContentRef.current = content;
-    setIsDirty(true);
-  }, []);
+    if (!isDirty) {
+      setIsDirty(true);
+      updateWindowTitle(document.meta.filename, true);
+    }
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    autoSaveTimerRef.current = setTimeout(() => {
+      performAutoSave();
+    }, AUTO_SAVE_DELAY_MS);
+  }, [isDirty, document.meta.filename, performAutoSave]);
 
   const handleNew = useCallback(async () => {
     if (isDirty) {
@@ -32,6 +61,7 @@ function App() {
     }
     setDocument(createNewDocument());
     setIsDirty(false);
+    await updateWindowTitle(null);
   }, [isDirty]);
 
   const handleOpen = useCallback(async () => {
@@ -46,6 +76,7 @@ function App() {
         setDocument(doc);
         editorContentRef.current = doc.document;
         setIsDirty(false);
+        await updateWindowTitle(doc.meta.filename);
       }
     } catch (error) {
       console.error('Failed to open file:', error);
@@ -58,6 +89,7 @@ function App() {
       if (savedDoc) {
         setDocument(savedDoc);
         setIsDirty(false);
+        await updateWindowTitle(savedDoc.meta.filename);
       }
     } catch (error) {
       console.error('Failed to save file:', error);
@@ -70,6 +102,7 @@ function App() {
       if (savedDoc) {
         setDocument(savedDoc);
         setIsDirty(false);
+        await updateWindowTitle(savedDoc.meta.filename);
       }
     } catch (error) {
       console.error('Failed to save file:', error);
@@ -110,6 +143,15 @@ function App() {
       titlePage,
     }));
     setIsDirty(true);
+  }, []);
+
+  // Cleanup auto-save timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
   }, []);
 
   // Listen for native menu events
