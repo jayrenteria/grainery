@@ -1,7 +1,18 @@
-# Tauri + React + Typescript
+# Grainery
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+## WHY?
+The goal of this project is create a simple and minimalistic screenwriting application. I wanted something that just mostly got out of the way and lets me write, with some small but convenient features that make things like formatting easier.
 
-## Recommended IDE Setup
+## WHAT?
+Grainery is a play on grain (like film) and a granary (like a place to store grain/seeds). In that way, you can hopefully store ideas and pile them up until you dump a script out of it.
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+## HOW?
+Pop it open and just start writing.
+
+Some tips:
+
+Use the `tab` key to cycle through your elements. This works in a kind of "smart" loop, which looks like this:
+- Base loop: cycles between "Action", "Character", "Transition", and "Scene Heading"
+- Character sub-loop: cycles between "Character", "Paranthetical", and "Dialogue"
+
+You can also save your script at any time, and export it as a PDF or to a `.fountain` file if you want to take your script somewhere else.
