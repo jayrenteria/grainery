@@ -10,7 +10,7 @@ export async function updateWindowTitle(filename: string | null, isDirty: boolea
   await getCurrentWebviewWindow().setTitle(title);
 }
 
-const FILE_EXTENSION = 'screenplay';
+const FILE_EXTENSION = 'gwx';
 const APP_NAME = 'Screenwrite';
 const APP_VERSION = '0.1.0';
 
@@ -110,7 +110,7 @@ export async function saveFileAs(
         extensions: [FILE_EXTENSION],
       },
     ],
-    defaultPath: doc.meta.filename || 'untitled.screenplay',
+    defaultPath: doc.meta.filename || 'untitled.gwx',
   });
 
   if (!filePath) return null;

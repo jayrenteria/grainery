@@ -55,6 +55,7 @@ pub struct PdfGenerator {
     font: IndirectFontRef,
     y_position: f32,
     page_number: i32,
+    has_title_page: bool,
 }
 
 impl PdfGenerator {
@@ -78,6 +79,7 @@ impl PdfGenerator {
             font,
             y_position: PAGE_HEIGHT - MARGIN_TOP,
             page_number: 1,
+            has_title_page: false,
         })
     }
 
@@ -93,7 +95,11 @@ impl PdfGenerator {
         self.page_number += 1;
 
         // Add page number (top right)
-        self.write_page_number();
+        // Skip numbering on pages 1-2 when there's a title page (title page + first content page)
+        // Page numbering starts at "2." on the 3rd physical page
+        if !self.has_title_page || self.page_number > 2 {
+            self.write_page_number();
+        }
     }
 
     fn write_page_number(&self) {
@@ -101,7 +107,13 @@ impl PdfGenerator {
             .doc
             .get_page(self.current_page)
             .get_layer(self.current_layer);
-        let page_num = format!("{}.", self.page_number);
+        // When there's a title page, subtract 1 so 3rd physical page shows "2."
+        let display_number = if self.has_title_page {
+            self.page_number - 1
+        } else {
+            self.page_number
+        };
+        let page_num = format!("{}.", display_number);
 
         layer.use_text(
             &page_num,
@@ -187,6 +199,8 @@ impl PdfGenerator {
     }
 
     pub fn render_title_page(&mut self, title_page: &TitlePageData) {
+        self.has_title_page = true;
+        
         // Title page is vertically centered
         let mut lines_to_render: Vec<(String, bool)> = Vec::new(); // (text, is_title)
 
