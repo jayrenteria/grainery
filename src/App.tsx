@@ -25,8 +25,9 @@ function App() {
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const performAutoSave = useCallback(async () => {
-    if (!isDirty) return;
-    
+    console.log('performAutoSave', isDirty, showTitlePageEditor);
+    if (!isDirty || showTitlePageEditor) return;
+
     try {
       const savedDoc = await saveFile(document, editorContentRef.current);
       if (savedDoc) {
@@ -37,7 +38,7 @@ function App() {
     } catch (error) {
       console.error('Auto-save failed:', error);
     }
-  }, [document, isDirty]);
+  }, [document, isDirty, showTitlePageEditor]);
 
   const handleEditorChange = useCallback((content: JSONContent) => {
     editorContentRef.current = content;

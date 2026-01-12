@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    screenwrite_lib::run()
+    grainery_lib::run()
 }

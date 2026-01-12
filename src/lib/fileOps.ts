@@ -11,7 +11,7 @@ export async function updateWindowTitle(filename: string | null, isDirty: boolea
 }
 
 const FILE_EXTENSION = 'gwx';
-const APP_NAME = 'Screenwrite';
+const APP_NAME = 'Grainery';
 const APP_VERSION = '0.1.0';
 
 export function createNewDocument(): ScreenplayDocument {
@@ -34,7 +34,7 @@ export function createNewDocument(): ScreenplayDocument {
       type: 'doc',
       content: [
         {
-          type: 'action',
+          type: 'sceneHeading',
           content: [],
         },
       ],

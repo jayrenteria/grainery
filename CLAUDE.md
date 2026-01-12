@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Screenwrite - A minimal screenwriting application built with Tauri (Rust backend) and React/TypeScript frontend using TipTap editor.
+Grainery - A minimal screenwriting application built with Tauri (Rust backend) and React/TypeScript frontend using TipTap editor.
 
 ## Commands
 
