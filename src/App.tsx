@@ -8,6 +8,7 @@ import {
   saveFileAs,
   exportAsFountain,
   exportAsPdf,
+  exportAsFdx,
   confirmUnsavedChanges,
   updateWindowTitle,
 } from './lib/fileOps';
@@ -134,6 +135,18 @@ function App() {
     }
   }, [document.titlePage, document.meta.filename]);
 
+  const handleExportFdx = useCallback(async () => {
+    try {
+      await exportAsFdx(
+        editorContentRef.current,
+        document.titlePage,
+        document.meta.filename
+      );
+    } catch (error) {
+      console.error('Failed to export as Final Draft:', error);
+    }
+  }, [document.titlePage, document.meta.filename]);
+
   const handleEditTitlePage = useCallback(() => {
     setShowTitlePageEditor(true);
   }, []);
@@ -177,6 +190,9 @@ function App() {
         case 'export_pdf':
           handleExportPdf();
           break;
+        case 'export_fdx':
+          handleExportFdx();
+          break;
         case 'title_page':
           handleEditTitlePage();
           break;
@@ -186,7 +202,7 @@ function App() {
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [handleNew, handleOpen, handleSave, handleSaveAs, handleExportFountain, handleExportPdf, handleEditTitlePage]);
+  }, [handleNew, handleOpen, handleSave, handleSaveAs, handleExportFountain, handleExportPdf, handleExportFdx, handleEditTitlePage]);
 
   return (
     <div className="app-container">

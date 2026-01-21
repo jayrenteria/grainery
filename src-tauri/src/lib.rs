@@ -67,6 +67,8 @@ pub fn run() {
             let export_pdf_item = MenuItemBuilder::with_id("export_pdf", "Export as PDF...")
                 .accelerator("CmdOrCtrl+Shift+P")
                 .build(app)?;
+            let export_fdx_item = MenuItemBuilder::with_id("export_fdx", "Export to Final Draft...")
+                .build(app)?;
 
             let file_menu = SubmenuBuilder::new(app, "File")
                 .item(&new_item)
@@ -77,6 +79,7 @@ pub fn run() {
                 .separator()
                 .item(&export_fountain_item)
                 .item(&export_pdf_item)
+                .item(&export_fdx_item)
                 .separator()
                 .quit()
                 .build()?;

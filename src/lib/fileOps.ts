@@ -4,6 +4,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { ScreenplayDocument, TitlePageData } from './types';
 import type { JSONContent } from '@tiptap/react';
 import { exportToFountain } from './fountain';
+import { exportToFdx } from './fdx';
 
 export async function updateWindowTitle(filename: string | null, isDirty: boolean = false): Promise<void> {
   const title = (filename || 'Untitled') + (isDirty ? ' - Edited' : '');
@@ -201,6 +202,37 @@ export async function exportAsPdf(
     titlePageJson: titlePage ? JSON.stringify(titlePage) : null,
     outputPath: filePath,
     documentTitle: baseName,
+  });
+
+  return true;
+}
+
+export async function exportAsFdx(
+  editorContent: JSONContent,
+  titlePage: TitlePageData | null,
+  currentFilename: string | null
+): Promise<boolean> {
+  const baseName = currentFilename
+    ? currentFilename.replace(/\.[^.]+$/, '')
+    : 'untitled';
+
+  const filePath = await save({
+    filters: [
+      {
+        name: 'Final Draft',
+        extensions: ['fdx'],
+      },
+    ],
+    defaultPath: `${baseName}.fdx`,
+  });
+
+  if (!filePath) return false;
+
+  const fdxContent = exportToFdx(editorContent, titlePage);
+
+  await invoke('save_screenplay', {
+    path: filePath,
+    content: fdxContent,
   });
 
   return true;
