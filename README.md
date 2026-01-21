@@ -17,4 +17,4 @@ Use the `tab` key to cycle through your elements. This works in a kind of "smart
 
 There is a subtle box at the top of the screen that indicates the current element you are editing. There may also be some special instructions in there to experiment with. These are new and maybe a little janky, but I will update them as I can.
 
-You can also save your script at any time, and export it as a PDF or to a `.fountain` file if you want to take your script somewhere else.
+You can also save your script at any time, and export it as a PDF or to a `.fountain` or a `.fdx` file if you want to take your script somewhere else or export to Final Draft.
