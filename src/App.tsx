@@ -228,7 +228,11 @@ function App() {
         )}
 
         {showSettings && (
-          <SettingsModal onClose={() => setShowSettings(false)} />
+          <SettingsModal
+            onClose={() => setShowSettings(false)}
+            onOpenTitlePage={handleEditTitlePage}
+            titlePage={document.titlePage}
+          />
         )}
       </div>
     </ThemeProvider>

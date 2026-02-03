@@ -1,8 +1,13 @@
-import { createPortal } from 'react-dom';
+import { useState } from 'react';
 import { useTheme, THEMES, Theme } from '../../contexts/ThemeContext';
+import { Modal } from '../Modal';
+import { TitlePagePreview } from '../TitlePage';
+import type { TitlePageData } from '../../lib/types';
 
 interface SettingsModalProps {
   onClose: () => void;
+  onOpenTitlePage: () => void;
+  titlePage: TitlePageData | null;
 }
 
 function capitalizeTheme(theme: string): string {
@@ -30,16 +35,18 @@ function ThemeCard({ t, isSelected, onClick }: { t: Theme; isSelected: boolean; 
   );
 }
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
+export function SettingsModal({ onClose, onOpenTitlePage, titlePage }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
+  const [showPreview, setShowPreview] = useState(false);
 
-  const modal = (
-    <div data-theme={theme} className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div 
-        className="absolute inset-0 bg-black/40" 
-        onClick={onClose}
-      />
-      <div className="relative bg-base-100 rounded-lg shadow-xl w-[90%] max-w-md max-h-[80vh] overflow-y-auto p-6! flex gap-2 flex-col z-10">
+  const handleOpenTitlePage = () => {
+    onClose();
+    onOpenTitlePage();
+  };
+
+  return (
+    <>
+      <Modal onClose={onClose} className="w-[90%] max-w-4xl max-h-[80vh] overflow-y-auto gap-2">
         <h3 className="font-bold text-lg mb-6 text-base-content">Settings</h3>
         
         <div className="form-control">
@@ -60,6 +67,28 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
         <div className="divider" />
 
+        <div className="form-control">
+          <label className="label">
+            <span className="label-text text-base font-bold">Title Page</span>
+          </label>
+          <div className="flex gap-2 mt-2">
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={handleOpenTitlePage}
+            >
+              Edit Title Page
+            </button>
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={() => setShowPreview(true)}
+            >
+              Preview
+            </button>
+          </div>
+        </div>
+
+        <div className="divider" />
+
         <p className="text-sm text-base-content/60 italic">
           More settings coming soon...
         </p>
@@ -69,9 +98,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             Done
           </button>
         </div>
-      </div>
-    </div>
-  );
+      </Modal>
 
-  return createPortal(modal, document.body);
+      {showPreview && (
+        <TitlePagePreview
+          titlePage={titlePage}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
+    </>
+  );
 }
