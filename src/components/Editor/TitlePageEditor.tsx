@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { TitlePageData } from '../../lib/types';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface TitlePageEditorProps {
   titlePage: TitlePageData | null;
@@ -20,6 +21,7 @@ const EMPTY_TITLE_PAGE: TitlePageData = {
 };
 
 export function TitlePageEditor({ titlePage, onSave, onClose }: TitlePageEditorProps) {
+  const { theme } = useTheme();
   const [formData, setFormData] = useState<TitlePageData>(
     titlePage || EMPTY_TITLE_PAGE
   );
@@ -40,7 +42,6 @@ export function TitlePageEditor({ titlePage, onSave, onClose }: TitlePageEditorP
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Only save if at least title or author is filled
     if (formData.title.trim() || formData.author.trim()) {
       onSave(formData);
     } else {
@@ -55,19 +56,22 @@ export function TitlePageEditor({ titlePage, onSave, onClose }: TitlePageEditorP
   };
 
   const modal = (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content title-page-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Title Page</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
+    <div data-theme={theme} className="fixed inset-0 z-[9999] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-base-100 rounded-lg shadow-xl w-[90%] max-w-lg max-h-[80vh] overflow-y-auto p-6 flex flex-col z-10">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="font-bold text-lg text-base-content">Title Page</h3>
+          <button className="btn btn-sm btn-circle btn-ghost" onClick={onClose}>✕</button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="title">Title</label>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text font-semibold">Title</span>
+            </label>
             <input
-              id="title"
               type="text"
+              className="input input-bordered w-full"
               value={formData.title}
               onChange={(e) => handleChange('title', e.target.value)}
               placeholder="SCREENPLAY TITLE"
@@ -75,56 +79,66 @@ export function TitlePageEditor({ titlePage, onSave, onClose }: TitlePageEditorP
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="credit">Credit</label>
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text font-semibold">Credit</span>
+            </label>
             <input
-              id="credit"
               type="text"
+              className="input input-bordered w-full"
               value={formData.credit || ''}
               onChange={(e) => handleChange('credit', e.target.value)}
               placeholder="Written by"
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="author">Author</label>
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text font-semibold">Author</span>
+            </label>
             <input
-              id="author"
               type="text"
+              className="input input-bordered w-full"
               value={formData.author}
               onChange={(e) => handleChange('author', e.target.value)}
               placeholder="Author Name"
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="source">Source</label>
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text font-semibold">Source</span>
+            </label>
             <input
-              id="source"
               type="text"
+              className="input input-bordered w-full"
               value={formData.source || ''}
               onChange={(e) => handleChange('source', e.target.value)}
               placeholder="Based on..."
             />
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="draftDate">Draft Date</label>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text font-semibold">Draft Date</span>
+              </label>
               <input
-                id="draftDate"
                 type="text"
+                className="input input-bordered w-full"
                 value={formData.draftDate || ''}
                 onChange={(e) => handleChange('draftDate', e.target.value)}
                 placeholder="January 2025"
               />
             </div>
 
-            <div className="form-group">
-              <label htmlFor="copyright">Copyright</label>
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text font-semibold">Copyright</span>
+              </label>
               <input
-                id="copyright"
                 type="text"
+                className="input input-bordered w-full"
                 value={formData.copyright || ''}
                 onChange={(e) => handleChange('copyright', e.target.value)}
                 placeholder="© 2025"
@@ -132,10 +146,12 @@ export function TitlePageEditor({ titlePage, onSave, onClose }: TitlePageEditorP
             </div>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="contact">Contact</label>
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text font-semibold">Contact</span>
+            </label>
             <textarea
-              id="contact"
+              className="textarea textarea-bordered w-full"
               value={formData.contact || ''}
               onChange={(e) => handleChange('contact', e.target.value)}
               placeholder="Contact information..."
@@ -143,10 +159,12 @@ export function TitlePageEditor({ titlePage, onSave, onClose }: TitlePageEditorP
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="notes">Notes</label>
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text font-semibold">Notes</span>
+            </label>
             <textarea
-              id="notes"
+              className="textarea textarea-bordered w-full"
               value={formData.notes || ''}
               onChange={(e) => handleChange('notes', e.target.value)}
               placeholder="Additional notes..."
@@ -154,15 +172,17 @@ export function TitlePageEditor({ titlePage, onSave, onClose }: TitlePageEditorP
             />
           </div>
 
-          <div className="modal-actions">
-            <button type="button" className="btn-secondary" onClick={handleClear}>
+          <div className="divider my-2" />
+
+          <div className="flex justify-between">
+            <button type="button" className="btn btn-error btn-outline" onClick={handleClear}>
               Clear Title Page
             </button>
-            <div className="modal-actions-right">
-              <button type="button" className="btn-secondary" onClick={onClose}>
+            <div className="flex gap-2">
+              <button type="button" className="btn btn-ghost" onClick={onClose}>
                 Cancel
               </button>
-              <button type="submit" className="btn-primary">
+              <button type="submit" className="btn btn-primary">
                 Save
               </button>
             </div>
