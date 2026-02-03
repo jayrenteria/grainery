@@ -1,22 +1,14 @@
-/* Global reset and base styles - minimal design */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+@reference "./tailwind.css";
 
+/* Global reset and base styles - minimal design */
 html, body {
-  height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  @apply h-full font-sans antialiased;
 }
 
 body {
-  background: #fafafa;
-  overflow: hidden;
+  @apply bg-base-200 text-base-content overflow-hidden;
 }
 
 #root {
-  height: 100%;
+  @apply h-full;
 }

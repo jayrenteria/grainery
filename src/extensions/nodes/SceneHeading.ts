@@ -1,4 +1,4 @@
-import { Node, mergeAttributes, textblockTypeInputRule } from '@tiptap/core';
+import { Node, mergeAttributes, InputRule } from '@tiptap/core';
 
 export interface SceneHeadingOptions {
   HTMLAttributes: Record<string, unknown>;
@@ -70,9 +70,17 @@ export const SceneHeading = Node.create<SceneHeadingOptions>({
 
   addInputRules() {
     return [
-      textblockTypeInputRule({
+      new InputRule({
         find: SCENE_HEADING_REGEX,
-        type: this.type,
+        handler: ({ state, range, match }) => {
+          const { tr } = state;
+          const start = range.from;
+          const end = range.to;
+          const text = match[1] + ' ';
+
+          tr.setBlockType(start, end, this.type);
+          tr.insertText(text, start, end);
+        },
       }),
     ];
   },

@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ScreenplayEditor, TitlePageEditor } from './components/Editor';
+import { SettingsModal } from './components/Settings';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { listen } from '@tauri-apps/api/event';
 import {
   createNewDocument,
@@ -22,6 +24,7 @@ function App() {
   const [document, setDocument] = useState<ScreenplayDocument>(createNewDocument);
   const [isDirty, setIsDirty] = useState(false);
   const [showTitlePageEditor, setShowTitlePageEditor] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const editorContentRef = useRef<JSONContent>(document.document);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -196,6 +199,9 @@ function App() {
         case 'title_page':
           handleEditTitlePage();
           break;
+        case 'settings':
+          setShowSettings(true);
+          break;
       }
     });
 
@@ -205,21 +211,27 @@ function App() {
   }, [handleNew, handleOpen, handleSave, handleSaveAs, handleExportFountain, handleExportPdf, handleExportFdx, handleEditTitlePage]);
 
   return (
-    <div className="app-container">
-      <ScreenplayEditor
-        key={document.meta.id}
-        initialContent={document.document}
-        onChange={handleEditorChange}
-      />
-
-      {showTitlePageEditor && (
-        <TitlePageEditor
-          titlePage={document.titlePage}
-          onSave={handleSaveTitlePage}
-          onClose={() => setShowTitlePageEditor(false)}
+    <ThemeProvider>
+      <div className="app-container">
+        <ScreenplayEditor
+          key={document.meta.id}
+          initialContent={document.document}
+          onChange={handleEditorChange}
         />
-      )}
-    </div>
+
+        {showTitlePageEditor && (
+          <TitlePageEditor
+            titlePage={document.titlePage}
+            onSave={handleSaveTitlePage}
+            onClose={() => setShowTitlePageEditor(false)}
+          />
+        )}
+
+        {showSettings && (
+          <SettingsModal onClose={() => setShowSettings(false)} />
+        )}
+      </div>
+    </ThemeProvider>
   );
 }
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { TitlePageData } from '../../lib/types';
 
 interface TitlePageEditorProps {
@@ -53,7 +54,7 @@ export function TitlePageEditor({ titlePage, onSave, onClose }: TitlePageEditorP
     onClose();
   };
 
-  return (
+  const modal = (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content title-page-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
@@ -170,4 +171,6 @@ export function TitlePageEditor({ titlePage, onSave, onClose }: TitlePageEditorP
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }

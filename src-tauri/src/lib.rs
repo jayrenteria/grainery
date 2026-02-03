@@ -80,8 +80,6 @@ pub fn run() {
                 .item(&export_fountain_item)
                 .item(&export_pdf_item)
                 .item(&export_fdx_item)
-                .separator()
-                .quit()
                 .build()?;
 
             // Edit menu with standard items
@@ -104,6 +102,25 @@ pub fn run() {
                 .item(&title_page_item)
                 .build()?;
 
+            // Grainery (app) menu with Settings
+            let settings_item = MenuItemBuilder::with_id("settings", "Settings...")
+                .accelerator("CmdOrCtrl+,")
+                .build(app)?;
+
+            let app_menu = SubmenuBuilder::new(app, "Grainery")
+                .about(None)
+                .separator()
+                .item(&settings_item)
+                .separator()
+                .services()
+                .separator()
+                .hide()
+                .hide_others()
+                .show_all()
+                .separator()
+                .quit()
+                .build()?;
+
             // Window menu
             let window_menu = SubmenuBuilder::new(app, "Window")
                 .minimize()
@@ -113,7 +130,7 @@ pub fn run() {
                 .build()?;
 
             let menu = MenuBuilder::new(app)
-                .items(&[&file_menu, &edit_menu, &format_menu, &window_menu])
+                .items(&[&app_menu, &file_menu, &edit_menu, &format_menu, &window_menu])
                 .build()?;
 
             app.set_menu(menu)?;

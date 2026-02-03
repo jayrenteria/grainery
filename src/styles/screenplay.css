@@ -1,3 +1,5 @@
+@reference "./tailwind.css";
+
 /* Screenplay Editor Styles */
 
 /* Page dimensions for US Letter (8.5 x 11 inches) */
@@ -14,34 +16,20 @@
 
 /* Paginated Editor Container */
 .paginated-editor-container {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
-  padding: 40px 20px;
-  background: #f5f1e8;
+  @apply flex-1 overflow-y-auto overflow-x-auto p-10 bg-base-100;
 }
 
 .paginated-editor-wrapper {
-  position: relative;
-  margin: 0 auto;
+  @apply relative mx-auto;
 }
 
 /* Background paper pages */
 .paginated-editor-pages {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  pointer-events: none;
-  z-index: 0;
+  @apply absolute top-0 left-0 right-0 pointer-events-none z-0;
 }
 
 .paginated-editor-page {
-  position: absolute;
-  left: 0;
-  background: #f5f1e8;
-  box-shadow: none;
-  border-radius: 0;
+  @apply absolute left-0 bg-base-100 rounded-none;
 }
 
 .paginated-editor-page-number {
@@ -50,13 +38,12 @@
   right: 0.75in;
   font-family: 'Courier New', Courier, monospace;
   font-size: 12pt;
-  color: #333;
+  @apply text-base-content;
 }
 
 /* Editor content layer */
 .paginated-editor-content {
-  position: relative;
-  z-index: 1;
+  @apply relative z-[1];
 }
 
 /* Main screenplay editor */
@@ -70,11 +57,11 @@
   padding: var(--page-margin-top) var(--page-margin-right) var(--page-margin-bottom) var(--page-margin-left);
   box-sizing: border-box;
   position: relative;
-  background: transparent;
+  @apply bg-transparent text-base-content;
 }
 
 .screenplay-editor:focus {
-  outline: none;
+  @apply outline-none;
 }
 
 /* Automatic page break decoration */
@@ -88,29 +75,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Account for the editor padding */
   margin-left: calc(-1 * var(--page-margin-left));
   margin-right: calc(-1 * var(--page-margin-right));
   width: calc(100% + var(--page-margin-left) + var(--page-margin-right));
-  /* Add the bottom/top margin gap for the page break */
   padding-top: var(--page-margin-bottom);
   padding-bottom: var(--page-margin-top);
   box-sizing: content-box;
 }
 
 .page-break-auto .page-break-label {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 10px;
-  color: #c4b89e;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  background: #f5f1e8;
-  padding: 2px 8px;
-  border-radius: 3px;
+  @apply absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2;
+  @apply font-sans text-[10px] text-base-content/50 uppercase tracking-wide;
+  @apply bg-base-200 px-2 py-0.5 rounded;
 }
 
 /* Manual page break node */
@@ -122,11 +98,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Account for the editor padding */
   margin-left: calc(-1 * var(--page-margin-left));
   margin-right: calc(-1 * var(--page-margin-right));
   width: calc(100% + var(--page-margin-left) + var(--page-margin-right));
-  /* Add the bottom/top margin gap for the page break */
   padding-top: var(--page-margin-bottom);
   padding-bottom: var(--page-margin-top);
   box-sizing: content-box;
@@ -135,27 +109,19 @@
 
 .page-break-manual::before {
   content: 'Manual Page Break';
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 10px;
-  color: #c4b89e;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  background: #ebe5d8;
-  padding: 2px 8px;
-  border-radius: 3px;
+  @apply font-sans text-[10px] text-base-content/50 uppercase tracking-wide;
+  @apply bg-base-300 px-2 py-0.5 rounded;
 }
 
 .page-break-manual.ProseMirror-selectednode::before {
-  background: #007AFF;
-  color: white;
+  @apply bg-primary text-primary-content;
 }
 
 /* Scene Heading */
 .scene-heading {
-  text-transform: uppercase;
+  @apply uppercase font-bold;
   margin-top: 2em;
   margin-bottom: 0;
-  font-weight: bold;
 }
 
 .scene-heading:first-child {
@@ -172,51 +138,40 @@
   margin-top: 0;
 }
 
-/* Action following scene heading has less spacing */
 .scene-heading + .action {
   margin-top: 1em;
 }
 
-/* Character Name - centered, standard screenplay format */
+/* Character Name */
 .character {
-  text-transform: uppercase;
+  @apply uppercase text-center mx-auto;
   margin-top: 1em;
   margin-bottom: 0;
-  margin-left: auto;
-  margin-right: auto;
-  text-align: center;
-}
-
-.character-name {
-  /* Inherits uppercase from parent */
 }
 
 .character-extension {
-  text-transform: uppercase;
-  font-weight: normal;
+  @apply uppercase font-normal;
 }
 
-/* Dialogue - centered, standard screenplay format */
+/* Dialogue */
 .dialogue {
+  @apply mx-auto;
   margin-top: 0;
   margin-bottom: 0;
-  margin-left: auto;
-  margin-right: auto;
   max-width: 4in;
 }
 
-/* Dialogue following character has minimal spacing */
 .character + .dialogue {
   margin-top: 0;
 }
 
-/* Parenthetical - centered, narrower than dialogue */
+/* Parenthetical */
 .parenthetical {
+  @apply text-center;
   margin-top: 0;
   margin-bottom: 0;
   width: 5in;
   max-width: 5in;
-  text-align: center;
 }
 
 .parenthetical:not(.is-empty)::before {
@@ -227,22 +182,20 @@
   content: ')';
 }
 
-/* Dialogue following parenthetical has minimal spacing */
 .parenthetical + .dialogue {
   margin-top: 0;
 }
 
 /* Transition */
 .transition {
-  text-transform: uppercase;
-  text-align: right;
+  @apply uppercase text-right;
   margin-top: 2em;
   margin-bottom: 0;
 }
 
 /* Placeholder styling */
 .screenplay-editor p.is-editor-empty:first-child::before {
-  color: #adb5bd;
+  @apply text-base-content/40;
   content: attr(data-placeholder);
   float: left;
   height: 0;
@@ -252,231 +205,141 @@
 /* Empty block placeholders */
 .scene-heading.is-empty::before {
   content: 'INT./EXT. LOCATION - TIME';
-  color: #adb5bd;
+  @apply text-base-content/40;
   pointer-events: none;
 }
 
 .action.is-empty::before {
   content: 'Action...';
-  color: #adb5bd;
+  @apply text-base-content/40;
   pointer-events: none;
 }
 
 .character.is-empty::before {
   content: 'CHARACTER NAME';
-  color: #adb5bd;
+  @apply text-base-content/40;
   pointer-events: none;
 }
 
 .dialogue.is-empty::before {
   content: 'Dialogue...';
-  color: #adb5bd;
+  @apply text-base-content/40;
   pointer-events: none;
 }
 
 .parenthetical.is-empty::before {
   content: '()';
-  color: #adb5bd;
+  @apply text-base-content/40;
   pointer-events: none;
 }
 
 .transition.is-empty::before {
   content: 'CUT TO:';
-  color: #adb5bd;
+  @apply text-base-content/40;
   pointer-events: none;
 }
 
 /* Selection styling */
 .screenplay-editor ::selection {
-  background: #b4d5fe;
+  @apply bg-primary/30;
 }
 
-/* Element type indicator - minimal design */
+/* Element type indicator */
 .element-type-indicator {
-  position: fixed;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(8px);
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 11px;
-  color: #888;
-  text-align: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  z-index: 100;
+  @apply fixed top-4 left-1/2 -translate-x-1/2;
+  @apply bg-base-100/90 backdrop-blur-sm rounded-md px-3 py-2;
+  @apply font-sans text-[11px] text-base-content/60 text-center;
+  @apply shadow-sm z-[100];
 }
 
 .element-type-label {
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 500;
-  color: #666;
+  @apply uppercase tracking-wide font-medium text-base-content/80;
 }
 
 .element-type-hint {
-  font-size: 10px;
-  color: #aaa;
-  margin-top: 2px;
+  @apply text-[10px] text-base-content/50 mt-0.5;
 }
 
-/* App container - minimal Typora-like design */
+/* App container */
 .app-container {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
-  background: #f5f1e8;
+  @apply flex flex-col h-screen overflow-hidden bg-base-200;
 }
 
 .editor-container {
-  flex: 1;
-  overflow-y: scroll;
-  overflow-x: auto;
-  /* Add padding for macOS traffic light buttons and page spacing */
+  @apply flex-1 overflow-y-scroll overflow-x-auto;
   padding: 28px 20px 40px 20px;
 }
 
-/* Modal Styles */
+/* Title Page Modal Styles */
 .modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
+  @apply fixed inset-0 bg-black/40 flex items-center justify-center z-[9999];
 }
 
 .modal-content {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  max-width: 500px;
-  width: 90%;
-  max-height: 90vh;
-  overflow-y: auto;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  @apply bg-base-100 text-base-content rounded-lg shadow-xl;
+  @apply max-w-[500px] w-[90%] max-h-[90vh] overflow-y-auto;
+  @apply font-sans;
 }
 
 .modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid #eee;
+  @apply flex items-center justify-between p-4 border-b border-base-300;
 }
 
 .modal-header h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+  @apply m-0 text-lg font-semibold;
 }
 
 .modal-close {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: #999;
-  padding: 0;
-  line-height: 1;
+  @apply bg-transparent border-none text-2xl cursor-pointer text-base-content/50 p-0 leading-none;
 }
 
 .modal-close:hover {
-  color: #333;
+  @apply text-base-content;
 }
 
 .title-page-modal form {
-  padding: 20px;
+  @apply p-5;
 }
 
 .form-group {
-  margin-bottom: 16px;
+  @apply mb-4;
 }
 
 .form-group label {
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-  color: #555;
-  margin-bottom: 6px;
+  @apply block text-sm font-medium text-base-content/70 mb-1.5;
 }
 
 .form-group input,
 .form-group textarea {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 14px;
-  font-family: inherit;
-  box-sizing: border-box;
-}
-
-.form-group input:focus,
-.form-group textarea:focus {
-  outline: none;
-  border-color: #007AFF;
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+  @apply w-full px-3 py-2.5 border border-base-300 rounded-md text-sm;
+  @apply bg-base-100 text-base-content;
+  @apply focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20;
 }
 
 .form-group textarea {
-  resize: vertical;
+  @apply resize-y;
 }
 
 .form-row {
-  display: flex;
-  gap: 16px;
+  @apply flex gap-4;
 }
 
 .form-row .form-group {
-  flex: 1;
+  @apply flex-1;
 }
 
 .modal-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid #eee;
+  @apply flex justify-between items-center mt-6 pt-4 border-t border-base-300;
 }
 
 .modal-actions-right {
-  display: flex;
-  gap: 8px;
-}
-
-.btn-primary,
-.btn-secondary {
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
+  @apply flex gap-2;
 }
 
 .btn-primary {
-  background: #007AFF;
-  color: white;
-}
-
-.btn-primary:hover {
-  background: #0066DD;
+  @apply btn btn-primary;
 }
 
 .btn-secondary {
-  background: #f0f0f0;
-  color: #333;
-}
-
-.btn-secondary:hover {
-  background: #e0e0e0;
+  @apply btn btn-ghost;
 }
