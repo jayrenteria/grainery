@@ -260,6 +260,16 @@
   @apply text-[10px] text-base-content/50 mt-0.5;
 }
 
+.plugin-status-badges {
+  @apply fixed right-4 bottom-3 z-[90] flex flex-col items-end gap-1 pointer-events-none;
+}
+
+.plugin-status-badge {
+  @apply rounded-sm bg-base-100/70 backdrop-blur-sm px-2 py-1;
+  @apply font-sans text-[10px] text-base-content/60 tracking-wide;
+  @apply shadow-sm border border-base-300/40;
+}
+
 /* App container */
 .app-container {
   @apply flex flex-col h-screen overflow-hidden bg-base-200;

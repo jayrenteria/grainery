@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "com.grainery.wordcount",
+  "name": "Word Count Utilities",
+  "version": "1.0.0",
+  "description": "Adds a word-count command and plain-text export.",
+  "engine": {
+    "grainery": ">=0.1.0",
+    "pluginApi": "^1.0.0"
+  },
+  "entry": "dist/main.js",
+  "permissions": [
+    "document:read",
+    "editor:commands",
+    "export:register"
+  ],
+  "optionalPermissions": [
+    "network:https"
+  ],
+  "networkAllowlist": [
+    "example.com"
+  ],
+  "signature": {
+    "keyId": "main-2026",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "sig": "PLACEHOLDER"
+  }
+}

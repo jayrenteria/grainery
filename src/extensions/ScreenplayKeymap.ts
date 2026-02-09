@@ -1,6 +1,8 @@
 import { Extension } from '@tiptap/core';
+import type { Editor } from '@tiptap/core';
 import type { ResolvedPos } from '@tiptap/pm/model';
 import { ELEMENT_CYCLE, type ScreenplayElementType } from '../lib/types';
+import type { ElementLoopContext } from '../plugins';
 
 // Dialogue block cycles only between dialogue and parenthetical
 const DIALOGUE_BLOCK_CYCLE: ScreenplayElementType[] = ['dialogue', 'parenthetical'];
@@ -12,6 +14,10 @@ const NON_DIALOGUE_CYCLE: ScreenplayElementType[] = [
   'character',
   'transition',
 ];
+
+export interface ScreenplayKeymapOptions {
+  resolveElementLoop?: (context: ElementLoopContext) => ScreenplayElementType | null;
+}
 
 function getPreviousNodeType($from: ResolvedPos): string | null {
   const doc = $from.doc;
@@ -38,7 +44,7 @@ function getNextElementType(currentType: string, prevNodeType: string | null): S
     // If on any other element after character, can enter dialogue block
     return 'dialogue';
   }
-  
+
   // All other elements use non-dialogue cycle (excludes dialogue/parenthetical)
   const index = NON_DIALOGUE_CYCLE.indexOf(currentType as ScreenplayElementType);
   if (index === -1) return 'action';
@@ -51,46 +57,132 @@ function getPreviousElementType(currentType: string, prevNodeType: string | null
     const index = DIALOGUE_BLOCK_CYCLE.indexOf(currentType as ScreenplayElementType);
     return DIALOGUE_BLOCK_CYCLE[(index - 1 + DIALOGUE_BLOCK_CYCLE.length) % DIALOGUE_BLOCK_CYCLE.length];
   }
-  
+
   // Dialogue going backwards should go to character (back out of dialogue block)
   if (isInDialogueBlock(currentType)) {
     return 'character';
   }
-  
+
   // All other elements use non-dialogue cycle (excludes dialogue/parenthetical)
   const index = NON_DIALOGUE_CYCLE.indexOf(currentType as ScreenplayElementType);
   if (index === -1) return 'action';
   return NON_DIALOGUE_CYCLE[(index - 1 + NON_DIALOGUE_CYCLE.length) % NON_DIALOGUE_CYCLE.length];
 }
 
-export const ScreenplayKeymap = Extension.create({
+function isScreenplayElementType(value: string): value is ScreenplayElementType {
+  return ELEMENT_CYCLE.includes(value as ScreenplayElementType);
+}
+
+function resolveFromPlugins(
+  resolver: ((context: ElementLoopContext) => ScreenplayElementType | null) | undefined,
+  context: ElementLoopContext
+): ScreenplayElementType | null {
+  if (!resolver) {
+    return null;
+  }
+
+  try {
+    return resolver(context);
+  } catch (error) {
+    console.error('[ScreenplayKeymap] Plugin loop resolver failed', error);
+    return null;
+  }
+}
+
+function insertNewNodeOfType(editor: Editor, nextType: ScreenplayElementType): boolean {
+  const { $from } = editor.state.selection;
+  const endPos = $from.end();
+
+  return editor.chain().insertContentAt(endPos + 1, { type: nextType }).focus().run();
+}
+
+export const ScreenplayKeymap = Extension.create<ScreenplayKeymapOptions>({
   name: 'screenplayKeymap',
-  
+
   priority: 1000,
+
+  addOptions() {
+    return {
+      resolveElementLoop: undefined,
+    };
+  },
 
   addKeyboardShortcuts() {
     return {
       Tab: ({ editor }) => {
         const { $from } = editor.state.selection;
         const currentNode = $from.parent;
+        const currentType = currentNode.type.name;
+
+        if (!isScreenplayElementType(currentType)) {
+          return false;
+        }
+
         const prevNodeType = getPreviousNodeType($from);
-        const nextType = getNextElementType(currentNode.type.name, prevNodeType);
+        const pluginType = resolveFromPlugins(this.options.resolveElementLoop, {
+          event: 'tab',
+          currentType,
+          previousType: prevNodeType,
+          isCurrentEmpty: currentNode.textContent.trim().length === 0,
+        });
+
+        if (pluginType) {
+          return editor.commands.setNode(pluginType);
+        }
+
+        const nextType = getNextElementType(currentType, prevNodeType);
         return editor.commands.setNode(nextType);
       },
       'Shift-Tab': ({ editor }) => {
         const { $from } = editor.state.selection;
         const currentNode = $from.parent;
+        const currentType = currentNode.type.name;
+
+        if (!isScreenplayElementType(currentType)) {
+          return false;
+        }
+
         const prevNodeType = getPreviousNodeType($from);
-        const prevType = getPreviousElementType(currentNode.type.name, prevNodeType);
+        const pluginType = resolveFromPlugins(this.options.resolveElementLoop, {
+          event: 'shift-tab',
+          currentType,
+          previousType: prevNodeType,
+          isCurrentEmpty: currentNode.textContent.trim().length === 0,
+        });
+
+        if (pluginType) {
+          return editor.commands.setNode(pluginType);
+        }
+
+        const prevType = getPreviousElementType(currentType, prevNodeType);
         return editor.commands.setNode(prevType);
       },
       // Escape returns to Action element
       Escape: ({ editor }) => {
         const { $from } = editor.state.selection;
-        const currentType = $from.parent.type.name;
-        if (currentType !== 'action' && ELEMENT_CYCLE.includes(currentType as ScreenplayElementType)) {
+        const currentNode = $from.parent;
+        const currentType = currentNode.type.name;
+        const prevNodeType = getPreviousNodeType($from);
+
+        if (!isScreenplayElementType(currentType)) {
+          return false;
+        }
+
+        const pluginType = resolveFromPlugins(this.options.resolveElementLoop, {
+          event: 'escape',
+          currentType,
+          previousType: prevNodeType,
+          isCurrentEmpty: currentNode.textContent.trim().length === 0,
+        });
+
+        if (pluginType) {
+          return editor.commands.setNode(pluginType);
+        }
+
+        if (currentType !== 'action') {
           return editor.commands.setNode('action');
         }
+
         return false;
       },
       Enter: ({ editor }) => {
@@ -99,8 +191,20 @@ export const ScreenplayKeymap = Extension.create({
         const currentType = currentNode.type.name;
 
         // Only handle special cases for screenplay elements
-        if (!ELEMENT_CYCLE.includes(currentType as ScreenplayElementType)) {
+        if (!isScreenplayElementType(currentType)) {
           return false;
+        }
+
+        const prevNodeType = getPreviousNodeType($from);
+        const pluginType = resolveFromPlugins(this.options.resolveElementLoop, {
+          event: 'enter',
+          currentType,
+          previousType: prevNodeType,
+          isCurrentEmpty: currentNode.textContent.trim().length === 0,
+        });
+
+        if (pluginType) {
+          return insertNewNodeOfType(editor, pluginType);
         }
 
         // Smart enter behavior based on current element
@@ -117,7 +221,7 @@ export const ScreenplayKeymap = Extension.create({
             nextType = 'action';
             break;
           case 'parenthetical':
-            // Exit dialogue block, go to action
+            // Exit dialogue block, go to dialogue
             nextType = 'dialogue';
             break;
           case 'transition':
@@ -129,15 +233,8 @@ export const ScreenplayKeymap = Extension.create({
             break;
         }
 
-        // Insert a new block after the current one using insertContentAt
-        const endPos = $from.end();
-        
-        return editor.chain()
-          .insertContentAt(endPos + 1, { type: nextType })
-          .focus()
-          .run();
+        return insertNewNodeOfType(editor, nextType);
       },
-
     };
   },
 });
