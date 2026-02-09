@@ -6,5 +6,10 @@ This plugin demonstrates the Grainery plugin SDK surface:
 - `registerCommand`
 - `registerDocumentTransform`
 - `registerExporter`
+- `registerStatusBadge`
+
+Runtime behavior:
+
+- Adds a subtle bottom-right `Wordcount: X` status badge
 
 Package this directory as a `.grainery-plugin.zip` with `grainery-plugin.manifest.json` at the root to install via Settings -> Plugins -> Install from file.

@@ -17,6 +17,15 @@ import type {
   PluginManifest,
   StatusBadge,
   StatusBadgeContext,
+  UIControlDefinition,
+  UIControlStateContext,
+  UIControlTriggerResult,
+  UIEvaluateResponse,
+  UIPanelActionContext,
+  UIPanelActionResult,
+  UIPanelContent,
+  UIPanelDefinition,
+  UIPanelStateContext,
 } from './types';
 
 const commandHandlers = new Map<string, PluginCommand['handler']>();
@@ -24,6 +33,24 @@ const transformHandlers = new Map<string, DocumentTransform['handler']>();
 const exporterHandlers = new Map<string, Exporter['handler']>();
 const importerHandlers = new Map<string, Importer['handler']>();
 const statusBadgeHandlers = new Map<string, StatusBadge['handler']>();
+const uiControlTriggerHandlers = new Map<
+  string,
+  NonNullable<UIControlDefinition['onTrigger']>
+>();
+const uiControlVisibleHandlers = new Map<
+  string,
+  NonNullable<UIControlDefinition['isVisible']>
+>();
+const uiControlDisabledHandlers = new Map<
+  string,
+  NonNullable<UIControlDefinition['isDisabled']>
+>();
+const uiControlActiveHandlers = new Map<
+  string,
+  NonNullable<UIControlDefinition['isActive']>
+>();
+const uiPanelActionHandlers = new Map<string, NonNullable<UIPanelDefinition['onAction']>>();
+const uiPanelRenderHandlers = new Map<string, NonNullable<UIPanelDefinition['onRender']>>();
 
 const pendingHostRequests = new Map<
   string,
@@ -162,6 +189,64 @@ function createPluginApi(): PluginApi {
         },
       });
     },
+    registerUIControl(control) {
+      throwIfInvalidPluginId();
+
+      if (control.onTrigger) {
+        uiControlTriggerHandlers.set(control.id, control.onTrigger);
+      }
+      if (control.isVisible) {
+        uiControlVisibleHandlers.set(control.id, control.isVisible);
+      }
+      if (control.isDisabled) {
+        uiControlDisabledHandlers.set(control.id, control.isDisabled);
+      }
+      if (control.isActive) {
+        uiControlActiveHandlers.set(control.id, control.isActive);
+      }
+
+      postWorkerMessage({
+        type: 'worker:register-ui-control',
+        pluginId: currentPluginId,
+        control: {
+          id: control.id,
+          mount: control.mount,
+          kind: control.kind,
+          label: control.label,
+          icon: control.icon,
+          priority: control.priority,
+          tooltip: control.tooltip,
+          group: control.group,
+          hotkeyHint: control.hotkeyHint,
+          action: control.action,
+        },
+      });
+    },
+    registerUIPanel(panel) {
+      throwIfInvalidPluginId();
+
+      if (panel.onAction) {
+        uiPanelActionHandlers.set(panel.id, panel.onAction);
+      }
+      if (panel.onRender) {
+        uiPanelRenderHandlers.set(panel.id, panel.onRender);
+      }
+
+      postWorkerMessage({
+        type: 'worker:register-ui-panel',
+        pluginId: currentPluginId,
+        panel: {
+          id: panel.id,
+          title: panel.title,
+          icon: panel.icon,
+          defaultWidth: panel.defaultWidth,
+          minWidth: panel.minWidth,
+          maxWidth: panel.maxWidth,
+          priority: panel.priority,
+          content: panel.content,
+        },
+      });
+    },
     getDocument() {
       return requestHost('document:get', null);
     },
@@ -201,7 +286,58 @@ async function loadPlugin(entrySource: string, _manifest: PluginManifest): Promi
   }
 }
 
-async function handleInvokeMessage(message: Extract<HostToWorkerMessage, { type: 'host:invoke' }>): Promise<void> {
+async function evaluateUIState(
+  controlIds: string[],
+  panelIds: string[],
+  context: UIControlStateContext
+): Promise<UIEvaluateResponse> {
+  const controls: Record<string, { visible: boolean; disabled: boolean; active: boolean; text?: string | null }> = {};
+  const panels: Record<string, UIPanelContent> = {};
+
+  for (const controlId of controlIds) {
+    const visibleHandler = uiControlVisibleHandlers.get(controlId);
+    const disabledHandler = uiControlDisabledHandlers.get(controlId);
+    const activeHandler = uiControlActiveHandlers.get(controlId);
+
+    const visible = visibleHandler ? Boolean(await visibleHandler(context)) : true;
+    const disabled = disabledHandler ? Boolean(await disabledHandler(context)) : false;
+    const active = activeHandler ? Boolean(await activeHandler(context)) : false;
+
+    controls[controlId] = {
+      visible,
+      disabled,
+      active,
+      text: null,
+    };
+  }
+
+  const panelContext: UIPanelStateContext = {
+    document: context.document,
+    currentElementType: context.currentElementType,
+    metadata: context.metadata,
+  };
+
+  for (const panelId of panelIds) {
+    const renderHandler = uiPanelRenderHandlers.get(panelId);
+    if (!renderHandler) {
+      continue;
+    }
+
+    const content = await renderHandler(panelContext);
+    if (content) {
+      panels[panelId] = content;
+    }
+  }
+
+  return {
+    controls,
+    panels,
+  };
+}
+
+async function handleInvokeMessage(
+  message: Extract<HostToWorkerMessage, { type: 'host:invoke' }>
+): Promise<void> {
   const respond = (ok: boolean, result?: unknown, error?: string) => {
     postWorkerMessage({
       type: 'worker:response',
@@ -267,6 +403,44 @@ async function handleInvokeMessage(message: Extract<HostToWorkerMessage, { type:
         respond(true, result ?? null);
         return;
       }
+      case 'ui-control': {
+        const handler = uiControlTriggerHandlers.get(message.id);
+        if (!handler) {
+          respond(true, { action: null } satisfies UIControlTriggerResult);
+          return;
+        }
+
+        const result = await handler(message.payload as UIControlStateContext);
+        respond(true, result ?? { action: null } satisfies UIControlTriggerResult);
+        return;
+      }
+      case 'ui-panel-action': {
+        const handler = uiPanelActionHandlers.get(message.id);
+        if (!handler) {
+          respond(true, { action: null } satisfies UIPanelActionResult);
+          return;
+        }
+
+        const result = await handler(message.payload as UIPanelActionContext);
+        respond(true, result ?? { action: null } satisfies UIPanelActionResult);
+        return;
+      }
+      case 'ui-evaluate': {
+        const payload = message.payload as {
+          controlIds: string[];
+          panelIds: string[];
+          context: UIControlStateContext;
+        };
+
+        const evaluated = await evaluateUIState(
+          payload.controlIds ?? [],
+          payload.panelIds ?? [],
+          payload.context
+        );
+
+        respond(true, evaluated);
+        return;
+      }
       default:
         throw new Error(`Unsupported invoke method: ${String(message.method)}`);
     }
@@ -285,6 +459,12 @@ async function handleShutdown(): Promise<void> {
   exporterHandlers.clear();
   importerHandlers.clear();
   statusBadgeHandlers.clear();
+  uiControlTriggerHandlers.clear();
+  uiControlVisibleHandlers.clear();
+  uiControlDisabledHandlers.clear();
+  uiControlActiveHandlers.clear();
+  uiPanelActionHandlers.clear();
+  uiPanelRenderHandlers.clear();
   pendingHostRequests.clear();
 
   self.close();

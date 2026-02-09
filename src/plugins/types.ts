@@ -10,7 +10,8 @@ export type CorePermission =
 export type OptionalPermission =
   | 'fs:pick-read'
   | 'fs:pick-write'
-  | 'network:https';
+  | 'network:https'
+  | 'ui:mount';
 
 export type PluginPermission = CorePermission | OptionalPermission;
 
@@ -40,7 +41,6 @@ export interface PluginManifest {
 }
 
 export type PluginInstallSource = 'sideload' | 'registry';
-
 export type PluginTrustState = 'verified' | 'unverified';
 
 export interface PluginPermissionGrant {
@@ -156,9 +156,7 @@ export interface DocumentTransform {
   id: string;
   hook: DocumentTransformHook;
   priority?: number;
-  handler: (
-    context: DocumentTransformContext
-  ) => JSONContent | void | Promise<JSONContent | void>;
+  handler: (context: DocumentTransformContext) => JSONContent | void | Promise<JSONContent | void>;
 }
 
 export interface ExporterContext {
@@ -226,6 +224,151 @@ export interface RenderedStatusBadge {
   priority: number;
 }
 
+export type UIControlMount = 'top-bar' | 'bottom-bar';
+export type UIControlKind = 'button' | 'toggle' | 'segmented';
+
+export type BuiltinIconId =
+  | 'scene-heading'
+  | 'action'
+  | 'character'
+  | 'dialogue'
+  | 'parenthetical'
+  | 'transition'
+  | 'chevron-left'
+  | 'chevron-right'
+  | 'panel'
+  | 'close'
+  | 'settings'
+  | 'spark';
+
+export type UIControlAction =
+  | { type: 'command'; commandId: string }
+  | { type: 'editor:set-element'; elementType: ScreenplayElementType }
+  | { type: 'editor:cycle-element'; direction: 'next' | 'prev' }
+  | { type: 'editor:escape-to-action' }
+  | { type: 'panel:open' | 'panel:close' | 'panel:toggle'; panelId: string };
+
+export interface UIControlStateContext {
+  document: JSONContent;
+  currentElementType: ScreenplayElementType | null;
+  previousElementType: string | null;
+  isCurrentEmpty: boolean;
+  selectionFrom: number;
+  selectionTo: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UIControlState {
+  visible: boolean;
+  disabled: boolean;
+  active: boolean;
+  text?: string | null;
+}
+
+export interface UIControlTriggerResult {
+  action?: UIControlAction | null;
+}
+
+export interface UIControlDefinition {
+  id: string;
+  mount: UIControlMount;
+  kind: UIControlKind;
+  label: string;
+  icon: BuiltinIconId;
+  priority?: number;
+  tooltip?: string;
+  group?: string;
+  hotkeyHint?: string;
+  action?: UIControlAction;
+  isVisible?: (context: UIControlStateContext) => boolean | Promise<boolean>;
+  isDisabled?: (context: UIControlStateContext) => boolean | Promise<boolean>;
+  isActive?: (context: UIControlStateContext) => boolean | Promise<boolean>;
+  onTrigger?: (context: UIControlStateContext) => UIControlTriggerResult | void | Promise<UIControlTriggerResult | void>;
+}
+
+export interface UIPanelActionItem {
+  id: string;
+  label: string;
+  variant?: 'default' | 'primary' | 'outline' | 'ghost';
+}
+
+export type UIPanelBlock =
+  | { type: 'text'; text: string }
+  | { type: 'list'; items: string[] }
+  | { type: 'keyValue'; items: Array<{ key: string; value: string }> }
+  | { type: 'actions'; actions: UIPanelActionItem[] };
+
+export interface UIPanelContent {
+  blocks: UIPanelBlock[];
+}
+
+export interface UIPanelStateContext {
+  document: JSONContent;
+  currentElementType: ScreenplayElementType | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UIPanelActionContext extends UIPanelStateContext {
+  actionId: string;
+}
+
+export interface UIPanelActionResult {
+  action?: UIControlAction | null;
+  content?: UIPanelContent;
+}
+
+export interface UIPanelDefinition {
+  id: string;
+  title: string;
+  icon?: BuiltinIconId;
+  defaultWidth?: number;
+  minWidth?: number;
+  maxWidth?: number;
+  priority?: number;
+  content?: UIPanelContent;
+  onAction?: (context: UIPanelActionContext) => UIPanelActionResult | void | Promise<UIPanelActionResult | void>;
+  onRender?: (context: UIPanelStateContext) => UIPanelContent | void | Promise<UIPanelContent | void>;
+}
+
+export interface RegisteredUIControl {
+  id: string;
+  pluginId: string;
+  mount: UIControlMount;
+  kind: UIControlKind;
+  label: string;
+  icon: BuiltinIconId;
+  priority?: number;
+  tooltip?: string;
+  group?: string;
+  hotkeyHint?: string;
+  action?: UIControlAction;
+}
+
+export interface RegisteredUIPanel {
+  id: string;
+  pluginId: string;
+  title: string;
+  icon?: BuiltinIconId;
+  defaultWidth?: number;
+  minWidth?: number;
+  maxWidth?: number;
+  priority?: number;
+  content?: UIPanelContent;
+}
+
+export interface EvaluatedUIControl extends RegisteredUIControl {
+  state: UIControlState;
+}
+
+export interface EvaluatedUIPanel extends RegisteredUIPanel {
+  content: UIPanelContent;
+}
+
+export interface UIEvaluateResponse {
+  controls: Record<string, UIControlState>;
+  panels: Record<string, UIPanelContent>;
+}
+
 export interface PluginApi {
   registerElementLoopProvider(provider: ElementLoopProvider): void;
   registerCommand(command: PluginCommand): void;
@@ -233,6 +376,8 @@ export interface PluginApi {
   registerExporter(exporter: Exporter): void;
   registerImporter(importer: Importer): void;
   registerStatusBadge(badge: StatusBadge): void;
+  registerUIControl(control: UIControlDefinition): void;
+  registerUIPanel(panel: UIPanelDefinition): void;
   getDocument(): Promise<JSONContent>;
   replaceDocument(next: JSONContent): Promise<void>;
   requestPermission(permission: OptionalPermission): Promise<boolean>;
@@ -254,7 +399,15 @@ export interface HostInitMessage {
 export interface HostInvokeMessage {
   type: 'host:invoke';
   requestId: string;
-  method: 'command' | 'transform' | 'exporter' | 'importer' | 'status';
+  method:
+    | 'command'
+    | 'transform'
+    | 'exporter'
+    | 'importer'
+    | 'status'
+    | 'ui-control'
+    | 'ui-panel-action'
+    | 'ui-evaluate';
   id: string;
   payload: unknown;
 }
@@ -324,6 +477,18 @@ export interface WorkerRegisterStatusBadgeMessage {
   badge: Omit<StatusBadge, 'handler'>;
 }
 
+export interface WorkerRegisterUIControlMessage {
+  type: 'worker:register-ui-control';
+  pluginId: string;
+  control: Omit<UIControlDefinition, 'isVisible' | 'isDisabled' | 'isActive' | 'onTrigger'>;
+}
+
+export interface WorkerRegisterUIPanelMessage {
+  type: 'worker:register-ui-panel';
+  pluginId: string;
+  panel: Omit<UIPanelDefinition, 'onAction' | 'onRender'>;
+}
+
 export interface WorkerHostRequestMessage {
   type: 'worker:host-request';
   pluginId: string;
@@ -357,6 +522,8 @@ export type WorkerToHostMessage =
   | WorkerRegisterExporterMessage
   | WorkerRegisterImporterMessage
   | WorkerRegisterStatusBadgeMessage
+  | WorkerRegisterUIControlMessage
+  | WorkerRegisterUIPanelMessage
   | WorkerHostRequestMessage
   | WorkerPermissionRequestMessage
   | WorkerResponseMessage;
@@ -367,4 +534,6 @@ export interface PluginStateSnapshot {
   exporters: RegisteredExporter[];
   importers: RegisteredImporter[];
   statusBadges: RegisteredStatusBadge[];
+  uiControls: RegisteredUIControl[];
+  uiPanels: RegisteredUIPanel[];
 }

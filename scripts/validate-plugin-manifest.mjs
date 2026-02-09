@@ -14,6 +14,7 @@ const OPTIONAL_PERMISSIONS = new Set([
   'fs:pick-read',
   'fs:pick-write',
   'network:https',
+  'ui:mount',
 ]);
 
 function usage() {

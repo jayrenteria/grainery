@@ -1,9 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { JSONContent } from '@tiptap/react';
+import type { ScreenplayElementType } from '../lib/types';
+import { hasPluginPermission } from './permissions';
 import { nextRequestId, parseWorkerMessage } from './rpc';
 import { PluginHost } from './PluginHost';
-import { hasPluginPermission } from './permissions';
-import type { ScreenplayElementType } from '../lib/types';
 import type {
   DocumentTransformContext,
   DocumentTransformHook,
@@ -20,7 +20,16 @@ import type {
   RegisteredImporter,
   RegisteredPluginCommand,
   RegisteredStatusBadge,
+  RegisteredUIControl,
+  RegisteredUIPanel,
   RenderedStatusBadge,
+  UIControlAction,
+  UIControlState,
+  UIControlStateContext,
+  UIControlTriggerResult,
+  UIEvaluateResponse,
+  UIPanelActionResult,
+  UIPanelContent,
 } from './types';
 
 interface PendingInvoke {
@@ -70,6 +79,8 @@ export class PluginManager {
   private exporters: RegisteredExporter[] = [];
   private importers: RegisteredImporter[] = [];
   private statusBadges: RegisteredStatusBadge[] = [];
+  private uiControls: RegisteredUIControl[] = [];
+  private uiPanels: RegisteredUIPanel[] = [];
 
   constructor(options: PluginManagerOptions) {
     this.pluginHost = new PluginHost({
@@ -97,6 +108,8 @@ export class PluginManager {
       exporters: [...this.exporters],
       importers: [...this.importers],
       statusBadges: [...this.statusBadges],
+      uiControls: [...this.uiControls],
+      uiPanels: [...this.uiPanels],
     };
   }
 
@@ -120,6 +133,46 @@ export class PluginManager {
     return [...this.statusBadges];
   }
 
+  getUIControls(mount?: RegisteredUIControl['mount']): RegisteredUIControl[] {
+    const filtered = this.uiControls.filter((control) => {
+      const plugin = this.getPluginById(control.pluginId);
+      if (!plugin) {
+        return false;
+      }
+
+      if (!hasPluginPermission(plugin, 'ui:mount')) {
+        return false;
+      }
+
+      return mount ? control.mount === mount : true;
+    });
+
+    return [...filtered].sort((a, b) => {
+      const pa = a.priority ?? 0;
+      const pb = b.priority ?? 0;
+      if (pb !== pa) {
+        return pb - pa;
+      }
+      return a.id.localeCompare(b.id);
+    });
+  }
+
+  getUIPanels(): RegisteredUIPanel[] {
+    const filtered = this.uiPanels.filter((panel) => {
+      const plugin = this.getPluginById(panel.pluginId);
+      return Boolean(plugin && hasPluginPermission(plugin, 'ui:mount'));
+    });
+
+    return [...filtered].sort((a, b) => {
+      const pa = a.priority ?? 0;
+      const pb = b.priority ?? 0;
+      if (pb !== pa) {
+        return pb - pa;
+      }
+      return a.id.localeCompare(b.id);
+    });
+  }
+
   async initialize(): Promise<void> {
     await this.reloadInstalledPlugins();
   }
@@ -136,6 +189,8 @@ export class PluginManager {
     this.exporters = [];
     this.importers = [];
     this.statusBadges = [];
+    this.uiControls = [];
+    this.uiPanels = [];
 
     const enabled = this.installedPlugins.filter((plugin) => plugin.enabled);
 
@@ -219,7 +274,10 @@ export class PluginManager {
           continue;
         }
 
-        if (rule.when.previousTypes && !rule.when.previousTypes.includes(context.previousType ?? '')) {
+        if (
+          rule.when.previousTypes &&
+          !rule.when.previousTypes.includes(context.previousType ?? '')
+        ) {
           continue;
         }
 
@@ -242,10 +300,12 @@ export class PluginManager {
     if (!pluginId || !localId) {
       throw new Error(`Invalid command id: ${commandId}`);
     }
-    const plugin = this.installedPlugins.find((item) => item.id === pluginId);
+
+    const plugin = this.getPluginById(pluginId);
     if (!plugin) {
       throw new Error(`Plugin not installed: ${pluginId}`);
     }
+
     if (!hasPluginPermission(plugin, 'document:read')) {
       throw new Error(`Plugin ${pluginId} does not have document:read permission`);
     }
@@ -262,7 +322,9 @@ export class PluginManager {
       return false;
     }
 
-    const command = this.commands.find((item) => normalizeDeclaredShortcut(item.shortcut) === shortcut);
+    const command = this.commands.find(
+      (item) => normalizeDeclaredShortcut(item.shortcut) === shortcut
+    );
     if (!command) {
       return false;
     }
@@ -351,9 +413,7 @@ export class PluginManager {
   async evaluateStatusBadges(
     context: { document: JSONContent; metadata?: Record<string, unknown> }
   ): Promise<RenderedStatusBadge[]> {
-    const badges = [...this.statusBadges].sort(
-      (a, b) => (b.priority ?? 0) - (a.priority ?? 0)
-    );
+    const badges = [...this.statusBadges].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
     const rendered: RenderedStatusBadge[] = [];
 
     for (const badge of badges) {
@@ -378,6 +438,143 @@ export class PluginManager {
     }
 
     return rendered;
+  }
+
+  async evaluateUIState(
+    controlIds: string[],
+    panelIds: string[],
+    context: UIControlStateContext
+  ): Promise<{ controls: Record<string, UIControlState>; panels: Record<string, UIPanelContent> }> {
+    const controls: Record<string, UIControlState> = {};
+    const panels: Record<string, UIPanelContent> = {};
+
+    const pluginToControlIds = new Map<string, string[]>();
+    const pluginToPanelIds = new Map<string, string[]>();
+
+    for (const controlId of controlIds) {
+      const [pluginId, localId] = splitCompositeId(controlId);
+      if (!pluginId || !localId) continue;
+
+      const plugin = this.getPluginById(pluginId);
+      if (!plugin || !hasPluginPermission(plugin, 'ui:mount')) continue;
+
+      const next = pluginToControlIds.get(pluginId) ?? [];
+      next.push(localId);
+      pluginToControlIds.set(pluginId, next);
+    }
+
+    for (const panelId of panelIds) {
+      const [pluginId, localId] = splitCompositeId(panelId);
+      if (!pluginId || !localId) continue;
+
+      const plugin = this.getPluginById(pluginId);
+      if (!plugin || !hasPluginPermission(plugin, 'ui:mount')) continue;
+
+      const next = pluginToPanelIds.get(pluginId) ?? [];
+      next.push(localId);
+      pluginToPanelIds.set(pluginId, next);
+    }
+
+    for (const [pluginId, localControlIds] of pluginToControlIds.entries()) {
+      try {
+        const localPanelIds = pluginToPanelIds.get(pluginId) ?? [];
+
+        const result = (await this.invokeWorker(pluginId, 'ui-evaluate', '__batch__', {
+          controlIds: localControlIds,
+          panelIds: localPanelIds,
+          context,
+        })) as UIEvaluateResponse;
+
+        for (const localControlId of localControlIds) {
+          const globalId = composeId(pluginId, localControlId);
+          controls[globalId] = result.controls?.[localControlId] ?? {
+            visible: true,
+            disabled: false,
+            active: false,
+            text: null,
+          };
+        }
+
+        for (const localPanelId of localPanelIds) {
+          const globalId = composeId(pluginId, localPanelId);
+          const panel = this.uiPanels.find((candidate) => candidate.id === globalId);
+          if (result.panels?.[localPanelId]) {
+            panels[globalId] = result.panels[localPanelId];
+          } else if (panel?.content) {
+            panels[globalId] = panel.content;
+          }
+        }
+      } catch (error) {
+        console.error(`[PluginManager] UI evaluate failed for plugin ${pluginId}`, error);
+      }
+    }
+
+    for (const panelId of panelIds) {
+      if (panels[panelId]) {
+        continue;
+      }
+
+      const panel = this.uiPanels.find((candidate) => candidate.id === panelId);
+      if (panel?.content) {
+        panels[panelId] = panel.content;
+      }
+    }
+
+    return { controls, panels };
+  }
+
+  async triggerUIControl(
+    controlId: string,
+    context: UIControlStateContext
+  ): Promise<UIControlAction | null> {
+    const control = this.uiControls.find((item) => item.id === controlId);
+    if (!control) {
+      throw new Error(`UI control not found: ${controlId}`);
+    }
+
+    const plugin = this.getPluginById(control.pluginId);
+    if (!plugin || !hasPluginPermission(plugin, 'ui:mount')) {
+      return null;
+    }
+
+    const result = (await this.invokeWorker(
+      control.pluginId,
+      'ui-control',
+      getLocalId(control.id),
+      context
+    )) as UIControlTriggerResult;
+
+    const action = result?.action ?? control.action ?? null;
+    return normalizeUiAction(control.pluginId, action);
+  }
+
+  async dispatchUIPanelAction(
+    panelId: string,
+    actionId: string,
+    context: UIControlStateContext
+  ): Promise<UIPanelActionResult> {
+    const panel = this.uiPanels.find((item) => item.id === panelId);
+    if (!panel) {
+      throw new Error(`UI panel not found: ${panelId}`);
+    }
+
+    const plugin = this.getPluginById(panel.pluginId);
+    if (!plugin || !hasPluginPermission(plugin, 'ui:mount')) {
+      return { action: null };
+    }
+
+    const response = (await this.invokeWorker(panel.pluginId, 'ui-panel-action', getLocalId(panel.id), {
+      document: context.document,
+      currentElementType: context.currentElementType,
+      metadata: context.metadata,
+      actionId,
+    })) as UIPanelActionResult;
+
+    const normalizedAction = normalizeUiAction(panel.pluginId, response?.action ?? null);
+    return {
+      ...(response ?? {}),
+      action: normalizedAction,
+    };
   }
 
   private startWorker(plugin: InstalledPlugin): void {
@@ -439,7 +636,10 @@ export class PluginManager {
 
       case 'worker:register-element-loop-provider': {
         this.loopProviders = this.loopProviders
-          .filter((item) => `${item.pluginId}:${item.provider.id}` !== `${pluginId}:${message.provider.id}`)
+          .filter(
+            (item) =>
+              `${item.pluginId}:${item.provider.id}` !== `${pluginId}:${message.provider.id}`
+          )
           .concat([
             {
               pluginId,
@@ -532,8 +732,52 @@ export class PluginManager {
         return;
       }
 
+      case 'worker:register-ui-control': {
+        const id = composeId(pluginId, message.control.id);
+        this.uiControls = this.uiControls
+          .filter((item) => item.id !== id)
+          .concat([
+            {
+              id,
+              pluginId,
+              mount: message.control.mount,
+              kind: message.control.kind,
+              label: message.control.label,
+              icon: message.control.icon,
+              priority: message.control.priority,
+              tooltip: message.control.tooltip,
+              group: message.control.group,
+              hotkeyHint: message.control.hotkeyHint,
+              action: message.control.action,
+            },
+          ]);
+        this.notifyListeners();
+        return;
+      }
+
+      case 'worker:register-ui-panel': {
+        const id = composeId(pluginId, message.panel.id);
+        this.uiPanels = this.uiPanels
+          .filter((item) => item.id !== id)
+          .concat([
+            {
+              id,
+              pluginId,
+              title: message.panel.title,
+              icon: message.panel.icon,
+              defaultWidth: message.panel.defaultWidth,
+              minWidth: message.panel.minWidth,
+              maxWidth: message.panel.maxWidth,
+              priority: message.panel.priority,
+              content: message.panel.content,
+            },
+          ]);
+        this.notifyListeners();
+        return;
+      }
+
       case 'worker:host-request': {
-        const plugin = this.installedPlugins.find((item) => item.id === pluginId);
+        const plugin = this.getPluginById(pluginId);
         if (!plugin) {
           this.respondToWorker(pluginId, message.requestId, false, null, 'Plugin not found');
           return;
@@ -560,7 +804,7 @@ export class PluginManager {
       }
 
       case 'worker:permission-request': {
-        const plugin = this.installedPlugins.find((item) => item.id === pluginId);
+        const plugin = this.getPluginById(pluginId);
         if (!plugin) {
           this.respondToWorker(pluginId, message.requestId, false, null, 'Plugin not found');
           return;
@@ -637,7 +881,15 @@ export class PluginManager {
 
   private async invokeWorker(
     pluginId: string,
-    method: 'command' | 'transform' | 'exporter' | 'importer' | 'status',
+    method:
+      | 'command'
+      | 'transform'
+      | 'exporter'
+      | 'importer'
+      | 'status'
+      | 'ui-control'
+      | 'ui-panel-action'
+      | 'ui-evaluate',
     id: string,
     payload: unknown
   ): Promise<unknown> {
@@ -741,6 +993,10 @@ export class PluginManager {
       listener();
     }
   }
+
+  private getPluginById(pluginId: string): InstalledPlugin | undefined {
+    return this.installedPlugins.find((item) => item.id === pluginId);
+  }
 }
 
 function composeId(pluginId: string, localId: string): string {
@@ -809,4 +1065,32 @@ function normalizeKeyboardShortcut(event: KeyboardEvent): string | null {
   }
 
   return parts.sort().join('+');
+}
+
+function normalizeUiAction(pluginId: string, action: UIControlAction | null): UIControlAction | null {
+  if (!action) {
+    return null;
+  }
+
+  if (action.type === 'command') {
+    const commandId = action.commandId.includes(':')
+      ? action.commandId
+      : composeId(pluginId, action.commandId);
+    return {
+      ...action,
+      commandId,
+    };
+  }
+
+  if (action.type === 'panel:open' || action.type === 'panel:close' || action.type === 'panel:toggle') {
+    const panelId = action.panelId.includes(':')
+      ? action.panelId
+      : composeId(pluginId, action.panelId);
+    return {
+      ...action,
+      panelId,
+    };
+  }
+
+  return action;
 }

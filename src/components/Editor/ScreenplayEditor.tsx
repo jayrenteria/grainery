@@ -28,6 +28,7 @@ import type { ElementLoopContext } from '../../plugins';
 interface ScreenplayEditorProps {
   initialContent?: JSONContent;
   onChange?: (content: JSONContent) => void;
+  onSelectionChange?: () => void;
   resolveElementLoop?: (context: ElementLoopContext) => ScreenplayElementType | null;
   onEditorReady?: (editor: Editor | null) => void;
 }
@@ -50,6 +51,7 @@ const DEFAULT_CONTENT: JSONContent = {
 export function ScreenplayEditor({
   initialContent,
   onChange,
+  onSelectionChange,
   resolveElementLoop,
   onEditorReady,
 }: ScreenplayEditorProps) {
@@ -106,6 +108,8 @@ export function ScreenplayEditor({
       } else {
         setCharacterExtension(null);
       }
+
+      onSelectionChange?.();
     },
     editorProps: {
       attributes: {

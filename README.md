@@ -37,6 +37,7 @@ Manifest schema: `/Users/jay/git/screenwrite/grainery-plugin.manifest.json`
 Example plugin: `/Users/jay/git/screenwrite/examples/plugins/wordcount/`
 
 Detailed mechanics: `/Users/jay/git/screenwrite/docs/plugin-system.md`
+Developer guide: `/Users/jay/git/screenwrite/docs/plugin-authoring-guide.md`
 
 Validate a manifest:
 

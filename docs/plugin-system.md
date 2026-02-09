@@ -16,7 +16,7 @@ The current implementation supports JavaScript plugins only (no native/dylib plu
 
 ## High-Level Architecture
 
-Grainery plugin execution is split across four layers:
+Grainery plugin execution is split across five layers:
 
 1. **Rust plugin backend (`src-tauri/src/plugins/mod.rs`)**
    - Installs/uninstalls plugins
@@ -40,6 +40,11 @@ Grainery plugin execution is split across four layers:
    - Controls document read/write access
    - Handles permission prompts for optional capabilities
    - Forwards privileged ops to Rust broker
+
+5. **Plugin UI host (`src/components/PluginUI/*`)**
+   - Renders plugin-declared controls into host UI regions
+   - Renders a single active plugin side panel
+   - Routes UI actions through a restricted host action layer
 
 ## Data Model
 
@@ -117,6 +122,9 @@ During `setup`, plugin calls SDK registration methods:
 - `registerDocumentTransform`
 - `registerExporter`
 - `registerImporter`
+- `registerStatusBadge`
+- `registerUIControl`
+- `registerUIPanel`
 
 Worker emits registration messages back to host; manager updates in-memory registries.
 
@@ -207,6 +215,23 @@ Behavior:
 - badge text refreshes as editor/plugin state changes
 - badges are informational only (no click actions)
 
+## 6) Declarative plugin UI
+
+Plugins can mount declarative UI in host-rendered regions:
+
+- top bar controls (`mount: 'top-bar'`)
+- bottom bar controls (`mount: 'bottom-bar'`)
+- one side panel at a time
+
+Key properties:
+
+- plugins do not render arbitrary DOM
+- controls use host icon IDs (`BuiltinIconId`)
+- actions are restricted to whitelisted types (`command`, editor element actions, panel open/close/toggle)
+- host batches worker state evaluation via `ui-evaluate`
+
+See `docs/plugin-ui-extension.md` for the complete API and behavior details.
+
 ## Permission and Security Model
 
 ### Deny-by-default
@@ -218,6 +243,7 @@ Optional permissions:
 - `fs:pick-read`
 - `fs:pick-write`
 - `network:https`
+- `ui:mount`
 
 Core permissions are declared in manifest and validated:
 

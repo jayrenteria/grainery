@@ -38,6 +38,8 @@ export function parseWorkerMessage(value: unknown): WorkerToHostMessage | null {
     case 'worker:register-exporter':
     case 'worker:register-importer':
     case 'worker:register-status-badge':
+    case 'worker:register-ui-control':
+    case 'worker:register-ui-panel':
     case 'worker:host-request':
     case 'worker:permission-request':
     case 'worker:response':

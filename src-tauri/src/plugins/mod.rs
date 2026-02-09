@@ -148,7 +148,7 @@ fn validate_plugin_id(plugin_id: &str) -> bool {
 fn is_optional_permission(permission: &str) -> bool {
     matches!(
         permission,
-        "fs:pick-read" | "fs:pick-write" | "network:https"
+        "fs:pick-read" | "fs:pick-write" | "network:https" | "ui:mount"
     )
 }
 

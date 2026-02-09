@@ -78,7 +78,8 @@
         "enum": [
           "fs:pick-read",
           "fs:pick-write",
-          "network:https"
+          "network:https",
+          "ui:mount"
         ]
       }
     },

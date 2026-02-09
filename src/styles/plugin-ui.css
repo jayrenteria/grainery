@@ -1,0 +1,88 @@
+@reference "./tailwind.css";
+
+.plugin-toolbar {
+  @apply fixed left-1/2 -translate-x-1/2 z-[85];
+  @apply flex items-center gap-1 rounded-md border border-base-300/60;
+  @apply bg-base-100/85 backdrop-blur-sm shadow-sm;
+  @apply px-1 py-1;
+}
+
+.plugin-toolbar-top {
+  @apply top-14;
+}
+
+.plugin-toolbar-bottom {
+  @apply bottom-2 left-2 -translate-x-0;
+}
+
+.plugin-toolbar-button {
+  @apply inline-flex items-center gap-1 rounded-sm px-1.5 py-1;
+  @apply text-xs text-base-content/75 hover:bg-base-200/80;
+  @apply transition-colors;
+}
+
+.plugin-toolbar-button.is-active {
+  @apply bg-primary/15 text-primary;
+}
+
+.plugin-toolbar-button:disabled {
+  @apply opacity-40 cursor-not-allowed;
+}
+
+.plugin-toolbar-label {
+  @apply text-[10px] uppercase tracking-wide;
+}
+
+.plugin-toolbar-meta {
+  @apply text-[9px] opacity-80;
+}
+
+.plugin-side-panel {
+  @apply fixed left-2 top-20 bottom-14 z-[84];
+  @apply rounded-md border border-base-300/60 bg-base-100/95 backdrop-blur-sm shadow-md;
+  @apply flex flex-col overflow-hidden;
+}
+
+.plugin-side-panel-header {
+  @apply flex items-center justify-between px-2 py-2 border-b border-base-300/60;
+}
+
+.plugin-side-panel-title-wrap {
+  @apply flex items-center gap-2;
+}
+
+.plugin-side-panel-title {
+  @apply text-sm font-semibold text-base-content/85;
+}
+
+.plugin-side-panel-body {
+  @apply flex-1 overflow-y-auto px-3 py-2 text-sm text-base-content/80;
+}
+
+.plugin-panel-text {
+  @apply mb-2 leading-relaxed;
+}
+
+.plugin-panel-list {
+  @apply mb-2 list-disc pl-5 space-y-1;
+}
+
+.plugin-panel-kv {
+  @apply mb-2 space-y-1;
+}
+
+.plugin-panel-kv-row {
+  @apply flex items-center justify-between gap-4;
+}
+
+.plugin-panel-kv-row dt {
+  @apply text-xs uppercase tracking-wide text-base-content/60;
+}
+
+.plugin-panel-kv-row dd {
+  @apply text-sm font-medium;
+}
+
+.plugin-panel-actions {
+  @apply mt-2 flex flex-wrap gap-1;
+}

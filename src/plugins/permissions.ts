@@ -17,6 +17,7 @@ export const OPTIONAL_PERMISSIONS: OptionalPermission[] = [
   'fs:pick-read',
   'fs:pick-write',
   'network:https',
+  'ui:mount',
 ];
 
 export function isOptionalPermission(value: string): value is OptionalPermission {
