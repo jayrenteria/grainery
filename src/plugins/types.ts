@@ -244,6 +244,7 @@ export type BuiltinIconId =
 export type UIControlAction =
   | { type: 'command'; commandId: string }
   | { type: 'editor:set-element'; elementType: ScreenplayElementType }
+  | { type: 'editor:jump-to'; position: number; offsetTop?: number }
   | { type: 'editor:cycle-element'; direction: 'next' | 'prev' }
   | { type: 'editor:escape-to-action' }
   | { type: 'panel:open' | 'panel:close' | 'panel:toggle'; panelId: string };
@@ -305,6 +306,8 @@ export interface UIPanelContent {
 export interface UIPanelStateContext {
   document: JSONContent;
   currentElementType: ScreenplayElementType | null;
+  selectionFrom: number;
+  selectionTo: number;
   metadata?: Record<string, unknown>;
 }
 

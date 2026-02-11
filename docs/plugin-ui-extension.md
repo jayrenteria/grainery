@@ -34,11 +34,17 @@ Control action model:
 
 - `command`
 - `editor:set-element`
+- `editor:jump-to`
 - `editor:cycle-element`
 - `editor:escape-to-action`
 - `panel:open`
 - `panel:close`
 - `panel:toggle`
+
+`editor:jump-to` fields:
+
+- `position` (required): ProseMirror document position
+- `offsetTop` (optional): desired pixel offset from the top of the editor viewport
 
 Panel content model (v1 primitives):
 
@@ -62,7 +68,10 @@ Host exposes an editor adapter used by UI actions:
 
 - read active element and selection state
 - set/cycle element type
+- jump to a document position
 - escape current element to `action`
+
+Panel render/action contexts include current selection positions (`selectionFrom`, `selectionTo`) for active-row and navigation logic.
 
 Element mutations are host-whitelisted operations only.
 

@@ -314,6 +314,8 @@ async function evaluateUIState(
   const panelContext: UIPanelStateContext = {
     document: context.document,
     currentElementType: context.currentElementType,
+    selectionFrom: context.selectionFrom,
+    selectionTo: context.selectionTo,
     metadata: context.metadata,
   };
 

@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { Editor, JSONContent } from '@tiptap/react';
+import { TextSelection } from '@tiptap/pm/state';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
@@ -161,6 +162,43 @@ function App() {
         }
         editor.commands.setNode(type);
         setEditorVersion((prev) => prev + 1);
+      },
+      jumpToPosition: (position: number, offsetTop = 100) => {
+        const editor = editorRef.current;
+        if (!editor || !Number.isFinite(position)) {
+          return;
+        }
+
+        const view = editor.view;
+        const max = Math.max(1, view.state.doc.content.size);
+        const nextPosition = Math.min(Math.max(Math.floor(position), 1), max);
+
+        const selection = TextSelection.create(view.state.doc, nextPosition);
+        view.dispatch(view.state.tr.setSelection(selection));
+        view.focus();
+
+        const scrollContainer = view.dom.closest('.paginated-editor-container');
+        if (!(scrollContainer instanceof HTMLElement)) {
+          editor.commands.scrollIntoView();
+          return;
+        }
+
+        requestAnimationFrame(() => {
+          try {
+            const coordinates = view.coordsAtPos(nextPosition);
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const desiredTop =
+              coordinates.top - containerRect.top + scrollContainer.scrollTop - offsetTop;
+
+            scrollContainer.scrollTo({
+              top: Math.max(0, desiredTop),
+              behavior: 'smooth',
+            });
+          } catch (error) {
+            console.error('[Plugins] Failed to scroll to requested position', error);
+            editor.commands.scrollIntoView();
+          }
+        });
       },
       cycleElement: (direction: 'next' | 'prev') => {
         const editor = editorRef.current;

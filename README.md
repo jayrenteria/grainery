@@ -38,6 +38,7 @@ Example plugin: `/Users/jay/git/screenwrite/examples/plugins/wordcount/`
 
 Detailed mechanics: `/Users/jay/git/screenwrite/docs/plugin-system.md`
 Developer guide: `/Users/jay/git/screenwrite/docs/plugin-authoring-guide.md`
+Agent handoff: `/Users/jay/git/screenwrite/docs/plugin-agent.md`
 
 Validate a manifest:
 

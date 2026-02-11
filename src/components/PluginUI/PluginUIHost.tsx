@@ -19,6 +19,7 @@ interface EditorAdapter {
   isCurrentElementEmpty: () => boolean;
   getSelectionRange: () => { from: number; to: number };
   setElementType: (type: ScreenplayElementType) => void;
+  jumpToPosition: (position: number, offsetTop?: number) => void;
   cycleElement: (direction: 'next' | 'prev') => void;
   escapeToAction: () => void;
 }
@@ -127,6 +128,9 @@ export function PluginUIHost({
         break;
       case 'editor:set-element':
         editorAdapter.setElementType(action.elementType);
+        break;
+      case 'editor:jump-to':
+        editorAdapter.jumpToPosition(action.position, action.offsetTop);
         break;
       case 'editor:cycle-element':
         editorAdapter.cycleElement(action.direction);

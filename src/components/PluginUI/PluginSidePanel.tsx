@@ -13,6 +13,9 @@ function renderBlock(
   index: number,
   onAction: (panelId: string, actionId: string) => void
 ) {
+  const isSceneOutlinePanel =
+    panelId.endsWith(':scene-outline-panel') || panelId === 'scene-outline-panel';
+
   switch (block.type) {
     case 'text':
       return (
@@ -54,7 +57,7 @@ function renderBlock(
                     : action.variant === 'ghost'
                       ? 'btn-ghost'
                       : 'btn-neutral'
-              }`}
+              } ${isSceneOutlinePanel ? 'font-bold uppercase w-full justify-start' : ''}`}
               onClick={() => onAction(panelId, action.id)}
             >
               {action.label}

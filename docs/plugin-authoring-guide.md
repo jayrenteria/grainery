@@ -23,11 +23,13 @@ Use one of these existing examples:
 
 - `/Users/jay/git/screenwrite/examples/plugins/wordcount/`
 - `/Users/jay/git/screenwrite/examples/plugins/element-toolbar/`
+- `/Users/jay/git/screenwrite/examples/plugins/scene-outline/`
 
 What each example demonstrates:
 
 - `wordcount`: element loop rule, command, status badge, pre-save transform, exporter.
 - `element-toolbar`: declarative UI control + side panel + editor action dispatch.
+- `scene-outline`: side panel scene list with click-to-jump navigation.
 
 ## 3. Plugin folder structure
 

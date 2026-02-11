@@ -566,6 +566,8 @@ export class PluginManager {
     const response = (await this.invokeWorker(panel.pluginId, 'ui-panel-action', getLocalId(panel.id), {
       document: context.document,
       currentElementType: context.currentElementType,
+      selectionFrom: context.selectionFrom,
+      selectionTo: context.selectionTo,
       metadata: context.metadata,
       actionId,
     })) as UIPanelActionResult;
