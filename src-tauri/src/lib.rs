@@ -9,6 +9,7 @@ use tauri::menu::{
 use tauri::{Emitter, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 
 mod pdf;
+mod plugins;
 
 #[tauri::command]
 fn save_screenplay(path: String, content: String) -> Result<(), String> {
@@ -43,8 +44,6 @@ fn file_exists(path: String) -> bool {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // File menu items
@@ -189,7 +188,16 @@ pub fn run() {
             save_screenplay,
             load_screenplay,
             file_exists,
-            export_pdf
+            export_pdf,
+            plugins::plugin_list_installed,
+            plugins::plugin_get_lock_records,
+            plugins::plugin_install_from_file,
+            plugins::plugin_install_from_registry,
+            plugins::plugin_uninstall,
+            plugins::plugin_enable_disable,
+            plugins::plugin_update_permissions,
+            plugins::plugin_fetch_registry_index,
+            plugins::plugin_host_call
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

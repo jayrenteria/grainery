@@ -1,0 +1,163 @@
+# Plugin Agent Handoff (Grainery)
+
+This document is for future coding agents that need to build or extend the Grainery plugin system without prior thread context.
+
+## Purpose
+
+Use this as the execution map for plugin-related changes:
+
+- where to edit
+- what contracts must remain stable
+- how to validate behavior safely
+
+## System Snapshot
+
+Grainery plugins are JavaScript modules loaded into isolated Web Workers.
+
+Current plugin model:
+
+- Runtime: worker-isolated, one worker per enabled plugin
+- Install: sideload zip + curated registry
+- Permissions: deny-by-default for optional scopes
+- UI extensions: declarative, host-rendered only
+- Native code plugins: not supported in v1
+
+## Source of Truth Files
+
+Core plugin contracts:
+
+- `/Users/jay/git/screenwrite/src/plugins/types.ts`
+- `/Users/jay/git/screenwrite/src/plugins/sdk.ts`
+- `/Users/jay/git/screenwrite/src/plugins/rpc.ts`
+
+Runtime / orchestration:
+
+- `/Users/jay/git/screenwrite/src/plugins/worker-runtime.ts`
+- `/Users/jay/git/screenwrite/src/plugins/PluginManager.ts`
+- `/Users/jay/git/screenwrite/src/plugins/PluginHost.ts`
+
+Host app integration:
+
+- `/Users/jay/git/screenwrite/src/App.tsx`
+- `/Users/jay/git/screenwrite/src/components/Editor/ScreenplayEditor.tsx`
+- `/Users/jay/git/screenwrite/src/components/Settings/SettingsModal.tsx`
+
+Plugin UI host:
+
+- `/Users/jay/git/screenwrite/src/components/PluginUI/PluginUIHost.tsx`
+- `/Users/jay/git/screenwrite/src/components/PluginUI/PluginToolbar.tsx`
+- `/Users/jay/git/screenwrite/src/components/PluginUI/PluginSidePanel.tsx`
+- `/Users/jay/git/screenwrite/src/plugins/ui/icons.tsx`
+- `/Users/jay/git/screenwrite/src/styles/plugin-ui.css`
+
+Rust backend:
+
+- `/Users/jay/git/screenwrite/src-tauri/src/plugins/mod.rs`
+- `/Users/jay/git/screenwrite/src-tauri/src/lib.rs` (command wiring)
+
+Manifest and validation:
+
+- `/Users/jay/git/screenwrite/grainery-plugin.manifest.json`
+- `/Users/jay/git/screenwrite/scripts/validate-plugin-manifest.mjs`
+
+Examples:
+
+- `/Users/jay/git/screenwrite/examples/plugins/wordcount/`
+- `/Users/jay/git/screenwrite/examples/plugins/element-toolbar/`
+
+## Non-Negotiable Constraints
+
+1. Plugins must not inject arbitrary DOM into host UI.
+2. Plugins must not directly call Tauri `invoke` from plugin code.
+3. Optional permissions must remain deny-by-default.
+4. UI definitions must be ignored unless `ui:mount` is granted.
+5. Zip install expects `grainery-plugin.manifest.json` at archive root.
+6. Worker crashes/timeouts must not crash editor host.
+
+## Extension Points (v1)
+
+Supported plugin registrations:
+
+- element loop providers
+- commands
+- document transforms (`post-open`, `pre-save`, `pre-export`)
+- exporters/importers
+- status badges
+- UI controls (`top-bar`, `bottom-bar`)
+- single side panel with primitive blocks (`text`, `list`, `keyValue`, `actions`)
+
+Not supported:
+
+- arbitrary plugin React components
+- custom schema/node mutation from plugins
+- native dylib plugins
+
+## Known Integration Gotchas
+
+1. **Composite IDs**
+   - Host stores IDs as `pluginId:localId`.
+   - UI actions coming from workers may be local IDs and must be normalized.
+   - See normalization logic in `/Users/jay/git/screenwrite/src/plugins/PluginManager.ts`.
+
+2. **UI refresh coupling**
+   - Plugin UI state depends on editor selection + document state.
+   - Keep selection updates wired through editor callbacks in `/Users/jay/git/screenwrite/src/components/Editor/ScreenplayEditor.tsx` and `/Users/jay/git/screenwrite/src/App.tsx`.
+
+3. **Permission list drift**
+   - If you add optional/core permissions, update all of:
+   - TypeScript unions (`types.ts`)
+   - frontend constants (`permissions.ts`)
+   - manifest JSON schema
+   - JS manifest validator
+   - Rust permission checks
+   - settings UI toggles
+
+## Change Playbook
+
+When adding a new plugin capability:
+
+1. Add types to `/Users/jay/git/screenwrite/src/plugins/types.ts`.
+2. Extend SDK exposure in `/Users/jay/git/screenwrite/src/plugins/sdk.ts`.
+3. Extend worker/host RPC parsing in `/Users/jay/git/screenwrite/src/plugins/rpc.ts`.
+4. Implement worker handler paths in `/Users/jay/git/screenwrite/src/plugins/worker-runtime.ts`.
+5. Implement manager storage + dispatch in `/Users/jay/git/screenwrite/src/plugins/PluginManager.ts`.
+6. Wire host behavior in app/components as needed.
+7. Update docs + at least one example plugin.
+8. Validate with build checks below.
+
+## Validation Checklist
+
+Run after plugin-system changes:
+
+```bash
+npm run build
+cargo check --manifest-path src-tauri/Cargo.toml
+```
+
+Validate manifests:
+
+```bash
+npm run validate:plugin-manifest -- examples/plugins/wordcount/grainery-plugin.manifest.json
+npm run validate:plugin-manifest -- examples/plugins/element-toolbar/grainery-plugin.manifest.json
+```
+
+If modifying example zips, rebuild and verify root layout:
+
+```bash
+unzip -l examples/plugins/wordcount/wordcount.grainery-plugin.zip
+unzip -l examples/plugins/element-toolbar/element-toolbar.grainery-plugin.zip
+```
+
+## Manual QA Minimum
+
+1. Install example plugin from file succeeds.
+2. Permission gating works (especially `ui:mount`).
+3. Disable/uninstall removes plugin behavior immediately.
+4. Plugin crash does not crash editor.
+5. Core writing loop (Tab/Enter/Escape) remains intact without plugins.
+
+## Related Docs
+
+- `/Users/jay/git/screenwrite/docs/plugin-system.md`
+- `/Users/jay/git/screenwrite/docs/plugin-ui-extension.md`
+- `/Users/jay/git/screenwrite/docs/plugin-authoring-guide.md`

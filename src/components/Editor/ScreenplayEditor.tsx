@@ -6,7 +6,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Bold from '@tiptap/extension-bold';
 import Italic from '@tiptap/extension-italic';
 import Underline from '@tiptap/extension-underline';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   SceneHeading,
@@ -22,11 +22,15 @@ import {
 import { ElementTypeIndicator } from './ElementTypeIndicator';
 import { PaginatedEditor } from './PaginatedEditor';
 import type { ScreenplayElementType, CharacterExtension } from '../../lib/types';
-import type { JSONContent } from '@tiptap/react';
+import type { Editor, JSONContent } from '@tiptap/react';
+import type { ElementLoopContext } from '../../plugins';
 
 interface ScreenplayEditorProps {
   initialContent?: JSONContent;
   onChange?: (content: JSONContent) => void;
+  onSelectionChange?: () => void;
+  resolveElementLoop?: (context: ElementLoopContext) => ScreenplayElementType | null;
+  onEditorReady?: (editor: Editor | null) => void;
 }
 
 // Custom document that only allows screenplay elements
@@ -44,7 +48,13 @@ const DEFAULT_CONTENT: JSONContent = {
   ],
 };
 
-export function ScreenplayEditor({ initialContent, onChange }: ScreenplayEditorProps) {
+export function ScreenplayEditor({
+  initialContent,
+  onChange,
+  onSelectionChange,
+  resolveElementLoop,
+  onEditorReady,
+}: ScreenplayEditorProps) {
   const [currentElement, setCurrentElement] = useState<ScreenplayElementType | null>('sceneHeading');
   const [characterExtension, setCharacterExtension] = useState<CharacterExtension>(null);
 
@@ -63,7 +73,9 @@ export function ScreenplayEditor({ initialContent, onChange }: ScreenplayEditorP
       Parenthetical,
       Transition,
       PageBreak,
-      ScreenplayKeymap,
+      ScreenplayKeymap.configure({
+        resolveElementLoop,
+      }),
       PaginationExtension,
       Placeholder.configure({
         placeholder: 'Start writing...',
@@ -96,6 +108,8 @@ export function ScreenplayEditor({ initialContent, onChange }: ScreenplayEditorP
       } else {
         setCharacterExtension(null);
       }
+
+      onSelectionChange?.();
     },
     editorProps: {
       attributes: {
@@ -103,6 +117,10 @@ export function ScreenplayEditor({ initialContent, onChange }: ScreenplayEditorP
       },
     },
   });
+
+  useEffect(() => {
+    onEditorReady?.(editor);
+  }, [editor, onEditorReady]);
 
   return (
     <>

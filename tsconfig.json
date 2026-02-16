@@ -13,6 +13,10 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@grainery/plugin-sdk": ["src/plugins/sdk.ts"]
+    },
 
     /* Linting */
     "strict": true,

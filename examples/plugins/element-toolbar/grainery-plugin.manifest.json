@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "com.grainery.element-toolbar",
+  "name": "Element Toolbar",
+  "version": "1.0.0",
+  "description": "Adds icon-based top bar controls for screenplay element switching.",
+  "engine": {
+    "grainery": ">=0.1.0",
+    "pluginApi": "^1.0.0"
+  },
+  "entry": "dist/main.js",
+  "permissions": [],
+  "optionalPermissions": [
+    "ui:mount"
+  ],
+  "networkAllowlist": [],
+  "signature": {
+    "keyId": "main-2026",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "sig": "PLACEHOLDER"
+  }
+}

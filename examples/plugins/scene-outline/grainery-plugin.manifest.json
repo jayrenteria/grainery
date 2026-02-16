@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "com.grainery.scene-outline",
+  "name": "Scene Outline",
+  "version": "1.0.0",
+  "description": "Adds a side panel scene outline with jump navigation.",
+  "engine": {
+    "grainery": ">=0.1.0",
+    "pluginApi": "^1.0.0"
+  },
+  "entry": "dist/main.js",
+  "permissions": [],
+  "optionalPermissions": [
+    "ui:mount"
+  ],
+  "networkAllowlist": [],
+  "signature": {
+    "keyId": "main-2026",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "sig": "PLACEHOLDER"
+  }
+}

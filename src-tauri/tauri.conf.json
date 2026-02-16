@@ -13,7 +13,7 @@
   "app": {
     "windows": [],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' asset: data: blob:; font-src 'self' data:; connect-src 'self' https://*; worker-src 'self' blob:"
     }
   },
   "bundle": {

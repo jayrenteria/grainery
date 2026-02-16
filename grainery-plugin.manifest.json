@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://grainery.app/schemas/grainery-plugin.manifest.json",
+  "title": "Grainery Plugin Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "version",
+    "description",
+    "engine",
+    "entry",
+    "permissions",
+    "optionalPermissions",
+    "networkAllowlist",
+    "signature"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9._-]+$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+].*)?$"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grainery", "pluginApi"],
+      "properties": {
+        "grainery": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pluginApi": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "entry": {
+      "type": "string",
+      "minLength": 1
+    },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "document:read",
+          "document:write",
+          "editor:commands",
+          "export:register"
+        ]
+      }
+    },
+    "optionalPermissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "fs:pick-read",
+          "fs:pick-write",
+          "network:https",
+          "ui:mount"
+        ]
+      }
+    },
+    "networkAllowlist": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keyId", "sha256", "sig"],
+      "properties": {
+        "keyId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "sig": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

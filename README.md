@@ -18,3 +18,30 @@ Use the `tab` key to cycle through your elements. This works in a kind of "smart
 There is a subtle box at the top of the screen that indicates the current element you are editing. There may also be some special instructions in there to experiment with. These are new and maybe a little janky, but I will update them as I can.
 
 You can also save your script at any time, and export it as a PDF or to a `.fountain` or a `.fdx` file if you want to take your script somewhere else or export to Final Draft.
+
+## Plugins (v1)
+
+Grainery now includes a writer-first plugin system:
+
+- Isolated JavaScript plugins running in Web Workers
+- Deny-by-default optional permissions (`fs:pick-read`, `fs:pick-write`, `network:https`)
+- Sideload install (`.grainery-plugin.zip`) and curated registry install flow
+- Plugin extension points for:
+  - element loop rules
+  - commands + shortcuts
+  - document transforms (`post-open`, `pre-save`, `pre-export`)
+  - importers/exporters
+
+Manifest schema: `/Users/jay/git/screenwrite/grainery-plugin.manifest.json`
+
+Example plugin: `/Users/jay/git/screenwrite/examples/plugins/wordcount/`
+
+Detailed mechanics: `/Users/jay/git/screenwrite/docs/plugin-system.md`
+Developer guide: `/Users/jay/git/screenwrite/docs/plugin-authoring-guide.md`
+Agent handoff: `/Users/jay/git/screenwrite/docs/plugin-agent.md`
+
+Validate a manifest:
+
+```bash
+npm run validate:plugin-manifest -- examples/plugins/wordcount/grainery-plugin.manifest.json
+```
