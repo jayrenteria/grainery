@@ -265,7 +265,7 @@ export function SettingsModal({
                   <button className="btn btn-outline btn-sm" disabled={isBusy} onClick={handleInstallFromFile}>
                     Install from file
                   </button>
-                  <button className="btn btn-outline btn-sm" disabled={isBusy} onClick={handleFetchRegistry}>
+                  {/* <button className="btn btn-outline btn-sm" disabled={isBusy} onClick={handleFetchRegistry}>
                     Fetch registry
                   </button>
                   <input
@@ -273,12 +273,12 @@ export function SettingsModal({
                     value={registryUrl}
                     onChange={(event) => setRegistryUrl(event.target.value)}
                     placeholder="Registry index URL"
-                  />
+                  /> */}
                 </div>
 
                 {pluginError && <div className="alert alert-error py-2 text-sm">{pluginError}</div>}
 
-                <div className="text-xs text-base-content/70">
+                <div className="text-xs text-base-content/70 m-2">
                   Registered: {commands.length} commands, {exporters.length} exporters, {importers.length}{' '}
                   importers.
                 </div>
