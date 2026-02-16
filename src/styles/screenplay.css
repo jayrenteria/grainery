@@ -357,3 +357,67 @@
 .btn-secondary {
   @apply btn btn-ghost;
 }
+
+.start-screen {
+  @apply relative overflow-hidden;
+  @apply flex h-full w-full items-center justify-center p-6 md:p-10;
+  @apply bg-gradient-to-b from-base-200 to-base-300;
+}
+
+.start-screen-background {
+  @apply absolute inset-0 bg-center bg-no-repeat bg-contain opacity-10;
+  @apply pointer-events-none;
+}
+
+.start-screen-card {
+  @apply relative z-10;
+  @apply flex w-full max-w-3xl flex-col gap-6 rounded-2xl border border-base-300 bg-base-100/95 p-6 shadow-xl md:p-8;
+}
+
+.start-screen-header p {
+  @apply mt-1 text-sm text-base-content/70;
+}
+
+.start-screen-actions {
+  @apply flex flex-col gap-2 sm:flex-row;
+}
+
+.start-screen-actions .btn {
+  @apply sm:min-w-40;
+}
+
+.start-screen-recent {
+  @apply flex min-h-0 flex-col gap-3;
+}
+
+.start-screen-recent-header h2 {
+  @apply text-base font-semibold text-base-content;
+}
+
+.start-screen-empty {
+  @apply rounded-lg border border-dashed border-base-300 bg-base-200/50 p-4 text-sm text-base-content/60;
+}
+
+.start-screen-list {
+  @apply flex flex-col gap-2;
+}
+
+.start-screen-list-item {
+  @apply grid w-full cursor-pointer grid-cols-1 gap-1 rounded-lg border border-base-300 bg-base-200/30 px-4 py-3 text-left transition-colors;
+  @apply hover:border-primary/40 hover:bg-base-200 sm:grid-cols-[1fr_auto];
+}
+
+.start-screen-filename {
+  @apply truncate text-sm font-medium text-base-content;
+  @apply sm:col-start-1 sm:row-start-1;
+}
+
+.start-screen-directory {
+  @apply truncate text-xs text-base-content/60;
+  @apply sm:col-span-2 sm:row-start-2;
+}
+
+.start-screen-time {
+  @apply text-xs text-base-content/50;
+  @apply sm:col-start-2 sm:row-start-1 sm:justify-self-end sm:self-start;
+}
