@@ -50,7 +50,10 @@
 .screenplay-editor {
   font-family: 'Courier New', Courier, monospace;
   font-size: 12pt;
-  line-height: 1;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
   width: var(--page-width);
   min-height: var(--page-height);
   margin: 0 auto;
@@ -120,6 +123,7 @@
 /* Scene Heading */
 .scene-heading {
   @apply uppercase font-bold;
+  font-weight: bolder;
   margin-top: 2em;
   margin-bottom: 0;
 }
