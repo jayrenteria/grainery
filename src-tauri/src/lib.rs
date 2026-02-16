@@ -4,12 +4,34 @@ extern crate objc;
 
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
 use tauri::menu::{
     MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{Emitter, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 
 mod pdf;
 mod plugins;
+
+#[derive(Default)]
+struct PendingOpenFiles {
+    paths: Mutex<Vec<String>>,
+}
+
+impl PendingOpenFiles {
+    fn push_paths(&self, mut new_paths: Vec<String>) {
+        if new_paths.is_empty() {
+            return;
+        }
+
+        let mut paths = self.paths.lock().unwrap();
+        paths.append(&mut new_paths);
+    }
+
+    fn take_paths(&self) -> Vec<String> {
+        let mut paths = self.paths.lock().unwrap();
+        std::mem::take(&mut *paths)
+    }
+}
 
 #[tauri::command]
 fn save_screenplay(path: String, content: String) -> Result<(), String> {
@@ -41,10 +63,16 @@ fn file_exists(path: String) -> bool {
     Path::new(&path).exists()
 }
 
+#[tauri::command]
+fn consume_pending_open_files(state: tauri::State<'_, PendingOpenFiles>) -> Vec<String> {
+    state.take_paths()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(PendingOpenFiles::default())
         .setup(|app| {
             // File menu items
             let new_item = MenuItemBuilder::with_id("new", "New")
@@ -153,6 +181,17 @@ pub fn run() {
 
             let window = win_builder.build().unwrap();
 
+            // Collect files passed as command line arguments (Windows/Linux and fallback on macOS).
+            let startup_paths = std::env::args()
+                .skip(1)
+                .filter(|arg| Path::new(arg).exists())
+                .collect::<Vec<_>>();
+
+            if !startup_paths.is_empty() {
+                let pending = app.state::<PendingOpenFiles>();
+                pending.push_paths(startup_paths.clone());
+            }
+
             // set background color and title color only when building for macOS
             #[cfg(target_os = "macos")]
             {
@@ -188,6 +227,7 @@ pub fn run() {
             save_screenplay,
             load_screenplay,
             file_exists,
+            consume_pending_open_files,
             export_pdf,
             plugins::plugin_list_installed,
             plugins::plugin_get_lock_records,
@@ -199,6 +239,33 @@ pub fn run() {
             plugins::plugin_fetch_registry_index,
             plugins::plugin_host_call
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        if let tauri::RunEvent::Opened { urls } = event {
+            let paths = urls
+                .into_iter()
+                .filter_map(|url| {
+                    if url.scheme() != "file" {
+                        return None;
+                    }
+
+                    url.to_file_path()
+                        .ok()
+                        .map(|path| path.to_string_lossy().to_string())
+                })
+                .collect::<Vec<_>>();
+
+            if !paths.is_empty() {
+                let pending = app_handle.state::<PendingOpenFiles>();
+                pending.push_paths(paths.clone());
+
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.emit("app-open-file", paths);
+                }
+            }
+        }
+    });
 }

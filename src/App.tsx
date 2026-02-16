@@ -94,11 +94,14 @@ function App() {
   const [pluginStateVersion, setPluginStateVersion] = useState(0);
   const [editorVersion, setEditorVersion] = useState(0);
   const [statusBadges, setStatusBadges] = useState<RenderedStatusBadge[]>([]);
+  const [isResolvingInitialOpen, setIsResolvingInitialOpen] = useState(true);
 
   const editorRef = useRef<Editor | null>(null);
   const editorContentRef = useRef<JSONContent>(document.document);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pluginManagerRef = useRef<PluginManager | null>(null);
+  const viewRef = useRef(view);
+  const isDirtyRef = useRef(isDirty);
 
   const applyDocumentFromPlugin = useCallback(
     (next: JSONContent) => {
@@ -269,6 +272,49 @@ function App() {
     setRecentFiles(getRecentFiles());
   }, []);
 
+  const openPathIntoEditor = useCallback(
+    async (
+      path: string,
+      options?: {
+        confirmIfDirty?: boolean;
+        errorPrefix?: string;
+        showStartError?: boolean;
+      }
+    ) => {
+      const { confirmIfDirty = false, errorPrefix = 'Failed to open file.', showStartError = false } = options ?? {};
+
+      if (confirmIfDirty && viewRef.current === 'editor' && isDirtyRef.current) {
+        const discard = await confirmUnsavedChanges();
+        if (!discard) {
+          return false;
+        }
+      }
+
+      try {
+        const doc = await openFileAtPath(path);
+        const transformed = await runTransformHook('post-open', doc.document);
+        doc.document = transformed;
+
+        setDocument(doc);
+        editorContentRef.current = transformed;
+        setIsDirty(false);
+        setView('editor');
+        setStartScreenError(null);
+        refreshRecentFiles();
+        await updateWindowTitle(doc.meta.filename);
+        return true;
+      } catch (error) {
+        console.error('Failed to open file at path:', error);
+        if (showStartError && viewRef.current === 'start') {
+          const message = error instanceof Error ? error.message : String(error);
+          setStartScreenError(`${errorPrefix} ${message}`);
+        }
+        return false;
+      }
+    },
+    [refreshRecentFiles, runTransformHook]
+  );
+
   const performAutoSave = useCallback(async () => {
     if (!isDirty || showTitlePageEditor) return;
 
@@ -366,23 +412,18 @@ function App() {
           return;
         }
 
-        const doc = await openFileAtPath(path);
-        const transformed = await runTransformHook('post-open', doc.document);
-        doc.document = transformed;
-
-        setDocument(doc);
-        editorContentRef.current = transformed;
-        setIsDirty(false);
-        setView('editor');
-        refreshRecentFiles();
-        await updateWindowTitle(doc.meta.filename);
+        await openPathIntoEditor(path, {
+          confirmIfDirty: false,
+          errorPrefix: 'Failed to open recent file.',
+          showStartError: true,
+        });
       } catch (error) {
         console.error('Failed to open recent file:', error);
         const message = error instanceof Error ? error.message : String(error);
         setStartScreenError(`Failed to open recent file. ${message}`);
       }
     },
-    [refreshRecentFiles, runTransformHook]
+    [openPathIntoEditor]
   );
 
   const handleSave = useCallback(async () => {
@@ -612,6 +653,14 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  }, [isDirty]);
+
   // Listen for native menu events
   useEffect(() => {
     const unlisten = listen<string>('menu-event', (event) => {
@@ -666,10 +715,50 @@ function App() {
     pluginManager,
   ]);
 
+  // Open files when the app is launched via file association / OS open-file events.
+  useEffect(() => {
+    const openIncomingPaths = async (paths: string[]) => {
+      const firstPath = paths.find((path) => typeof path === 'string' && path.length > 0);
+      if (!firstPath) {
+        return;
+      }
+
+      await openPathIntoEditor(firstPath, {
+        confirmIfDirty: true,
+        errorPrefix: 'Failed to open file.',
+        showStartError: true,
+      });
+    };
+
+    const unlisten = listen<string[]>('app-open-file', (event) => {
+      if (!Array.isArray(event.payload)) {
+        return;
+      }
+
+      void openIncomingPaths(event.payload);
+    });
+
+    void (async () => {
+      try {
+        const pending = await invoke<string[]>('consume_pending_open_files');
+        await openIncomingPaths(Array.isArray(pending) ? pending : []);
+      } catch (error) {
+        console.error('Failed to consume pending open files:', error);
+      } finally {
+        setIsResolvingInitialOpen(false);
+      }
+    })();
+
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, [openPathIntoEditor]);
+
   return (
     <ThemeProvider>
       <div className="app-container">
         {view === 'start' ? (
+          isResolvingInitialOpen ? null : (
           <StartScreen
             recentFiles={recentFiles}
             errorMessage={startScreenError}
@@ -684,6 +773,7 @@ function App() {
               void handleOpenRecent(path);
             }}
           />
+          )
         ) : (
           <>
             <ScreenplayEditor

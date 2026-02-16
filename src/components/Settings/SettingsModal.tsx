@@ -4,7 +4,7 @@ import { useTheme, THEMES, Theme } from '../../contexts/ThemeContext';
 import { Modal } from '../Modal';
 import { TitlePagePreview } from '../TitlePage';
 import type { TitlePageData } from '../../lib/types';
-import type { OptionalPermission, PluginPermissionGrant, PluginRegistryEntry } from '../../plugins';
+import type { OptionalPermission, PluginPermissionGrant } from '../../plugins';
 import { PluginManager } from '../../plugins';
 
 interface SettingsModalProps {
@@ -83,8 +83,8 @@ export function SettingsModal({
   const [showPreview, setShowPreview] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [pluginError, setPluginError] = useState<string | null>(null);
-  const [registryUrl, setRegistryUrl] = useState('https://plugins.grainery.app/index.json');
-  const [registryEntries, setRegistryEntries] = useState<PluginRegistryEntry[]>([]);
+  // const [registryUrl, setRegistryUrl] = useState('https://plugins.grainery.app/index.json');
+  // const [registryEntries, setRegistryEntries] = useState<PluginRegistryEntry[]>([]);
 
   const plugins = useMemo(() => pluginManager.getInstalledPlugins(), [pluginManager, pluginStateVersion]);
   const commands = useMemo(() => pluginManager.getCommands(), [pluginManager, pluginStateVersion]);
@@ -128,18 +128,18 @@ export function SettingsModal({
     });
   };
 
-  const handleFetchRegistry = () => {
-    void runBusy(async () => {
-      const entries = await pluginManager.fetchRegistryIndex(registryUrl);
-      setRegistryEntries(entries);
-    });
-  };
+  // const handleFetchRegistry = () => {
+  //   void runBusy(async () => {
+  //     const entries = await pluginManager.fetchRegistryIndex(registryUrl);
+  //     setRegistryEntries(entries);
+  //   });
+  // };
 
-  const handleInstallFromRegistry = (pluginId: string, version: string) => {
-    void runBusy(async () => {
-      await pluginManager.installFromRegistry(registryUrl, pluginId, version || null);
-    });
-  };
+  // const handleInstallFromRegistry = (pluginId: string, version: string) => {
+  //   void runBusy(async () => {
+  //     await pluginManager.installFromRegistry(registryUrl, pluginId, version || null);
+  //   });
+  // };
 
   const handleToggleEnabled = (pluginId: string, enabled: boolean) => {
     void runBusy(async () => {
@@ -409,7 +409,7 @@ export function SettingsModal({
                   })}
                 </div>
 
-                {registryEntries.length > 0 && (
+                {/* {registryEntries.length > 0 && (
                   <div className="mt-2 space-y-2">
                     <div className="text-xs font-semibold opacity-70">Registry Plugins</div>
                     {registryEntries.map((entry) => (
@@ -431,7 +431,7 @@ export function SettingsModal({
                       </div>
                     ))}
                   </div>
-                )}
+                )} */}
               </div>
             )}
           </section>
