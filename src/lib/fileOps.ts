@@ -5,6 +5,7 @@ import type { ScreenplayDocument, TitlePageData } from './types';
 import type { JSONContent } from '@tiptap/react';
 import { exportToFountain } from './fountain';
 import { exportToFdx } from './fdx';
+import { recordRecentFile } from './recentFiles';
 
 export async function updateWindowTitle(filename: string | null, isDirty: boolean = false): Promise<void> {
   const title = (filename || 'Untitled') + (isDirty ? ' - Edited' : '');
@@ -48,6 +49,25 @@ export function createNewDocument(): ScreenplayDocument {
   };
 }
 
+function populateDocumentMetaFromPath(doc: ScreenplayDocument, filePath: string): ScreenplayDocument {
+  return {
+    ...doc,
+    meta: {
+      ...doc.meta,
+      filePath,
+      filename: filePath.split(/[\\/]/).pop() || null,
+    },
+  };
+}
+
+export async function openFileAtPath(path: string): Promise<ScreenplayDocument> {
+  const content = await invoke<string>('load_screenplay', { path });
+  const doc = JSON.parse(content) as ScreenplayDocument;
+  const normalized = populateDocumentMetaFromPath(doc, path);
+  recordRecentFile(path);
+  return normalized;
+}
+
 export async function openFile(): Promise<ScreenplayDocument | null> {
   const filePath = await open({
     multiple: false,
@@ -65,14 +85,7 @@ export async function openFile(): Promise<ScreenplayDocument | null> {
 
   if (!filePath) return null;
 
-  const content = await invoke<string>('load_screenplay', { path: filePath });
-  const doc = JSON.parse(content) as ScreenplayDocument;
-
-  // Update the file path in meta
-  doc.meta.filePath = filePath;
-  doc.meta.filename = filePath.split('/').pop() || null;
-
-  return doc;
+  return openFileAtPath(filePath);
 }
 
 export async function saveFile(
@@ -97,6 +110,7 @@ export async function saveFile(
     content: JSON.stringify(updatedDoc, null, 2),
   });
 
+  recordRecentFile(doc.meta.filePath);
   return updatedDoc;
 }
 
@@ -122,7 +136,7 @@ export async function saveFileAs(
     meta: {
       ...doc.meta,
       filePath,
-      filename: filePath.split('/').pop() || null,
+      filename: filePath.split(/[\\/]/).pop() || null,
       modifiedAt: new Date().toISOString(),
     },
   };
@@ -132,6 +146,7 @@ export async function saveFileAs(
     content: JSON.stringify(updatedDoc, null, 2),
   });
 
+  recordRecentFile(filePath);
   return updatedDoc;
 }
 

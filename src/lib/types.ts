@@ -48,6 +48,12 @@ export interface ScreenplayDocument {
   settings: DocumentSettings;
 }
 
+export interface RecentFileEntry {
+  path: string;
+  filename: string;
+  lastOpenedAt: string;
+}
+
 export const ELEMENT_CYCLE: ScreenplayElementType[] = [
   'sceneHeading',
   'action',

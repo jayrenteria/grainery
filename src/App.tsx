@@ -7,10 +7,12 @@ import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialo
 
 import { ScreenplayEditor, TitlePageEditor } from './components/Editor';
 import { SettingsModal } from './components/Settings';
+import { StartScreen } from './components/StartScreen';
 import { ThemeProvider } from './contexts/ThemeContext';
 import {
   createNewDocument,
   openFile,
+  openFileAtPath,
   saveFile,
   saveFileAs,
   exportAsFountain,
@@ -19,7 +21,14 @@ import {
   confirmUnsavedChanges,
   updateWindowTitle,
 } from './lib/fileOps';
-import { ELEMENT_CYCLE, type ScreenplayDocument, type ScreenplayElementType, type TitlePageData } from './lib/types';
+import { getRecentFiles, removeRecentFile } from './lib/recentFiles';
+import {
+  ELEMENT_CYCLE,
+  type RecentFileEntry,
+  type ScreenplayDocument,
+  type ScreenplayElementType,
+  type TitlePageData,
+} from './lib/types';
 import { PluginManager } from './plugins';
 import type { RenderedStatusBadge } from './plugins';
 import { PluginUIHost } from './components/PluginUI';
@@ -75,8 +84,11 @@ function getPreviousElementType(currentType: ScreenplayElementType, previousType
 }
 
 function App() {
+  const [view, setView] = useState<'start' | 'editor'>('start');
   const [document, setDocument] = useState<ScreenplayDocument>(createNewDocument);
   const [isDirty, setIsDirty] = useState(false);
+  const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>(() => getRecentFiles());
+  const [startScreenError, setStartScreenError] = useState<string | null>(null);
   const [showTitlePageEditor, setShowTitlePageEditor] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [pluginStateVersion, setPluginStateVersion] = useState(0);
@@ -253,6 +265,10 @@ function App() {
     [document.meta.filename, pluginManager]
   );
 
+  const refreshRecentFiles = useCallback(() => {
+    setRecentFiles(getRecentFiles());
+  }, []);
+
   const performAutoSave = useCallback(async () => {
     if (!isDirty || showTitlePageEditor) return;
 
@@ -292,7 +308,7 @@ function App() {
   );
 
   const handleNew = useCallback(async () => {
-    if (isDirty) {
+    if (view === 'editor' && isDirty) {
       const discard = await confirmUnsavedChanges();
       if (!discard) return;
     }
@@ -301,11 +317,13 @@ function App() {
     setDocument(nextDoc);
     editorContentRef.current = nextDoc.document;
     setIsDirty(false);
+    setView('editor');
+    setStartScreenError(null);
     await updateWindowTitle(null);
-  }, [isDirty]);
+  }, [isDirty, view]);
 
   const handleOpen = useCallback(async () => {
-    if (isDirty) {
+    if (view === 'editor' && isDirty) {
       const discard = await confirmUnsavedChanges();
       if (!discard) return;
     }
@@ -322,11 +340,50 @@ function App() {
       setDocument(doc);
       editorContentRef.current = transformed;
       setIsDirty(false);
+      setView('editor');
+      setStartScreenError(null);
+      refreshRecentFiles();
       await updateWindowTitle(doc.meta.filename);
     } catch (error) {
       console.error('Failed to open file:', error);
+      if (view === 'start') {
+        const message = error instanceof Error ? error.message : String(error);
+        setStartScreenError(`Failed to open file. ${message}`);
+      }
     }
-  }, [isDirty, runTransformHook]);
+  }, [isDirty, refreshRecentFiles, runTransformHook, view]);
+
+  const handleOpenRecent = useCallback(
+    async (path: string) => {
+      setStartScreenError(null);
+
+      try {
+        const exists = await invoke<boolean>('file_exists', { path });
+        if (!exists) {
+          const next = removeRecentFile(path);
+          setRecentFiles(next);
+          setStartScreenError('This file is no longer available. It has been removed from Recent Files.');
+          return;
+        }
+
+        const doc = await openFileAtPath(path);
+        const transformed = await runTransformHook('post-open', doc.document);
+        doc.document = transformed;
+
+        setDocument(doc);
+        editorContentRef.current = transformed;
+        setIsDirty(false);
+        setView('editor');
+        refreshRecentFiles();
+        await updateWindowTitle(doc.meta.filename);
+      } catch (error) {
+        console.error('Failed to open recent file:', error);
+        const message = error instanceof Error ? error.message : String(error);
+        setStartScreenError(`Failed to open recent file. ${message}`);
+      }
+    },
+    [refreshRecentFiles, runTransformHook]
+  );
 
   const handleSave = useCallback(async () => {
     try {
@@ -337,12 +394,13 @@ function App() {
       if (savedDoc) {
         setDocument(savedDoc);
         setIsDirty(false);
+        refreshRecentFiles();
         await updateWindowTitle(savedDoc.meta.filename);
       }
     } catch (error) {
       console.error('Failed to save file:', error);
     }
-  }, [document, runTransformHook]);
+  }, [document, refreshRecentFiles, runTransformHook]);
 
   const handleSaveAs = useCallback(async () => {
     try {
@@ -353,12 +411,13 @@ function App() {
       if (savedDoc) {
         setDocument(savedDoc);
         setIsDirty(false);
+        refreshRecentFiles();
         await updateWindowTitle(savedDoc.meta.filename);
       }
     } catch (error) {
       console.error('Failed to save file:', error);
     }
-  }, [document, runTransformHook]);
+  }, [document, refreshRecentFiles, runTransformHook]);
 
   const handleExportFountain = useCallback(async () => {
     try {
@@ -610,55 +669,74 @@ function App() {
   return (
     <ThemeProvider>
       <div className="app-container">
-        <ScreenplayEditor
-          key={document.meta.id}
-          initialContent={document.document}
-          onChange={handleEditorChange}
-          resolveElementLoop={(context) => pluginManager.resolveElementLoop(context)}
-          onSelectionChange={() => {
-            setEditorVersion((prev) => prev + 1);
-          }}
-          onEditorReady={(editor) => {
-            editorRef.current = editor;
-          }}
-        />
-
-        <PluginUIHost
-          pluginManager={pluginManager}
-          pluginStateVersion={pluginStateVersion}
-          editorVersion={editorVersion}
-          document={editorContentRef.current}
-          editorAdapter={editorAdapter}
-        />
-
-        {showTitlePageEditor && (
-          <TitlePageEditor
-            titlePage={document.titlePage}
-            onSave={handleSaveTitlePage}
-            onClose={() => setShowTitlePageEditor(false)}
+        {view === 'start' ? (
+          <StartScreen
+            recentFiles={recentFiles}
+            errorMessage={startScreenError}
+            onDismissError={() => setStartScreenError(null)}
+            onNewScreenplay={() => {
+              void handleNew();
+            }}
+            onOpenFile={() => {
+              void handleOpen();
+            }}
+            onOpenRecent={(path) => {
+              void handleOpenRecent(path);
+            }}
           />
-        )}
+        ) : (
+          <>
+            <ScreenplayEditor
+              key={document.meta.id}
+              initialContent={document.document}
+              onChange={handleEditorChange}
+              resolveElementLoop={(context) => pluginManager.resolveElementLoop(context)}
+              onSelectionChange={() => {
+                setEditorVersion((prev) => prev + 1);
+              }}
+              onEditorReady={(editor) => {
+                editorRef.current = editor;
+              }}
+            />
 
-        {showSettings && (
-          <SettingsModal
-            onClose={() => setShowSettings(false)}
-            onOpenTitlePage={handleEditTitlePage}
-            titlePage={document.titlePage}
-            pluginManager={pluginManager}
-            pluginStateVersion={pluginStateVersion}
-            onRunPluginExporter={handleRunPluginExporter}
-            onRunPluginImporter={handleRunPluginImporter}
-          />
-        )}
+            <PluginUIHost
+              pluginManager={pluginManager}
+              pluginStateVersion={pluginStateVersion}
+              editorVersion={editorVersion}
+              document={editorContentRef.current}
+              editorAdapter={editorAdapter}
+            />
 
-        {statusBadges.length > 0 && (
-          <div className="plugin-status-badges">
-            {statusBadges.map((badge) => (
-              <div key={badge.id} className="plugin-status-badge">
-                {badge.label}: {badge.text}
+            {showTitlePageEditor && (
+              <TitlePageEditor
+                titlePage={document.titlePage}
+                onSave={handleSaveTitlePage}
+                onClose={() => setShowTitlePageEditor(false)}
+              />
+            )}
+
+            {showSettings && (
+              <SettingsModal
+                onClose={() => setShowSettings(false)}
+                onOpenTitlePage={handleEditTitlePage}
+                titlePage={document.titlePage}
+                pluginManager={pluginManager}
+                pluginStateVersion={pluginStateVersion}
+                onRunPluginExporter={handleRunPluginExporter}
+                onRunPluginImporter={handleRunPluginImporter}
+              />
+            )}
+
+            {statusBadges.length > 0 && (
+              <div className="plugin-status-badges">
+                {statusBadges.map((badge) => (
+                  <div key={badge.id} className="plugin-status-badge">
+                    {badge.label}: {badge.text}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
     </ThemeProvider>
