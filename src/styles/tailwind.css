@@ -10,8 +10,8 @@
   color-scheme: light;
 
   --color-base-100: oklch(0.9585 0.0139 88.68);
-  --color-base-200: oklch(0.93 0.012 88.68);
-  --color-base-300: oklch(0.89 0.011 88.68);
+  --color-base-200: oklch(0.9585 0.040 88.68);
+  --color-base-300: oklch(0.89 0.05 88.68);
   --color-base-content: oklch(0.2177 0.0849 16.96);
 
   --color-primary: oklch(0.7114 0.1528 71.44);
