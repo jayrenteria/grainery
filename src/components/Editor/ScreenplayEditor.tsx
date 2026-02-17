@@ -33,6 +33,48 @@ interface ScreenplayEditorProps {
   onEditorReady?: (editor: Editor | null) => void;
 }
 
+const VIEWPORT_TARGET_RATIO = 0.45;
+const VIEWPORT_UPPER_TRIGGER_RATIO = 0.28;
+const VIEWPORT_LOWER_TRIGGER_RATIO = 0.62;
+
+function keepCaretNearViewportCenter(editor: Editor): void {
+  const { view } = editor;
+  const { from, empty } = view.state.selection;
+  if (!empty) {
+    return;
+  }
+
+  const scrollContainer = view.dom.closest('.paginated-editor-container');
+  if (!(scrollContainer instanceof HTMLElement)) {
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    try {
+      const caretCoords = view.coordsAtPos(from);
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const caretYInViewport = caretCoords.top - containerRect.top;
+      const viewportHeight = containerRect.height;
+      const upperTrigger = viewportHeight * VIEWPORT_UPPER_TRIGGER_RATIO;
+      const lowerTrigger = viewportHeight * VIEWPORT_LOWER_TRIGGER_RATIO;
+
+      if (caretYInViewport >= upperTrigger && caretYInViewport <= lowerTrigger) {
+        return;
+      }
+
+      const targetScrollTop =
+        scrollContainer.scrollTop + caretYInViewport - viewportHeight * VIEWPORT_TARGET_RATIO;
+
+      scrollContainer.scrollTo({
+        top: Math.max(0, targetScrollTop),
+        behavior: 'auto',
+      });
+    } catch {
+      // Ignore transient coordinate errors while the document is reflowing.
+    }
+  });
+}
+
 // Custom document that only allows screenplay elements
 const ScreenplayDocument = Document.extend({
   content: '(sceneHeading | action | character | dialogue | parenthetical | transition | pageBreak)+',
@@ -84,6 +126,7 @@ export function ScreenplayEditor({
     content: initialContent || DEFAULT_CONTENT,
     onUpdate: ({ editor }) => {
       onChange?.(editor.getJSON());
+      keepCaretNearViewportCenter(editor);
       // Update current element type when content changes (e.g., Tab to switch element)
       const { $from } = editor.state.selection;
       const nodeName = $from.parent.type.name;

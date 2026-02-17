@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 export const THEMES = [
+  'grainery',
   'light', 'dark', 'cupcake', 'bumblebee', 'emerald', 'corporate',
   'synthwave', 'retro', 'cyberpunk', 'valentine', 'halloween', 'garden',
   'forest', 'aqua', 'lofi', 'pastel', 'fantasy', 'wireframe', 'black',
@@ -26,7 +27,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (stored && THEMES.includes(stored)) {
       return stored;
     }
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return 'grainery';
+    // TODO: Consider using system preference as default if no stored theme is found, need to pick a dark theme
+    // return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'grainery';
   });
 
   const setTheme = (newTheme: Theme) => {
