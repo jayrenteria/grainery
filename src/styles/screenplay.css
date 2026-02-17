@@ -260,6 +260,58 @@
   @apply uppercase tracking-wide font-medium text-base-content/80;
 }
 
+.find-replace-bar {
+  @apply fixed top-4 right-6 z-[200];
+  @apply bg-base-100/95 backdrop-blur-sm border border-base-300 rounded-lg shadow-lg;
+  @apply p-3 flex flex-col gap-2 min-w-[520px] max-w-[680px];
+}
+
+.find-replace-row {
+  @apply flex items-end gap-2;
+}
+
+.find-replace-field {
+  @apply flex flex-col gap-1 flex-1;
+}
+
+.find-replace-label {
+  @apply text-[11px] font-semibold uppercase tracking-wide text-base-content/70;
+}
+
+.find-replace-toggle {
+  @apply inline-flex items-center gap-2 text-xs text-base-content/80;
+}
+
+.find-replace-controls {
+  @apply ml-auto flex items-center gap-2;
+}
+
+.find-replace-count {
+  @apply text-xs font-mono text-base-content/70 min-w-[48px] text-right;
+}
+
+.find-match {
+  @apply bg-warning/45 rounded-[2px];
+}
+
+.find-match-active {
+  @apply bg-warning text-warning-content rounded-[2px];
+}
+
+@media (max-width: 920px) {
+  .find-replace-bar {
+    @apply left-4 right-4 top-4 min-w-0;
+  }
+
+  .find-replace-row {
+    @apply flex-col items-stretch;
+  }
+
+  .find-replace-controls {
+    @apply ml-0 justify-end;
+  }
+}
+
 .element-type-hint {
   @apply text-[10px] text-base-content/50 mt-0.5;
 }

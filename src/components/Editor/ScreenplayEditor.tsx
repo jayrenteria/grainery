@@ -18,8 +18,11 @@ import {
   PageBreak,
   ScreenplayKeymap,
   PaginationExtension,
+  FindReplaceExtension,
+  getFindReplaceState,
 } from '../../extensions';
 import { ElementTypeIndicator } from './ElementTypeIndicator';
+import { FindReplaceBar } from './FindReplaceBar';
 import { PaginatedEditor } from './PaginatedEditor';
 import type { ScreenplayElementType, CharacterExtension } from '../../lib/types';
 import type { Editor, JSONContent } from '@tiptap/react';
@@ -99,6 +102,7 @@ export function ScreenplayEditor({
 }: ScreenplayEditorProps) {
   const [currentElement, setCurrentElement] = useState<ScreenplayElementType | null>('sceneHeading');
   const [characterExtension, setCharacterExtension] = useState<CharacterExtension>(null);
+  const [isFindOpen, setIsFindOpen] = useState(false);
 
   const editor = useEditor({
     extensions: [
@@ -115,6 +119,7 @@ export function ScreenplayEditor({
       Parenthetical,
       Transition,
       PageBreak,
+      FindReplaceExtension,
       ScreenplayKeymap.configure({
         resolveElementLoop,
       }),
@@ -165,11 +170,36 @@ export function ScreenplayEditor({
     onEditorReady?.(editor);
   }, [editor, onEditorReady]);
 
+  useEffect(() => {
+    if (!editor) {
+      setIsFindOpen(false);
+      return;
+    }
+
+    const syncFindOpen = () => {
+      setIsFindOpen(getFindReplaceState(editor).isOpen);
+    };
+
+    syncFindOpen();
+    editor.on('transaction', syncFindOpen);
+
+    return () => {
+      editor.off('transaction', syncFindOpen);
+    };
+  }, [editor]);
+
   return (
     <>
       <PaginatedEditor editor={editor}>
         <EditorContent editor={editor} />
       </PaginatedEditor>
+      <FindReplaceBar
+        editor={editor}
+        isOpen={isFindOpen}
+        onClose={() => {
+          setIsFindOpen(false);
+        }}
+      />
       <ElementTypeIndicator
         currentType={currentElement}
         characterExtension={characterExtension}

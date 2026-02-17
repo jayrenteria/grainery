@@ -109,10 +109,28 @@ pub fn run() {
                 .item(&export_fdx_item)
                 .build()?;
 
+            let find_item = MenuItemBuilder::with_id("find", "Find...")
+                .accelerator("CmdOrCtrl+F")
+                .build(app)?;
+            let find_next_item = MenuItemBuilder::with_id("find_next", "Find Next")
+                .accelerator("CmdOrCtrl+G")
+                .build(app)?;
+            let find_prev_item = MenuItemBuilder::with_id("find_prev", "Find Previous")
+                .accelerator("CmdOrCtrl+Shift+G")
+                .build(app)?;
+            let replace_item = MenuItemBuilder::with_id("replace", "Replace...")
+                .accelerator("CmdOrCtrl+H")
+                .build(app)?;
+
             // Edit menu with standard items
             let edit_menu = SubmenuBuilder::new(app, "Edit")
                 .undo()
                 .redo()
+                .separator()
+                .item(&find_item)
+                .item(&find_next_item)
+                .item(&find_prev_item)
+                .item(&replace_item)
                 .separator()
                 .cut()
                 .copy()

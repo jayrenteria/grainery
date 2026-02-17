@@ -491,6 +491,48 @@ function App() {
     setShowTitlePageEditor(true);
   }, []);
 
+  const handleFind = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    editor.commands.openFind();
+    setEditorVersion((prev) => prev + 1);
+  }, []);
+
+  const handleFindNext = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    if (editor.commands.findNext()) {
+      setEditorVersion((prev) => prev + 1);
+    }
+  }, []);
+
+  const handleFindPrevious = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    if (editor.commands.findPrevious()) {
+      setEditorVersion((prev) => prev + 1);
+    }
+  }, []);
+
+  const handleReplace = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    editor.commands.openFind();
+    setEditorVersion((prev) => prev + 1);
+  }, []);
+
   const handleSaveTitlePage = useCallback((titlePage: TitlePageData | null) => {
     setDocument((prev) => ({
       ...prev,
@@ -691,6 +733,18 @@ function App() {
         case 'export_fdx':
           void handleExportFdx();
           break;
+        case 'find':
+          handleFind();
+          break;
+        case 'find_next':
+          handleFindNext();
+          break;
+        case 'find_prev':
+          handleFindPrevious();
+          break;
+        case 'replace':
+          handleReplace();
+          break;
         case 'title_page':
           handleEditTitlePage();
           break;
@@ -708,8 +762,12 @@ function App() {
     handleExportFdx,
     handleExportFountain,
     handleExportPdf,
+    handleFind,
+    handleFindNext,
+    handleFindPrevious,
     handleNew,
     handleOpen,
+    handleReplace,
     handleSave,
     handleSaveAs,
     pluginManager,
