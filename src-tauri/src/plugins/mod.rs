@@ -17,7 +17,7 @@ use zip::ZipArchive;
 const PLUGIN_STORE_FILE: &str = "plugins-state.json";
 const PLUGIN_AUDIT_LOG_FILE: &str = "plugin-audit.log";
 const MANIFEST_FILE_NAME: &str = "grainery-plugin.manifest.json";
-const PLUGIN_API_VERSION: &str = "1.0.0";
+const PLUGIN_API_VERSION: &str = "1.1.0";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

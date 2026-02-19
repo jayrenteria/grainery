@@ -24,12 +24,14 @@ Use one of these existing examples:
 - `/Users/jay/git/screenwrite/examples/plugins/wordcount/`
 - `/Users/jay/git/screenwrite/examples/plugins/element-toolbar/`
 - `/Users/jay/git/screenwrite/examples/plugins/scene-outline/`
+- `/Users/jay/git/screenwrite/examples/plugins/review-notes/`
 
 What each example demonstrates:
 
 - `wordcount`: element loop rule, command, status badge, pre-save transform, exporter.
 - `element-toolbar`: declarative UI control + side panel + editor action dispatch.
 - `scene-outline`: side panel scene list with click-to-jump navigation.
+- `review-notes`: reviewer-attributed notes with panel form fields, document plugin data, and inline highlights.
 
 ## 3. Plugin folder structure
 
@@ -59,7 +61,7 @@ Create `grainery-plugin.manifest.json`:
   "name": "My Plugin",
   "version": "1.0.0",
   "description": "My Grainery plugin",
-  "engine": { "grainery": ">=0.1.0", "pluginApi": "^1.0.0" },
+  "engine": { "grainery": ">=0.1.0", "pluginApi": "^1.1.0" },
   "entry": "dist/main.js",
   "permissions": ["document:read"],
   "optionalPermissions": [],
@@ -112,6 +114,7 @@ Recommended order:
 2. Add read-only output (`registerStatusBadge`).
 3. Add transforms/exporters/importers.
 4. Add UI controls/panels (`registerUIControl`, `registerUIPanel`) only if needed.
+5. Add inline annotations (`registerInlineAnnotationProvider`) if your plugin needs range highlights.
 
 Why: this keeps your plugin testable and minimizes permission scope.
 
@@ -155,6 +158,30 @@ How it fits together:
 - Plugin does not render custom React/DOM.
 - Plugin declares UI shape + behavior in JSON/handlers.
 - Host handles rendering, styling, focus, and dispatch.
+
+Panel form fields:
+
+- `input` and `textarea` blocks are host-rendered.
+- values are delivered to `onAction(context.formValues)`.
+- use stable `fieldId` keys to keep form state predictable.
+
+## 9b. Step-by-step walkthrough: `review-notes`
+
+Source: `/Users/jay/git/screenwrite/examples/plugins/review-notes/dist/main.js`
+
+Step sequence:
+
+1. `registerUIControl` adds a panel toggle in the bottom toolbar.
+2. `registerUIPanel` renders reviewer/name note fields with declarative `input` + `textarea` blocks.
+3. `onAction` reads `context.formValues`, creates/deletes notes, and returns updated panel content.
+4. Plugin persists notes via `api.getPluginData()` / `api.setPluginData(...)`.
+5. `registerInlineAnnotationProvider` returns inline highlight ranges (`note` / `note-active`) for host rendering.
+
+How it fits together:
+
+- state is stored per plugin in document `pluginData`.
+- annotations stay host-rendered and sandbox-safe.
+- note anchors can be re-resolved from stored quote context after document edits.
 
 ## 10. Package the plugin zip
 
@@ -204,6 +231,8 @@ Before sharing a plugin:
 - Zip has a top-level folder (manifest not at archive root).
 - Manifest `entry` path is wrong or absolute.
 - Missing `ui:mount` while trying to render UI controls/panel.
+- Forgetting `document:write` when using `setPluginData`.
+- Returning annotation ranges without validating stale anchors.
 - Declaring optional permissions but not handling denied state.
 - Expecting direct DOM or Tauri API access from plugin code.
 

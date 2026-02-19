@@ -10,6 +10,9 @@ import type {
   HostOperation,
   HostResponseMessage,
   HostToWorkerMessage,
+  InlineAnnotation,
+  InlineAnnotationContext,
+  InlineAnnotationProvider,
   Importer,
   PluginApi,
   PluginCommand,
@@ -33,6 +36,7 @@ const transformHandlers = new Map<string, DocumentTransform['handler']>();
 const exporterHandlers = new Map<string, Exporter['handler']>();
 const importerHandlers = new Map<string, Importer['handler']>();
 const statusBadgeHandlers = new Map<string, StatusBadge['handler']>();
+const inlineAnnotationHandlers = new Map<string, InlineAnnotationProvider['handler']>();
 const uiControlTriggerHandlers = new Map<
   string,
   NonNullable<UIControlDefinition['onTrigger']>
@@ -189,6 +193,19 @@ function createPluginApi(): PluginApi {
         },
       });
     },
+    registerInlineAnnotationProvider(provider) {
+      throwIfInvalidPluginId();
+      inlineAnnotationHandlers.set(provider.id, provider.handler);
+      postWorkerMessage({
+        type: 'worker:register-inline-annotation-provider',
+        pluginId: currentPluginId,
+        provider: {
+          id: provider.id,
+          title: provider.title,
+          priority: provider.priority,
+        },
+      });
+    },
     registerUIControl(control) {
       throwIfInvalidPluginId();
 
@@ -252,6 +269,12 @@ function createPluginApi(): PluginApi {
     },
     replaceDocument(next) {
       return requestHost('document:replace', next);
+    },
+    getPluginData<T = unknown>() {
+      return requestHost<T | null>('document:get-plugin-data', null);
+    },
+    setPluginData(value) {
+      return requestHost('document:set-plugin-data', { value }).then(() => undefined);
     },
     requestPermission(permission) {
       return requestPermission(permission);
@@ -405,6 +428,18 @@ async function handleInvokeMessage(
         respond(true, result ?? null);
         return;
       }
+      case 'inline-annotations': {
+        const handler = inlineAnnotationHandlers.get(message.id);
+        if (!handler) {
+          respond(true, []);
+          return;
+        }
+
+        const result = await handler(message.payload as InlineAnnotationContext);
+        const output = Array.isArray(result) ? (result as InlineAnnotation[]) : [];
+        respond(true, output);
+        return;
+      }
       case 'ui-control': {
         const handler = uiControlTriggerHandlers.get(message.id);
         if (!handler) {
@@ -461,6 +496,7 @@ async function handleShutdown(): Promise<void> {
   exporterHandlers.clear();
   importerHandlers.clear();
   statusBadgeHandlers.clear();
+  inlineAnnotationHandlers.clear();
   uiControlTriggerHandlers.clear();
   uiControlVisibleHandlers.clear();
   uiControlDisabledHandlers.clear();

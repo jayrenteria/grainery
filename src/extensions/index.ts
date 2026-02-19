@@ -9,3 +9,8 @@ export {
   type FindReplaceState,
   type FindMatch,
 } from './FindReplaceExtension';
+export {
+  PluginAnnotationsExtension,
+  pluginAnnotationsPluginKey,
+  getPluginAnnotationsState,
+} from './PluginAnnotationsExtension';

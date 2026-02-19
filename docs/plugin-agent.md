@@ -64,6 +64,7 @@ Examples:
 
 - `/Users/jay/git/screenwrite/examples/plugins/wordcount/`
 - `/Users/jay/git/screenwrite/examples/plugins/element-toolbar/`
+- `/Users/jay/git/screenwrite/examples/plugins/review-notes/`
 
 ## Non-Negotiable Constraints
 
@@ -83,8 +84,9 @@ Supported plugin registrations:
 - document transforms (`post-open`, `pre-save`, `pre-export`)
 - exporters/importers
 - status badges
+- inline annotation providers
 - UI controls (`top-bar`, `bottom-bar`)
-- single side panel with primitive blocks (`text`, `list`, `keyValue`, `actions`)
+- single side panel with primitive blocks (`text`, `list`, `keyValue`, `input`, `textarea`, `actions`)
 
 Not supported:
 
@@ -139,6 +141,7 @@ Validate manifests:
 ```bash
 npm run validate:plugin-manifest -- examples/plugins/wordcount/grainery-plugin.manifest.json
 npm run validate:plugin-manifest -- examples/plugins/element-toolbar/grainery-plugin.manifest.json
+npm run validate:plugin-manifest -- examples/plugins/review-notes/grainery-plugin.manifest.json
 ```
 
 If modifying example zips, rebuild and verify root layout:

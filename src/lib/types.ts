@@ -46,6 +46,7 @@ export interface ScreenplayDocument {
   titlePage: TitlePageData | null;
   document: JSONContent;
   settings: DocumentSettings;
+  pluginData?: Record<string, unknown>;
 }
 
 export interface RecentFileEntry {

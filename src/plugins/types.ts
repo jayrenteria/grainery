@@ -93,6 +93,8 @@ export interface PluginLockRecord {
 export type HostOperation =
   | 'document:get'
   | 'document:replace'
+  | 'document:get-plugin-data'
+  | 'document:set-plugin-data'
   | 'network:get_json'
   | 'network:get_text'
   | 'audit:log';
@@ -224,6 +226,47 @@ export interface RenderedStatusBadge {
   priority: number;
 }
 
+export type InlineAnnotationKind = 'note' | 'note-active';
+
+export interface InlineAnnotation {
+  id: string;
+  from: number;
+  to: number;
+  kind?: InlineAnnotationKind;
+}
+
+export interface InlineAnnotationContext {
+  document: JSONContent;
+  selectionFrom: number;
+  selectionTo: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface InlineAnnotationProvider {
+  id: string;
+  title?: string;
+  priority?: number;
+  handler: (
+    context: InlineAnnotationContext
+  ) => InlineAnnotation[] | void | Promise<InlineAnnotation[] | void>;
+}
+
+export interface RegisteredInlineAnnotationProvider {
+  id: string;
+  pluginId: string;
+  title?: string;
+  priority?: number;
+}
+
+export interface RenderedInlineAnnotation {
+  id: string;
+  pluginId: string;
+  from: number;
+  to: number;
+  kind: InlineAnnotationKind;
+  priority: number;
+}
+
 export type UIControlMount = 'top-bar' | 'bottom-bar';
 export type UIControlKind = 'button' | 'toggle' | 'segmented';
 
@@ -297,6 +340,23 @@ export type UIPanelBlock =
   | { type: 'text'; text: string }
   | { type: 'list'; items: string[] }
   | { type: 'keyValue'; items: Array<{ key: string; value: string }> }
+  | {
+      type: 'input';
+      fieldId: string;
+      label?: string;
+      value?: string;
+      placeholder?: string;
+      maxLength?: number;
+    }
+  | {
+      type: 'textarea';
+      fieldId: string;
+      label?: string;
+      value?: string;
+      placeholder?: string;
+      rows?: number;
+      maxLength?: number;
+    }
   | { type: 'actions'; actions: UIPanelActionItem[] };
 
 export interface UIPanelContent {
@@ -313,6 +373,7 @@ export interface UIPanelStateContext {
 
 export interface UIPanelActionContext extends UIPanelStateContext {
   actionId: string;
+  formValues: Record<string, string>;
 }
 
 export interface UIPanelActionResult {
@@ -379,10 +440,13 @@ export interface PluginApi {
   registerExporter(exporter: Exporter): void;
   registerImporter(importer: Importer): void;
   registerStatusBadge(badge: StatusBadge): void;
+  registerInlineAnnotationProvider(provider: InlineAnnotationProvider): void;
   registerUIControl(control: UIControlDefinition): void;
   registerUIPanel(panel: UIPanelDefinition): void;
   getDocument(): Promise<JSONContent>;
   replaceDocument(next: JSONContent): Promise<void>;
+  getPluginData<T = unknown>(): Promise<T | null>;
+  setPluginData(value: unknown): Promise<void>;
   requestPermission(permission: OptionalPermission): Promise<boolean>;
   hostCall<T>(operation: HostOperation, payload: unknown): Promise<T>;
 }
@@ -408,6 +472,7 @@ export interface HostInvokeMessage {
     | 'exporter'
     | 'importer'
     | 'status'
+    | 'inline-annotations'
     | 'ui-control'
     | 'ui-panel-action'
     | 'ui-evaluate';
@@ -480,6 +545,12 @@ export interface WorkerRegisterStatusBadgeMessage {
   badge: Omit<StatusBadge, 'handler'>;
 }
 
+export interface WorkerRegisterInlineAnnotationProviderMessage {
+  type: 'worker:register-inline-annotation-provider';
+  pluginId: string;
+  provider: Omit<InlineAnnotationProvider, 'handler'>;
+}
+
 export interface WorkerRegisterUIControlMessage {
   type: 'worker:register-ui-control';
   pluginId: string;
@@ -525,6 +596,7 @@ export type WorkerToHostMessage =
   | WorkerRegisterExporterMessage
   | WorkerRegisterImporterMessage
   | WorkerRegisterStatusBadgeMessage
+  | WorkerRegisterInlineAnnotationProviderMessage
   | WorkerRegisterUIControlMessage
   | WorkerRegisterUIPanelMessage
   | WorkerHostRequestMessage
@@ -537,6 +609,7 @@ export interface PluginStateSnapshot {
   exporters: RegisteredExporter[];
   importers: RegisteredImporter[];
   statusBadges: RegisteredStatusBadge[];
+  inlineAnnotationProviders: RegisteredInlineAnnotationProvider[];
   uiControls: RegisteredUIControl[];
   uiPanels: RegisteredUIPanel[];
 }

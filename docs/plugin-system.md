@@ -77,6 +77,10 @@ Rust persists:
 
 Store location is under the app data plugins directory (`plugins-state.json` + install tree).
 
+Open screenplay documents can additionally persist plugin-scoped data in-file under:
+
+- `pluginData[pluginId]`
+
 ## Lifecycle: Install to Execution
 
 ### 1. Install
@@ -123,6 +127,7 @@ During `setup`, plugin calls SDK registration methods:
 - `registerExporter`
 - `registerImporter`
 - `registerStatusBadge`
+- `registerInlineAnnotationProvider`
 - `registerUIControl`
 - `registerUIPanel`
 
@@ -232,6 +237,23 @@ Key properties:
 
 See `docs/plugin-ui-extension.md` for the complete API and behavior details.
 
+## 7) Inline annotations
+
+Plugins can provide inline highlight ranges rendered by the host editor layer.
+
+Use:
+
+- `registerInlineAnnotationProvider`
+
+Provider handlers receive current document + selection context and return a list of range annotations.
+
+Behavior:
+
+- host validates and clamps returned ranges
+- annotations are rendered with host-owned style tokens (`note`, `note-active`)
+- annotations disappear immediately when plugin is disabled/uninstalled
+- no arbitrary plugin DOM injection is involved
+
 ## Permission and Security Model
 
 ### Deny-by-default
@@ -258,6 +280,10 @@ Document operations are brokered through host API methods, not direct app state 
 
 - `document:get`
 - `document:replace`
+- `document:get-plugin-data`
+- `document:set-plugin-data`
+
+`document:get-plugin-data` / `document:set-plugin-data` are plugin-scoped persistence helpers backed by the open `.gwx` document payload (`pluginData[pluginId]`).
 
 ### Rust host-call broker
 

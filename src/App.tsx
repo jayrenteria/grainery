@@ -30,7 +30,7 @@ import {
   type TitlePageData,
 } from './lib/types';
 import { PluginManager } from './plugins';
-import type { RenderedStatusBadge } from './plugins';
+import type { RenderedInlineAnnotation, RenderedStatusBadge } from './plugins';
 import { PluginUIHost } from './components/PluginUI';
 import './styles/screenplay.css';
 
@@ -94,14 +94,64 @@ function App() {
   const [pluginStateVersion, setPluginStateVersion] = useState(0);
   const [editorVersion, setEditorVersion] = useState(0);
   const [statusBadges, setStatusBadges] = useState<RenderedStatusBadge[]>([]);
+  const [inlineAnnotations, setInlineAnnotations] = useState<RenderedInlineAnnotation[]>([]);
   const [isResolvingInitialOpen, setIsResolvingInitialOpen] = useState(true);
 
   const editorRef = useRef<Editor | null>(null);
   const editorContentRef = useRef<JSONContent>(document.document);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const performAutoSaveRef = useRef<() => Promise<void>>(async () => undefined);
+  const pluginDataRef = useRef<Record<string, unknown>>(document.pluginData ?? {});
   const pluginManagerRef = useRef<PluginManager | null>(null);
   const viewRef = useRef(view);
   const isDirtyRef = useRef(isDirty);
+
+  const queueAutoSave = useCallback(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      void performAutoSaveRef.current();
+    }, AUTO_SAVE_DELAY_MS);
+  }, []);
+
+  const getPluginDataForPlugin = useCallback((pluginId: string): unknown | null => {
+    return pluginDataRef.current[pluginId] ?? null;
+  }, []);
+
+  const setPluginDataFromPlugin = useCallback(
+    (pluginId: string, value: unknown) => {
+      setDocument((prev) => {
+        const nextPluginData = { ...(prev.pluginData ?? {}) };
+        if (value === null) {
+          delete nextPluginData[pluginId];
+        } else {
+          nextPluginData[pluginId] = value;
+        }
+
+        pluginDataRef.current = nextPluginData;
+
+        return {
+          ...prev,
+          pluginData: nextPluginData,
+          meta: {
+            ...prev.meta,
+            modifiedAt: new Date().toISOString(),
+          },
+        };
+      });
+
+      if (!isDirty) {
+        setIsDirty(true);
+        void updateWindowTitle(document.meta.filename, true);
+      }
+
+      queueAutoSave();
+      setEditorVersion((prev) => prev + 1);
+    },
+    [document.meta.filename, isDirty, queueAutoSave]
+  );
 
   const applyDocumentFromPlugin = useCallback(
     (next: JSONContent) => {
@@ -125,15 +175,18 @@ function App() {
         void updateWindowTitle(document.meta.filename, true);
       }
 
+      queueAutoSave();
       setEditorVersion((prev) => prev + 1);
     },
-    [document.meta.filename, isDirty]
+    [document.meta.filename, isDirty, queueAutoSave]
   );
 
   if (!pluginManagerRef.current) {
     pluginManagerRef.current = new PluginManager({
       getDocument: () => editorContentRef.current,
       replaceDocument: applyDocumentFromPlugin,
+      getPluginData: getPluginDataForPlugin,
+      setPluginData: setPluginDataFromPlugin,
     });
   }
 
@@ -333,6 +386,10 @@ function App() {
     }
   }, [document, isDirty, runTransformHook, showTitlePageEditor]);
 
+  useEffect(() => {
+    performAutoSaveRef.current = performAutoSave;
+  }, [performAutoSave]);
+
   const handleEditorChange = useCallback(
     (content: JSONContent) => {
       editorContentRef.current = content;
@@ -341,16 +398,11 @@ function App() {
         void updateWindowTitle(document.meta.filename, true);
       }
 
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-      }
-      autoSaveTimerRef.current = setTimeout(() => {
-        void performAutoSave();
-      }, AUTO_SAVE_DELAY_MS);
+      queueAutoSave();
 
       setEditorVersion((prev) => prev + 1);
     },
-    [document.meta.filename, isDirty, performAutoSave]
+    [document.meta.filename, isDirty, queueAutoSave]
   );
 
   const handleNew = useCallback(async () => {
@@ -622,8 +674,10 @@ function App() {
     pluginManager.updateDocumentAccess({
       getDocument: () => editorContentRef.current,
       replaceDocument: applyDocumentFromPlugin,
+      getPluginData: getPluginDataForPlugin,
+      setPluginData: setPluginDataFromPlugin,
     });
-  }, [applyDocumentFromPlugin, pluginManager]);
+  }, [applyDocumentFromPlugin, getPluginDataForPlugin, pluginManager, setPluginDataFromPlugin]);
 
   useEffect(() => {
     let mounted = true;
@@ -643,6 +697,39 @@ function App() {
       unsubscribe();
     };
   }, [pluginManager]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshInlineAnnotations = async () => {
+      try {
+        const selection = editorAdapter.getSelectionRange();
+        const next = await pluginManager.evaluateInlineAnnotations({
+          document: editorContentRef.current,
+          selectionFrom: selection.from,
+          selectionTo: selection.to,
+          metadata: {
+            filename: document.meta.filename,
+          },
+        });
+
+        if (!cancelled) {
+          setInlineAnnotations(next);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('[Plugins] Failed to evaluate inline annotations', error);
+          setInlineAnnotations([]);
+        }
+      }
+    };
+
+    void refreshInlineAnnotations();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [document.meta.filename, document.meta.id, editorAdapter, editorVersion, pluginManager, pluginStateVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -672,7 +759,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [document.meta.filename, editorVersion, pluginManager, pluginStateVersion]);
+  }, [document.meta.filename, document.meta.id, editorVersion, pluginManager, pluginStateVersion]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -702,6 +789,10 @@ function App() {
   useEffect(() => {
     isDirtyRef.current = isDirty;
   }, [isDirty]);
+
+  useEffect(() => {
+    pluginDataRef.current = document.pluginData ?? {};
+  }, [document.pluginData]);
 
   // Listen for native menu events
   useEffect(() => {
@@ -837,6 +928,7 @@ function App() {
             <ScreenplayEditor
               key={document.meta.id}
               initialContent={document.document}
+              inlineAnnotations={inlineAnnotations}
               onChange={handleEditorChange}
               resolveElementLoop={(context) => pluginManager.resolveElementLoop(context)}
               onSelectionChange={() => {

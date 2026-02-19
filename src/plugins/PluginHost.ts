@@ -11,20 +11,30 @@ import type {
 interface PluginHostOptions {
   getDocument: () => JSONContent;
   replaceDocument: (next: JSONContent) => void | Promise<void>;
+  getPluginData: (pluginId: string) => unknown | null;
+  setPluginData: (pluginId: string, value: unknown) => void | Promise<void>;
 }
+
+const MAX_PLUGIN_DATA_BYTES = 256 * 1024;
 
 export class PluginHost {
   private getDocument: () => JSONContent;
   private replaceDocument: (next: JSONContent) => void | Promise<void>;
+  private getPluginData: (pluginId: string) => unknown | null;
+  private setPluginData: (pluginId: string, value: unknown) => void | Promise<void>;
 
   constructor(options: PluginHostOptions) {
     this.getDocument = options.getDocument;
     this.replaceDocument = options.replaceDocument;
+    this.getPluginData = options.getPluginData;
+    this.setPluginData = options.setPluginData;
   }
 
   updateDocumentAccess(options: PluginHostOptions): void {
     this.getDocument = options.getDocument;
     this.replaceDocument = options.replaceDocument;
+    this.getPluginData = options.getPluginData;
+    this.setPluginData = options.setPluginData;
   }
 
   readDocument(): JSONContent {
@@ -50,6 +60,32 @@ export class PluginHost {
         }
 
         await this.replaceDocument(payload as JSONContent);
+        return true;
+      }
+
+      case 'document:get-plugin-data': {
+        if (!hasPluginPermission(plugin, 'document:read')) {
+          throw new Error('Permission denied: document:read');
+        }
+
+        const current = this.getPluginData(plugin.id);
+        return current ?? null;
+      }
+
+      case 'document:set-plugin-data': {
+        if (!hasPluginPermission(plugin, 'document:write')) {
+          throw new Error('Permission denied: document:write');
+        }
+
+        const value = extractPluginDataPayload(payload);
+        const normalized = normalizePluginDataValue(value);
+        const serialized = JSON.stringify(normalized);
+        const sizeBytes = new TextEncoder().encode(serialized).length;
+        if (sizeBytes > MAX_PLUGIN_DATA_BYTES) {
+          throw new Error(`Plugin data exceeds ${MAX_PLUGIN_DATA_BYTES} byte limit.`);
+        }
+
+        await this.setPluginData(plugin.id, normalized);
         return true;
       }
 
@@ -136,4 +172,25 @@ export class PluginHost {
       };
     });
   }
+}
+
+function extractPluginDataPayload(payload: unknown): unknown {
+  if (typeof payload !== 'object' || payload === null) {
+    return payload;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(payload, 'value')) {
+    return payload;
+  }
+
+  return (payload as { value: unknown }).value;
+}
+
+function normalizePluginDataValue(value: unknown): unknown {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) {
+    throw new Error('Plugin data must be JSON-serializable.');
+  }
+
+  return JSON.parse(serialized) as unknown;
 }

@@ -10,6 +10,8 @@ import type {
   ElementLoopContext,
   ElementLoopProvider,
   HostToWorkerMessage,
+  InlineAnnotation,
+  InlineAnnotationContext,
   InstalledPlugin,
   OptionalPermission,
   PluginLockRecord,
@@ -22,6 +24,8 @@ import type {
   RegisteredStatusBadge,
   RegisteredUIControl,
   RegisteredUIPanel,
+  RegisteredInlineAnnotationProvider,
+  RenderedInlineAnnotation,
   RenderedStatusBadge,
   UIControlAction,
   UIControlState,
@@ -61,6 +65,8 @@ interface RegisteredTransform {
 interface PluginManagerOptions {
   getDocument: () => JSONContent;
   replaceDocument: (next: JSONContent) => void | Promise<void>;
+  getPluginData: (pluginId: string) => unknown | null;
+  setPluginData: (pluginId: string, value: unknown) => void | Promise<void>;
 }
 
 const MAX_CRASH_COUNT = 3;
@@ -79,6 +85,7 @@ export class PluginManager {
   private exporters: RegisteredExporter[] = [];
   private importers: RegisteredImporter[] = [];
   private statusBadges: RegisteredStatusBadge[] = [];
+  private inlineAnnotationProviders: RegisteredInlineAnnotationProvider[] = [];
   private uiControls: RegisteredUIControl[] = [];
   private uiPanels: RegisteredUIPanel[] = [];
 
@@ -86,6 +93,8 @@ export class PluginManager {
     this.pluginHost = new PluginHost({
       getDocument: options.getDocument,
       replaceDocument: options.replaceDocument,
+      getPluginData: options.getPluginData,
+      setPluginData: options.setPluginData,
     });
   }
 
@@ -108,6 +117,7 @@ export class PluginManager {
       exporters: [...this.exporters],
       importers: [...this.importers],
       statusBadges: [...this.statusBadges],
+      inlineAnnotationProviders: [...this.inlineAnnotationProviders],
       uiControls: [...this.uiControls],
       uiPanels: [...this.uiPanels],
     };
@@ -189,6 +199,7 @@ export class PluginManager {
     this.exporters = [];
     this.importers = [];
     this.statusBadges = [];
+    this.inlineAnnotationProviders = [];
     this.uiControls = [];
     this.uiPanels = [];
 
@@ -440,6 +451,62 @@ export class PluginManager {
     return rendered;
   }
 
+  async evaluateInlineAnnotations(
+    context: InlineAnnotationContext
+  ): Promise<RenderedInlineAnnotation[]> {
+    const providers = [...this.inlineAnnotationProviders].sort(
+      (a, b) => (b.priority ?? 0) - (a.priority ?? 0)
+    );
+    const rendered: RenderedInlineAnnotation[] = [];
+    const maxPosition = Math.max(1, getDocumentContentSize(context.document));
+
+    for (const provider of providers) {
+      const plugin = this.getPluginById(provider.pluginId);
+      if (!plugin || !plugin.enabled) {
+        continue;
+      }
+
+      if (!hasPluginPermission(plugin, 'ui:mount')) {
+        continue;
+      }
+
+      if (!hasPluginPermission(plugin, 'document:read')) {
+        continue;
+      }
+
+      try {
+        const response = await this.invokeWorker(
+          provider.pluginId,
+          'inline-annotations',
+          getLocalId(provider.id),
+          context
+        );
+
+        const annotations = Array.isArray(response) ? (response as InlineAnnotation[]) : [];
+        const priority = provider.priority ?? 0;
+
+        for (const annotation of annotations) {
+          const normalized = normalizeInlineAnnotation(
+            provider.pluginId,
+            annotation,
+            maxPosition,
+            priority
+          );
+          if (normalized) {
+            rendered.push(normalized);
+          }
+        }
+      } catch (error) {
+        console.error(
+          `[PluginManager] Inline annotation provider failed: ${provider.id}`,
+          error
+        );
+      }
+    }
+
+    return rendered;
+  }
+
   async evaluateUIState(
     controlIds: string[],
     panelIds: string[],
@@ -551,7 +618,8 @@ export class PluginManager {
   async dispatchUIPanelAction(
     panelId: string,
     actionId: string,
-    context: UIControlStateContext
+    context: UIControlStateContext,
+    formValues: Record<string, string>
   ): Promise<UIPanelActionResult> {
     const panel = this.uiPanels.find((item) => item.id === panelId);
     if (!panel) {
@@ -570,6 +638,7 @@ export class PluginManager {
       selectionTo: context.selectionTo,
       metadata: context.metadata,
       actionId,
+      formValues,
     })) as UIPanelActionResult;
 
     const normalizedAction = normalizeUiAction(panel.pluginId, response?.action ?? null);
@@ -734,6 +803,22 @@ export class PluginManager {
         return;
       }
 
+      case 'worker:register-inline-annotation-provider': {
+        const id = composeId(pluginId, message.provider.id);
+        this.inlineAnnotationProviders = this.inlineAnnotationProviders
+          .filter((item) => item.id !== id)
+          .concat([
+            {
+              id,
+              pluginId,
+              title: message.provider.title,
+              priority: message.provider.priority,
+            },
+          ]);
+        this.notifyListeners();
+        return;
+      }
+
       case 'worker:register-ui-control': {
         const id = composeId(pluginId, message.control.id);
         this.uiControls = this.uiControls
@@ -889,6 +974,7 @@ export class PluginManager {
       | 'exporter'
       | 'importer'
       | 'status'
+      | 'inline-annotations'
       | 'ui-control'
       | 'ui-panel-action'
       | 'ui-evaluate',
@@ -1029,6 +1115,78 @@ function isJsonContent(value: unknown): value is JSONContent {
 
   const maybe = value as { type?: unknown };
   return typeof maybe.type === 'string';
+}
+
+function normalizeInlineAnnotation(
+  pluginId: string,
+  annotation: InlineAnnotation,
+  maxPosition: number,
+  priority: number
+): RenderedInlineAnnotation | null {
+  if (!annotation || typeof annotation !== 'object') {
+    return null;
+  }
+
+  if (typeof annotation.id !== 'string' || annotation.id.trim().length === 0) {
+    return null;
+  }
+
+  const rawFrom = Number(annotation.from);
+  const rawTo = Number(annotation.to);
+
+  if (!Number.isFinite(rawFrom) || !Number.isFinite(rawTo)) {
+    return null;
+  }
+
+  const from = Math.min(Math.max(Math.floor(rawFrom), 1), maxPosition);
+  const to = Math.min(Math.max(Math.floor(rawTo), 1), maxPosition);
+
+  if (to <= from) {
+    return null;
+  }
+
+  const kind = annotation.kind === 'note-active' ? 'note-active' : 'note';
+
+  return {
+    id: composeId(pluginId, annotation.id),
+    pluginId,
+    from,
+    to,
+    kind,
+    priority,
+  };
+}
+
+function getNodeSize(node: unknown): number {
+  if (!node || typeof node !== 'object') {
+    return 0;
+  }
+
+  const maybeTextNode = node as { text?: unknown };
+  if (typeof maybeTextNode.text === 'string') {
+    return maybeTextNode.text.length;
+  }
+
+  const maybeContentNode = node as { content?: unknown };
+  const children = Array.isArray(maybeContentNode.content) ? maybeContentNode.content : [];
+  let size = 2;
+
+  for (const child of children) {
+    size += getNodeSize(child);
+  }
+
+  return size;
+}
+
+function getDocumentContentSize(document: JSONContent): number {
+  const content = Array.isArray(document.content) ? document.content : [];
+  let size = 0;
+
+  for (const node of content) {
+    size += getNodeSize(node);
+  }
+
+  return size;
 }
 
 function normalizeDeclaredShortcut(shortcut?: string): string | null {
