@@ -26,44 +26,44 @@ Current plugin model:
 
 Core plugin contracts:
 
-- `/Users/jay/git/screenwrite/src/plugins/types.ts`
-- `/Users/jay/git/screenwrite/src/plugins/sdk.ts`
-- `/Users/jay/git/screenwrite/src/plugins/rpc.ts`
+- `src/plugins/types.ts`
+- `src/plugins/sdk.ts`
+- `src/plugins/rpc.ts`
 
 Runtime / orchestration:
 
-- `/Users/jay/git/screenwrite/src/plugins/worker-runtime.ts`
-- `/Users/jay/git/screenwrite/src/plugins/PluginManager.ts`
-- `/Users/jay/git/screenwrite/src/plugins/PluginHost.ts`
+- `src/plugins/worker-runtime.ts`
+- `src/plugins/PluginManager.ts`
+- `src/plugins/PluginHost.ts`
 
 Host app integration:
 
-- `/Users/jay/git/screenwrite/src/App.tsx`
-- `/Users/jay/git/screenwrite/src/components/Editor/ScreenplayEditor.tsx`
-- `/Users/jay/git/screenwrite/src/components/Settings/SettingsModal.tsx`
+- `src/App.tsx`
+- `src/components/Editor/ScreenplayEditor.tsx`
+- `src/components/Settings/SettingsModal.tsx`
 
 Plugin UI host:
 
-- `/Users/jay/git/screenwrite/src/components/PluginUI/PluginUIHost.tsx`
-- `/Users/jay/git/screenwrite/src/components/PluginUI/PluginToolbar.tsx`
-- `/Users/jay/git/screenwrite/src/components/PluginUI/PluginSidePanel.tsx`
-- `/Users/jay/git/screenwrite/src/plugins/ui/icons.tsx`
-- `/Users/jay/git/screenwrite/src/styles/plugin-ui.css`
+- `src/components/PluginUI/PluginUIHost.tsx`
+- `src/components/PluginUI/PluginToolbar.tsx`
+- `src/components/PluginUI/PluginSidePanel.tsx`
+- `src/plugins/ui/icons.tsx`
+- `src/styles/plugin-ui.css`
 
 Rust backend:
 
-- `/Users/jay/git/screenwrite/src-tauri/src/plugins/mod.rs`
-- `/Users/jay/git/screenwrite/src-tauri/src/lib.rs` (command wiring)
+- `src-tauri/src/plugins/mod.rs`
+- `src-tauri/src/lib.rs` (command wiring)
 
 Manifest and validation:
 
-- `/Users/jay/git/screenwrite/grainery-plugin.manifest.json`
-- `/Users/jay/git/screenwrite/scripts/validate-plugin-manifest.mjs`
+- `grainery-plugin.manifest.json`
+- `scripts/validate-plugin-manifest.mjs`
 
 Examples:
 
-- `/Users/jay/git/screenwrite/examples/plugins/wordcount/`
-- `/Users/jay/git/screenwrite/examples/plugins/element-toolbar/`
+- `examples/plugins/wordcount/`
+- `examples/plugins/element-toolbar/`
 
 ## Non-Negotiable Constraints
 
@@ -97,11 +97,11 @@ Not supported:
 1. **Composite IDs**
    - Host stores IDs as `pluginId:localId`.
    - UI actions coming from workers may be local IDs and must be normalized.
-   - See normalization logic in `/Users/jay/git/screenwrite/src/plugins/PluginManager.ts`.
+   - See normalization logic in `src/plugins/PluginManager.ts`.
 
 2. **UI refresh coupling**
    - Plugin UI state depends on editor selection + document state.
-   - Keep selection updates wired through editor callbacks in `/Users/jay/git/screenwrite/src/components/Editor/ScreenplayEditor.tsx` and `/Users/jay/git/screenwrite/src/App.tsx`.
+   - Keep selection updates wired through editor callbacks in `src/components/Editor/ScreenplayEditor.tsx` and `src/App.tsx`.
 
 3. **Permission list drift**
    - If you add optional/core permissions, update all of:
@@ -116,11 +116,11 @@ Not supported:
 
 When adding a new plugin capability:
 
-1. Add types to `/Users/jay/git/screenwrite/src/plugins/types.ts`.
-2. Extend SDK exposure in `/Users/jay/git/screenwrite/src/plugins/sdk.ts`.
-3. Extend worker/host RPC parsing in `/Users/jay/git/screenwrite/src/plugins/rpc.ts`.
-4. Implement worker handler paths in `/Users/jay/git/screenwrite/src/plugins/worker-runtime.ts`.
-5. Implement manager storage + dispatch in `/Users/jay/git/screenwrite/src/plugins/PluginManager.ts`.
+1. Add types to `src/plugins/types.ts`.
+2. Extend SDK exposure in `src/plugins/sdk.ts`.
+3. Extend worker/host RPC parsing in `src/plugins/rpc.ts`.
+4. Implement worker handler paths in `src/plugins/worker-runtime.ts`.
+5. Implement manager storage + dispatch in `src/plugins/PluginManager.ts`.
 6. Wire host behavior in app/components as needed.
 7. Update docs + at least one example plugin.
 8. Validate with build checks below.
@@ -158,6 +158,6 @@ unzip -l examples/plugins/element-toolbar/element-toolbar.grainery-plugin.zip
 
 ## Related Docs
 
-- `/Users/jay/git/screenwrite/docs/plugin-system.md`
-- `/Users/jay/git/screenwrite/docs/plugin-ui-extension.md`
-- `/Users/jay/git/screenwrite/docs/plugin-authoring-guide.md`
+- `docs/plugin-system.md`
+- `docs/plugin-ui-extension.md`
+- `docs/plugin-authoring-guide.md`
