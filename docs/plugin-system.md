@@ -13,6 +13,7 @@ The plugin system is designed for a writer-first experience:
 - Keep Rust-side capabilities behind a strict broker
 
 The current implementation supports JavaScript plugins only (no native/dylib plugins).
+Current plugin API target is `^1.2.0` (older plugin API ranges are not supported).
 
 ## High-Level Architecture
 
@@ -64,6 +65,8 @@ Important fields:
 - `permissions` (core)
 - `optionalPermissions` (promptable)
 - `networkAllowlist`
+- `activationEvents` (required)
+- `contributes` (required)
 - `signature` metadata
 
 ### Persisted state
@@ -104,8 +107,9 @@ Then Rust extracts plugin files to app data and records installation metadata.
 At app startup and after plugin state changes:
 
 - `PluginManager.initialize()` -> `plugin_list_installed`
-- Enabled plugins with readable entry source are started
-- Each plugin gets its own worker
+- Enabled plugins are contribution-indexed from manifest
+- Workers are activated lazily via `activationEvents` (`onStartup` can opt into eager activation)
+- Each active plugin runs in its own worker
 
 ### 3. Worker init
 
@@ -266,6 +270,7 @@ Optional permissions:
 - `fs:pick-write`
 - `network:https`
 - `ui:mount`
+- `editor:annotations`
 
 Core permissions are declared in manifest and validated:
 
@@ -378,10 +383,17 @@ Available API surface:
 - `registerDocumentTransform`
 - `registerExporter`
 - `registerImporter`
+- `registerStatusBadge`
+- `registerInlineAnnotationProvider`
+- `registerUIControl`
+- `registerUIPanel`
 - `getDocument`
 - `replaceDocument`
+- `getPluginData`
+- `setPluginData`
 - `requestPermission`
 - `hostCall`
+- `proposed` (only when allowlisted via `enabledApiProposals`)
 
 ## Developer Tooling
 

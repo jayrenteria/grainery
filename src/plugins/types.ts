@@ -11,7 +11,8 @@ export type OptionalPermission =
   | 'fs:pick-read'
   | 'fs:pick-write'
   | 'network:https'
-  | 'ui:mount';
+  | 'ui:mount'
+  | 'editor:annotations';
 
 export type PluginPermission = CorePermission | OptionalPermission;
 
@@ -26,6 +27,91 @@ export interface PluginSignature {
   sig: string;
 }
 
+export type PluginActivationEvent =
+  | 'onStartup'
+  | `onCommand:${string}`
+  | `onExporter:${string}`
+  | `onImporter:${string}`
+  | `onUIControl:${string}`
+  | `onUIPanel:${string}`
+  | `onStatusBadge:${string}`
+  | `onInlineAnnotations:${string}`
+  | `onTransform:${DocumentTransformHook}`;
+
+export interface ContributedCommand {
+  id: string;
+  title: string;
+  shortcut?: string;
+}
+
+export interface ContributedExporter {
+  id: string;
+  title: string;
+  extension: string;
+  mimeType?: string;
+}
+
+export interface ContributedImporter {
+  id: string;
+  title: string;
+  extensions: string[];
+}
+
+export interface ContributedStatusBadge {
+  id: string;
+  label: string;
+  priority?: number;
+}
+
+export interface ContributedInlineAnnotationProvider {
+  id: string;
+  title?: string;
+  priority?: number;
+}
+
+export interface ContributedUIControl {
+  id: string;
+  mount: UIControlMount;
+  kind: UIControlKind;
+  label: string;
+  icon: BuiltinIconId;
+  priority?: number;
+  tooltip?: string;
+  group?: string;
+  hotkeyHint?: string;
+  action?: UIControlAction;
+  when?: string;
+}
+
+export interface ContributedUIPanel {
+  id: string;
+  title: string;
+  icon?: BuiltinIconId;
+  defaultWidth?: number;
+  minWidth?: number;
+  maxWidth?: number;
+  priority?: number;
+  content?: UIPanelContent;
+  when?: string;
+}
+
+export interface ContributedTransform {
+  id: string;
+  hook: DocumentTransformHook;
+  priority?: number;
+}
+
+export interface PluginContributions {
+  commands: ContributedCommand[];
+  exporters: ContributedExporter[];
+  importers: ContributedImporter[];
+  statusBadges: ContributedStatusBadge[];
+  inlineAnnotationProviders: ContributedInlineAnnotationProvider[];
+  uiControls: ContributedUIControl[];
+  uiPanels: ContributedUIPanel[];
+  transforms: ContributedTransform[];
+}
+
 export interface PluginManifest {
   schemaVersion: 1;
   id: string;
@@ -37,6 +123,9 @@ export interface PluginManifest {
   permissions: CorePermission[];
   optionalPermissions: OptionalPermission[];
   networkAllowlist: string[];
+  activationEvents: PluginActivationEvent[];
+  contributes: PluginContributions;
+  enabledApiProposals?: string[];
   signature?: PluginSignature;
 }
 
@@ -324,6 +413,7 @@ export interface UIControlDefinition {
   group?: string;
   hotkeyHint?: string;
   action?: UIControlAction;
+  when?: string;
   isVisible?: (context: UIControlStateContext) => boolean | Promise<boolean>;
   isDisabled?: (context: UIControlStateContext) => boolean | Promise<boolean>;
   isActive?: (context: UIControlStateContext) => boolean | Promise<boolean>;
@@ -390,6 +480,7 @@ export interface UIPanelDefinition {
   maxWidth?: number;
   priority?: number;
   content?: UIPanelContent;
+  when?: string;
   onAction?: (context: UIPanelActionContext) => UIPanelActionResult | void | Promise<UIPanelActionResult | void>;
   onRender?: (context: UIPanelStateContext) => UIPanelContent | void | Promise<UIPanelContent | void>;
 }
@@ -406,6 +497,7 @@ export interface RegisteredUIControl {
   group?: string;
   hotkeyHint?: string;
   action?: UIControlAction;
+  when?: string;
 }
 
 export interface RegisteredUIPanel {
@@ -418,6 +510,7 @@ export interface RegisteredUIPanel {
   maxWidth?: number;
   priority?: number;
   content?: UIPanelContent;
+  when?: string;
 }
 
 export interface EvaluatedUIControl extends RegisteredUIControl {
@@ -432,6 +525,8 @@ export interface UIEvaluateResponse {
   controls: Record<string, UIControlState>;
   panels: Record<string, UIPanelContent>;
 }
+
+export interface ProposedPluginApi {}
 
 export interface PluginApi {
   registerElementLoopProvider(provider: ElementLoopProvider): void;
@@ -449,6 +544,7 @@ export interface PluginApi {
   setPluginData(value: unknown): Promise<void>;
   requestPermission(permission: OptionalPermission): Promise<boolean>;
   hostCall<T>(operation: HostOperation, payload: unknown): Promise<T>;
+  proposed?: ProposedPluginApi;
 }
 
 export interface GraineryPlugin {

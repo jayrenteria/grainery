@@ -13,6 +13,7 @@ import type {
   UIPanelContent,
 } from '../../plugins';
 import type { ScreenplayElementType } from '../../lib/types';
+import { createWhenContext, evaluateWhenClause } from '../../plugins/when';
 
 interface EditorAdapter {
   getCurrentElementType: () => ScreenplayElementType | null;
@@ -131,24 +132,19 @@ export function PluginUIHost({
   document,
   editorAdapter,
 }: PluginUIHostProps) {
-  const topControls = useMemo(() => pluginManager.getUIControls('top-bar'), [pluginManager, pluginStateVersion]);
-  const bottomControls = useMemo(
+  const allTopControls = useMemo(() => pluginManager.getUIControls('top-bar'), [pluginManager, pluginStateVersion]);
+  const allBottomControls = useMemo(
     () => pluginManager.getUIControls('bottom-bar'),
     [pluginManager, pluginStateVersion]
   );
-  const panels = useMemo(() => pluginManager.getUIPanels(), [pluginManager, pluginStateVersion]);
+  const allPanels = useMemo(() => pluginManager.getUIPanels(), [pluginManager, pluginStateVersion]);
+  const installedPlugins = useMemo(() => pluginManager.getInstalledPlugins(), [pluginManager, pluginStateVersion]);
 
   const [controlStateMap, setControlStateMap] = useState<Record<string, UIControlState>>({});
   const [panelContentMap, setPanelContentMap] = useState<Record<string, UIPanelContent>>({});
   const [panelFormValuesMap, setPanelFormValuesMap] = useState<Record<string, Record<string, string>>>({});
   const [panelFormDefaultsMap, setPanelFormDefaultsMap] = useState<Record<string, Record<string, string>>>({});
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
-
-  const allControlIds = useMemo(
-    () => [...topControls, ...bottomControls].map((control) => control.id),
-    [topControls, bottomControls]
-  );
-  const allPanelIds = useMemo(() => panels.map((panel) => panel.id), [panels]);
 
   const context = useMemo<UIControlStateContext>(
     () => {
@@ -164,6 +160,45 @@ export function PluginUIHost({
     },
     [document, editorAdapter, editorVersion]
   );
+
+  const pluginEnabledMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const plugin of installedPlugins) {
+      map[plugin.id] = plugin.enabled;
+    }
+    return map;
+  }, [installedPlugins]);
+
+  const topControls = useMemo(
+    () =>
+      allTopControls.filter((control) => {
+        const whenContext = createWhenContext(context, Boolean(pluginEnabledMap[control.pluginId]));
+        return evaluateWhenClause(control.when, whenContext);
+      }),
+    [allTopControls, context, pluginEnabledMap]
+  );
+  const bottomControls = useMemo(
+    () =>
+      allBottomControls.filter((control) => {
+        const whenContext = createWhenContext(context, Boolean(pluginEnabledMap[control.pluginId]));
+        return evaluateWhenClause(control.when, whenContext);
+      }),
+    [allBottomControls, context, pluginEnabledMap]
+  );
+  const panels = useMemo(
+    () =>
+      allPanels.filter((panel) => {
+        const whenContext = createWhenContext(context, Boolean(pluginEnabledMap[panel.pluginId]));
+        return evaluateWhenClause(panel.when, whenContext);
+      }),
+    [allPanels, context, pluginEnabledMap]
+  );
+
+  const allControlIds = useMemo(
+    () => [...topControls, ...bottomControls].map((control) => control.id),
+    [topControls, bottomControls]
+  );
+  const allPanelIds = useMemo(() => panels.map((panel) => panel.id), [panels]);
 
   useEffect(() => {
     let cancelled = false;
@@ -259,6 +294,7 @@ export function PluginUIHost({
         editorAdapter.escapeToAction();
         break;
       case 'panel:open':
+        await pluginManager.activateUIPanel(action.panelId);
         setActivePanelId(action.panelId);
         break;
       case 'panel:close':
@@ -267,6 +303,9 @@ export function PluginUIHost({
         }
         break;
       case 'panel:toggle':
+        if (activePanelId !== action.panelId) {
+          await pluginManager.activateUIPanel(action.panelId);
+        }
         setActivePanelId((current) => (current === action.panelId ? null : action.panelId));
         break;
       default:

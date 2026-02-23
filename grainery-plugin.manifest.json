@@ -15,6 +15,8 @@
     "permissions",
     "optionalPermissions",
     "networkAllowlist",
+    "activationEvents",
+    "contributes",
     "signature"
   ],
   "properties": {
@@ -49,7 +51,7 @@
         },
         "pluginApi": {
           "type": "string",
-          "minLength": 1
+          "const": "^1.2.0"
         }
       }
     },
@@ -79,12 +81,223 @@
           "fs:pick-read",
           "fs:pick-write",
           "network:https",
-          "ui:mount"
+          "ui:mount",
+          "editor:annotations"
         ]
       }
     },
     "networkAllowlist": {
       "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "activationEvents": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^(onStartup|onCommand:[a-zA-Z0-9._-]+|onExporter:[a-zA-Z0-9._-]+|onImporter:[a-zA-Z0-9._-]+|onUIControl:[a-zA-Z0-9._-]+|onUIPanel:[a-zA-Z0-9._-]+|onStatusBadge:[a-zA-Z0-9._-]+|onInlineAnnotations:[a-zA-Z0-9._-]+|onTransform:(post-open|pre-save|pre-export))$"
+      }
+    },
+    "contributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commands",
+        "exporters",
+        "importers",
+        "statusBadges",
+        "inlineAnnotationProviders",
+        "uiControls",
+        "uiPanels",
+        "transforms"
+      ],
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "title"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "title": { "type": "string", "minLength": 1 },
+              "shortcut": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "exporters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "title", "extension"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "title": { "type": "string", "minLength": 1 },
+              "extension": { "type": "string", "minLength": 1 },
+              "mimeType": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "importers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "title", "extensions"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "title": { "type": "string", "minLength": 1 },
+              "extensions": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        },
+        "statusBadges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "label": { "type": "string", "minLength": 1 },
+              "priority": { "type": "number" }
+            }
+          }
+        },
+        "inlineAnnotationProviders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "title": { "type": "string", "minLength": 1 },
+              "priority": { "type": "number" }
+            }
+          }
+        },
+        "uiControls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "mount", "kind", "label", "icon"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "mount": { "type": "string", "enum": ["top-bar", "bottom-bar"] },
+              "kind": { "type": "string", "enum": ["button", "toggle", "segmented"] },
+              "label": { "type": "string", "minLength": 1 },
+              "icon": {
+                "type": "string",
+                "enum": [
+                  "scene-heading",
+                  "action",
+                  "character",
+                  "dialogue",
+                  "parenthetical",
+                  "transition",
+                  "chevron-left",
+                  "chevron-right",
+                  "panel",
+                  "close",
+                  "settings",
+                  "spark"
+                ]
+              },
+              "priority": { "type": "number" },
+              "tooltip": { "type": "string" },
+              "group": { "type": "string" },
+              "hotkeyHint": { "type": "string" },
+              "when": { "type": "string" },
+              "action": {
+                "type": "object",
+                "required": ["type"],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "command",
+                      "editor:set-element",
+                      "editor:jump-to",
+                      "editor:cycle-element",
+                      "editor:escape-to-action",
+                      "panel:open",
+                      "panel:close",
+                      "panel:toggle"
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "uiPanels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "title"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "title": { "type": "string", "minLength": 1 },
+              "icon": {
+                "type": "string",
+                "enum": [
+                  "scene-heading",
+                  "action",
+                  "character",
+                  "dialogue",
+                  "parenthetical",
+                  "transition",
+                  "chevron-left",
+                  "chevron-right",
+                  "panel",
+                  "close",
+                  "settings",
+                  "spark"
+                ]
+              },
+              "defaultWidth": { "type": "number" },
+              "minWidth": { "type": "number" },
+              "maxWidth": { "type": "number" },
+              "priority": { "type": "number" },
+              "when": { "type": "string" },
+              "content": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "transforms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "hook"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "hook": { "type": "string", "enum": ["post-open", "pre-save", "pre-export"] },
+              "priority": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "enabledApiProposals": {
+      "type": "array",
+      "uniqueItems": true,
       "items": {
         "type": "string",
         "minLength": 1

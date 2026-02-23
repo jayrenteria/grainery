@@ -61,11 +61,22 @@ Create `grainery-plugin.manifest.json`:
   "name": "My Plugin",
   "version": "1.0.0",
   "description": "My Grainery plugin",
-  "engine": { "grainery": ">=0.1.0", "pluginApi": "^1.1.0" },
+  "engine": { "grainery": ">=0.1.0", "pluginApi": "^1.2.0" },
   "entry": "dist/main.js",
   "permissions": ["document:read"],
   "optionalPermissions": [],
   "networkAllowlist": [],
+  "activationEvents": ["onCommand:my-command"],
+  "contributes": {
+    "commands": [{ "id": "my-command", "title": "My Command" }],
+    "exporters": [],
+    "importers": [],
+    "statusBadges": [],
+    "inlineAnnotationProviders": [],
+    "uiControls": [],
+    "uiPanels": [],
+    "transforms": []
+  },
   "signature": {
     "keyId": "main-2026",
     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
@@ -77,7 +88,9 @@ Create `grainery-plugin.manifest.json`:
 Permission sets:
 
 - Core permissions: `document:read`, `document:write`, `editor:commands`, `export:register`
-- Optional permissions: `fs:pick-read`, `fs:pick-write`, `network:https`, `ui:mount`
+- Optional permissions: `fs:pick-read`, `fs:pick-write`, `network:https`, `ui:mount`, `editor:annotations`
+
+`activationEvents` + `contributes` are required in plugin API `1.2.0`.
 
 ## 5. Validate the manifest
 
@@ -231,6 +244,7 @@ Before sharing a plugin:
 - Zip has a top-level folder (manifest not at archive root).
 - Manifest `entry` path is wrong or absolute.
 - Missing `ui:mount` while trying to render UI controls/panel.
+- Missing `editor:annotations` while trying to render inline highlights.
 - Forgetting `document:write` when using `setPluginData`.
 - Returning annotation ranges without validating stale anchors.
 - Declaring optional permissions but not handling denied state.

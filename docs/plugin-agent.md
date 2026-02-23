@@ -16,7 +16,8 @@ Grainery plugins are JavaScript modules loaded into isolated Web Workers.
 
 Current plugin model:
 
-- Runtime: worker-isolated, one worker per enabled plugin
+- Runtime: worker-isolated, one worker per active plugin
+- Activation: manifest-driven (`activationEvents`)
 - Install: sideload zip + curated registry
 - Permissions: deny-by-default for optional scopes
 - UI extensions: declarative, host-rendered only
@@ -72,10 +73,11 @@ Examples:
 2. Plugins must not directly call Tauri `invoke` from plugin code.
 3. Optional permissions must remain deny-by-default.
 4. UI definitions must be ignored unless `ui:mount` is granted.
-5. Zip install expects `grainery-plugin.manifest.json` at archive root.
-6. Worker crashes/timeouts must not crash editor host.
+5. Inline annotation providers require `editor:annotations`.
+6. Zip install expects `grainery-plugin.manifest.json` at archive root.
+7. Worker crashes/timeouts must not crash editor host.
 
-## Extension Points (v1)
+## Extension Points (v1.2)
 
 Supported plugin registrations:
 

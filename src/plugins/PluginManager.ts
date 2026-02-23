@@ -4,7 +4,17 @@ import type { ScreenplayElementType } from '../lib/types';
 import { hasPluginPermission } from './permissions';
 import { nextRequestId, parseWorkerMessage } from './rpc';
 import { PluginHost } from './PluginHost';
+import {
+  assertContributedId,
+  assertValidLocalId,
+  normalizeInlineAnnotationsWithLimit,
+  validatePanelContent,
+  validateUiAction,
+  validateUiControlDefinition,
+  validateUiPanelDefinition,
+} from './validation';
 import type {
+  ContributedTransform,
   DocumentTransformContext,
   DocumentTransformHook,
   ElementLoopContext,
@@ -14,6 +24,7 @@ import type {
   InlineAnnotationContext,
   InstalledPlugin,
   OptionalPermission,
+  PluginContributions,
   PluginLockRecord,
   PluginPermissionGrant,
   PluginRegistryEntry,
@@ -62,6 +73,19 @@ interface RegisteredTransform {
   priority: number;
 }
 
+type ActivationState = 'inactive' | 'activating' | 'active' | 'failed';
+
+interface ManifestContributionIndex {
+  commands: Set<string>;
+  exporters: Set<string>;
+  importers: Set<string>;
+  statusBadges: Set<string>;
+  inlineAnnotationProviders: Set<string>;
+  uiControls: Set<string>;
+  uiPanels: Set<string>;
+  transforms: Set<string>;
+}
+
 interface PluginManagerOptions {
   getDocument: () => JSONContent;
   replaceDocument: (next: JSONContent) => void | Promise<void>;
@@ -88,6 +112,9 @@ export class PluginManager {
   private inlineAnnotationProviders: RegisteredInlineAnnotationProvider[] = [];
   private uiControls: RegisteredUIControl[] = [];
   private uiPanels: RegisteredUIPanel[] = [];
+  private activationStates = new Map<string, ActivationState>();
+  private activationPromises = new Map<string, Promise<void>>();
+  private contributionsByPlugin = new Map<string, ManifestContributionIndex>();
 
   constructor(options: PluginManagerOptions) {
     this.pluginHost = new PluginHost({
@@ -202,15 +229,22 @@ export class PluginManager {
     this.inlineAnnotationProviders = [];
     this.uiControls = [];
     this.uiPanels = [];
+    this.activationStates.clear();
+    this.activationPromises.clear();
+    this.contributionsByPlugin.clear();
 
     const enabled = this.installedPlugins.filter((plugin) => plugin.enabled);
 
     for (const plugin of enabled) {
-      if (!plugin.entrySource) {
-        continue;
-      }
+      this.indexManifestContributions(plugin);
+      this.activationStates.set(plugin.id, 'inactive');
 
-      this.startWorker(plugin);
+      const shouldStartupActivate = plugin.manifest.activationEvents.includes('onStartup');
+      if (shouldStartupActivate) {
+        void this.ensureActivated(plugin.id, 'onStartup').catch((error) => {
+          console.error(`[PluginManager] Startup activation failed for ${plugin.id}`, error);
+        });
+      }
     }
 
     this.notifyListeners();
@@ -321,6 +355,7 @@ export class PluginManager {
       throw new Error(`Plugin ${pluginId} does not have document:read permission`);
     }
 
+    await this.ensureActivated(pluginId, `onCommand:${localId}`);
     await this.invokeWorker(pluginId, 'command', localId, {
       document: this.pluginHost.readDocument(),
       metadata,
@@ -360,6 +395,7 @@ export class PluginManager {
 
     for (const transform of ordered) {
       try {
+        await this.ensureActivated(transform.pluginId, `onTransform:${transform.hook}`);
         const result = await this.invokeWorker(transform.pluginId, 'transform', transform.id, {
           hook,
           document: current,
@@ -389,6 +425,7 @@ export class PluginManager {
       throw new Error(`Invalid exporter id: ${exporterId}`);
     }
 
+    await this.ensureActivated(pluginId, `onExporter:${localId}`);
     const result = await this.invokeWorker(pluginId, 'exporter', localId, {
       document: context.document,
       title: context.title,
@@ -412,6 +449,7 @@ export class PluginManager {
       throw new Error(`Invalid importer id: ${importerId}`);
     }
 
+    await this.ensureActivated(pluginId, `onImporter:${localId}`);
     const result = await this.invokeWorker(pluginId, 'importer', localId, input);
 
     if (!isJsonContent(result)) {
@@ -429,6 +467,7 @@ export class PluginManager {
 
     for (const badge of badges) {
       try {
+        await this.ensureActivated(badge.pluginId, `onStatusBadge:${getLocalId(badge.id)}`);
         const value = await this.invokeWorker(badge.pluginId, 'status', getLocalId(badge.id), {
           document: context.document,
           metadata: context.metadata,
@@ -457,24 +496,26 @@ export class PluginManager {
     const providers = [...this.inlineAnnotationProviders].sort(
       (a, b) => (b.priority ?? 0) - (a.priority ?? 0)
     );
-    const rendered: RenderedInlineAnnotation[] = [];
     const maxPosition = Math.max(1, getDocumentContentSize(context.document));
-
-    for (const provider of providers) {
+    const jobs = providers.map(async (provider) => {
       const plugin = this.getPluginById(provider.pluginId);
       if (!plugin || !plugin.enabled) {
-        continue;
-      }
-
-      if (!hasPluginPermission(plugin, 'ui:mount')) {
-        continue;
+        return [] as RenderedInlineAnnotation[];
       }
 
       if (!hasPluginPermission(plugin, 'document:read')) {
-        continue;
+        return [] as RenderedInlineAnnotation[];
+      }
+
+      if (!hasPluginPermission(plugin, 'editor:annotations')) {
+        return [] as RenderedInlineAnnotation[];
       }
 
       try {
+        await this.ensureActivated(
+          provider.pluginId,
+          `onInlineAnnotations:${getLocalId(provider.id)}`
+        );
         const response = await this.invokeWorker(
           provider.pluginId,
           'inline-annotations',
@@ -482,25 +523,33 @@ export class PluginManager {
           context
         );
 
-        const annotations = Array.isArray(response) ? (response as InlineAnnotation[]) : [];
+        const candidate = Array.isArray(response) ? (response as InlineAnnotation[]) : [];
+        const annotations = normalizeInlineAnnotationsWithLimit(candidate);
         const priority = provider.priority ?? 0;
 
+        const normalized: RenderedInlineAnnotation[] = [];
         for (const annotation of annotations) {
-          const normalized = normalizeInlineAnnotation(
-            provider.pluginId,
-            annotation,
-            maxPosition,
-            priority
-          );
-          if (normalized) {
-            rendered.push(normalized);
+          const item = normalizeInlineAnnotation(provider.pluginId, annotation, maxPosition, priority);
+          if (item) {
+            normalized.push(item);
           }
         }
+
+        return normalized;
       } catch (error) {
         console.error(
           `[PluginManager] Inline annotation provider failed: ${provider.id}`,
           error
         );
+        return [] as RenderedInlineAnnotation[];
+      }
+    });
+
+    const settled = await Promise.allSettled(jobs);
+    const rendered: RenderedInlineAnnotation[] = [];
+    for (const result of settled) {
+      if (result.status === 'fulfilled') {
+        rendered.push(...result.value);
       }
     }
 
@@ -543,6 +592,11 @@ export class PluginManager {
     }
 
     for (const [pluginId, localControlIds] of pluginToControlIds.entries()) {
+      const session = this.sessions.get(pluginId);
+      if (!session || !session.ready) {
+        continue;
+      }
+
       try {
         const localPanelIds = pluginToPanelIds.get(pluginId) ?? [];
 
@@ -604,6 +658,7 @@ export class PluginManager {
       return null;
     }
 
+    await this.ensureActivated(control.pluginId, `onUIControl:${getLocalId(control.id)}`);
     const result = (await this.invokeWorker(
       control.pluginId,
       'ui-control',
@@ -631,6 +686,7 @@ export class PluginManager {
       return { action: null };
     }
 
+    await this.ensureActivated(panel.pluginId, `onUIPanel:${getLocalId(panel.id)}`);
     const response = (await this.invokeWorker(panel.pluginId, 'ui-panel-action', getLocalId(panel.id), {
       document: context.document,
       currentElementType: context.currentElementType,
@@ -646,6 +702,220 @@ export class PluginManager {
       ...(response ?? {}),
       action: normalizedAction,
     };
+  }
+
+  async activateUIPanel(panelId: string): Promise<void> {
+    const [pluginId, localId] = splitCompositeId(panelId);
+    if (!pluginId || !localId) {
+      throw new Error(`Invalid panel id: ${panelId}`);
+    }
+
+    const panel = this.uiPanels.find((item) => item.id === panelId);
+    if (!panel) {
+      throw new Error(`UI panel not found: ${panelId}`);
+    }
+
+    const plugin = this.getPluginById(pluginId);
+    if (!plugin || !hasPluginPermission(plugin, 'ui:mount')) {
+      return;
+    }
+
+    await this.ensureActivated(pluginId, `onUIPanel:${localId}`);
+  }
+
+  private indexManifestContributions(plugin: InstalledPlugin): void {
+    const contributes = normalizeManifestContributions(plugin.manifest.contributes);
+    const index: ManifestContributionIndex = {
+      commands: new Set(contributes.commands.map((item) => item.id)),
+      exporters: new Set(contributes.exporters.map((item) => item.id)),
+      importers: new Set(contributes.importers.map((item) => item.id)),
+      statusBadges: new Set(contributes.statusBadges.map((item) => item.id)),
+      inlineAnnotationProviders: new Set(contributes.inlineAnnotationProviders.map((item) => item.id)),
+      uiControls: new Set(contributes.uiControls.map((item) => item.id)),
+      uiPanels: new Set(contributes.uiPanels.map((item) => item.id)),
+      transforms: new Set(contributes.transforms.map((item) => item.id)),
+    };
+
+    this.contributionsByPlugin.set(plugin.id, index);
+
+    for (const command of contributes.commands) {
+      assertValidLocalId(command.id, 'Command');
+      this.commands.push({
+        id: composeId(plugin.id, command.id),
+        pluginId: plugin.id,
+        title: command.title,
+        shortcut: command.shortcut,
+      });
+    }
+
+    for (const exporter of contributes.exporters) {
+      assertValidLocalId(exporter.id, 'Exporter');
+      this.exporters.push({
+        id: composeId(plugin.id, exporter.id),
+        pluginId: plugin.id,
+        title: exporter.title,
+        extension: exporter.extension,
+        mimeType: exporter.mimeType,
+      });
+    }
+
+    for (const importer of contributes.importers) {
+      assertValidLocalId(importer.id, 'Importer');
+      this.importers.push({
+        id: composeId(plugin.id, importer.id),
+        pluginId: plugin.id,
+        title: importer.title,
+        extensions: importer.extensions,
+      });
+    }
+
+    for (const badge of contributes.statusBadges) {
+      assertValidLocalId(badge.id, 'Status badge');
+      this.statusBadges.push({
+        id: composeId(plugin.id, badge.id),
+        pluginId: plugin.id,
+        label: badge.label,
+        priority: badge.priority,
+      });
+    }
+
+    for (const provider of contributes.inlineAnnotationProviders) {
+      assertValidLocalId(provider.id, 'Inline annotation provider');
+      this.inlineAnnotationProviders.push({
+        id: composeId(plugin.id, provider.id),
+        pluginId: plugin.id,
+        title: provider.title,
+        priority: provider.priority,
+      });
+    }
+
+    for (const control of contributes.uiControls) {
+      validateUiControlDefinition(control);
+      if (control.action) {
+        validateUiAction(control.action, `UI control '${control.id}'`);
+      }
+      this.uiControls.push({
+        id: composeId(plugin.id, control.id),
+        pluginId: plugin.id,
+        mount: control.mount,
+        kind: control.kind,
+        label: control.label,
+        icon: control.icon,
+        priority: control.priority,
+        tooltip: control.tooltip,
+        group: control.group,
+        hotkeyHint: control.hotkeyHint,
+        action: control.action,
+        when: control.when,
+      });
+    }
+
+    for (const panel of contributes.uiPanels) {
+      validateUiPanelDefinition(panel);
+      if (panel.content) {
+        validatePanelContent(panel.content, `UI panel '${panel.id}'`);
+      }
+      this.uiPanels.push({
+        id: composeId(plugin.id, panel.id),
+        pluginId: plugin.id,
+        title: panel.title,
+        icon: panel.icon,
+        defaultWidth: panel.defaultWidth,
+        minWidth: panel.minWidth,
+        maxWidth: panel.maxWidth,
+        priority: panel.priority,
+        content: panel.content,
+        when: panel.when,
+      });
+    }
+
+    for (const transform of contributes.transforms) {
+      assertValidLocalId(transform.id, 'Transform');
+      this.transforms.push({
+        pluginId: plugin.id,
+        id: transform.id,
+        hook: transform.hook,
+        priority: transform.priority ?? 0,
+      });
+    }
+  }
+
+  private async ensureActivated(pluginId: string, activationEvent: string): Promise<void> {
+    const plugin = this.getPluginById(pluginId);
+    if (!plugin || !plugin.enabled) {
+      throw new Error(`Plugin not enabled: ${pluginId}`);
+    }
+
+    const existingSession = this.sessions.get(pluginId);
+    if (existingSession?.ready) {
+      this.activationStates.set(pluginId, 'active');
+      return;
+    }
+
+    const state = this.activationStates.get(pluginId);
+    if (state === 'failed') {
+      throw new Error(`Plugin activation is in failed state: ${pluginId}`);
+    }
+
+    const declaredEvents = plugin.manifest.activationEvents as string[];
+    const allowsActivation =
+      declaredEvents.includes('onStartup') ||
+      declaredEvents.includes(activationEvent);
+    if (!allowsActivation) {
+      throw new Error(
+        `Plugin ${pluginId} does not declare activation event '${activationEvent}'`
+      );
+    }
+
+    const pending = this.activationPromises.get(pluginId);
+    if (pending) {
+      await pending;
+      return;
+    }
+
+    if (!plugin.entrySource) {
+      throw new Error(`Plugin entry is not available: ${pluginId}`);
+    }
+
+    const promise = (async () => {
+      this.activationStates.set(pluginId, 'activating');
+      if (!this.sessions.has(pluginId)) {
+        this.startWorker(plugin);
+      }
+
+      await this.waitForWorkerReady(pluginId);
+      this.activationStates.set(pluginId, 'active');
+    })();
+
+    this.activationPromises.set(pluginId, promise);
+
+    try {
+      await promise;
+    } catch (error) {
+      this.activationStates.set(pluginId, 'failed');
+      throw error;
+    } finally {
+      this.activationPromises.delete(pluginId);
+      this.notifyListeners();
+    }
+  }
+
+  private async waitForWorkerReady(pluginId: string): Promise<void> {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < INVOKE_TIMEOUT_MS) {
+      const session = this.sessions.get(pluginId);
+      if (!session) {
+        throw new Error(`Plugin worker unavailable during activation: ${pluginId}`);
+      }
+
+      if (session.ready) {
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    throw new Error(`Plugin activation timed out: ${pluginId}`);
   }
 
   private startWorker(plugin: InstalledPlugin): void {
@@ -697,6 +967,7 @@ export class PluginManager {
         if (session) {
           session.ready = true;
         }
+        this.activationStates.set(pluginId, 'active');
         return;
       }
 
@@ -722,6 +993,18 @@ export class PluginManager {
       }
 
       case 'worker:register-command': {
+        try {
+          const contributions = this.getContributionIndex(pluginId);
+          assertValidLocalId(message.command.id, 'Command');
+          assertContributedId(message.command.id, contributions.commands, 'Command');
+        } catch (error) {
+          await this.handleWorkerCrash(
+            pluginId,
+            error instanceof Error ? error.message : String(error)
+          );
+          return;
+        }
+
         const id = composeId(pluginId, message.command.id);
         this.commands = this.commands
           .filter((item) => item.id !== id)
@@ -738,6 +1021,18 @@ export class PluginManager {
       }
 
       case 'worker:register-transform': {
+        try {
+          const contributions = this.getContributionIndex(pluginId);
+          assertValidLocalId(message.transform.id, 'Transform');
+          assertContributedId(message.transform.id, contributions.transforms, 'Transform');
+        } catch (error) {
+          await this.handleWorkerCrash(
+            pluginId,
+            error instanceof Error ? error.message : String(error)
+          );
+          return;
+        }
+
         const record: RegisteredTransform = {
           pluginId,
           id: message.transform.id,
@@ -753,6 +1048,18 @@ export class PluginManager {
       }
 
       case 'worker:register-exporter': {
+        try {
+          const contributions = this.getContributionIndex(pluginId);
+          assertValidLocalId(message.exporter.id, 'Exporter');
+          assertContributedId(message.exporter.id, contributions.exporters, 'Exporter');
+        } catch (error) {
+          await this.handleWorkerCrash(
+            pluginId,
+            error instanceof Error ? error.message : String(error)
+          );
+          return;
+        }
+
         const id = composeId(pluginId, message.exporter.id);
         this.exporters = this.exporters
           .filter((item) => item.id !== id)
@@ -771,6 +1078,18 @@ export class PluginManager {
       }
 
       case 'worker:register-importer': {
+        try {
+          const contributions = this.getContributionIndex(pluginId);
+          assertValidLocalId(message.importer.id, 'Importer');
+          assertContributedId(message.importer.id, contributions.importers, 'Importer');
+        } catch (error) {
+          await this.handleWorkerCrash(
+            pluginId,
+            error instanceof Error ? error.message : String(error)
+          );
+          return;
+        }
+
         const id = composeId(pluginId, message.importer.id);
         this.importers = this.importers
           .filter((item) => item.id !== id)
@@ -788,6 +1107,18 @@ export class PluginManager {
       }
 
       case 'worker:register-status-badge': {
+        try {
+          const contributions = this.getContributionIndex(pluginId);
+          assertValidLocalId(message.badge.id, 'Status badge');
+          assertContributedId(message.badge.id, contributions.statusBadges, 'Status badge');
+        } catch (error) {
+          await this.handleWorkerCrash(
+            pluginId,
+            error instanceof Error ? error.message : String(error)
+          );
+          return;
+        }
+
         const id = composeId(pluginId, message.badge.id);
         this.statusBadges = this.statusBadges
           .filter((item) => item.id !== id)
@@ -804,6 +1135,22 @@ export class PluginManager {
       }
 
       case 'worker:register-inline-annotation-provider': {
+        try {
+          const contributions = this.getContributionIndex(pluginId);
+          assertValidLocalId(message.provider.id, 'Inline annotation provider');
+          assertContributedId(
+            message.provider.id,
+            contributions.inlineAnnotationProviders,
+            'Inline annotation provider'
+          );
+        } catch (error) {
+          await this.handleWorkerCrash(
+            pluginId,
+            error instanceof Error ? error.message : String(error)
+          );
+          return;
+        }
+
         const id = composeId(pluginId, message.provider.id);
         this.inlineAnnotationProviders = this.inlineAnnotationProviders
           .filter((item) => item.id !== id)
@@ -820,6 +1167,22 @@ export class PluginManager {
       }
 
       case 'worker:register-ui-control': {
+        try {
+          const contributions = this.getContributionIndex(pluginId);
+          assertValidLocalId(message.control.id, 'UI control');
+          assertContributedId(message.control.id, contributions.uiControls, 'UI control');
+          validateUiControlDefinition(message.control);
+          if (message.control.action) {
+            validateUiAction(message.control.action, `UI control '${message.control.id}'`);
+          }
+        } catch (error) {
+          await this.handleWorkerCrash(
+            pluginId,
+            error instanceof Error ? error.message : String(error)
+          );
+          return;
+        }
+
         const id = composeId(pluginId, message.control.id);
         this.uiControls = this.uiControls
           .filter((item) => item.id !== id)
@@ -836,6 +1199,7 @@ export class PluginManager {
               group: message.control.group,
               hotkeyHint: message.control.hotkeyHint,
               action: message.control.action,
+              when: message.control.when,
             },
           ]);
         this.notifyListeners();
@@ -843,6 +1207,22 @@ export class PluginManager {
       }
 
       case 'worker:register-ui-panel': {
+        try {
+          const contributions = this.getContributionIndex(pluginId);
+          assertValidLocalId(message.panel.id, 'UI panel');
+          assertContributedId(message.panel.id, contributions.uiPanels, 'UI panel');
+          validateUiPanelDefinition(message.panel);
+          if (message.panel.content) {
+            validatePanelContent(message.panel.content, `UI panel '${message.panel.id}'`);
+          }
+        } catch (error) {
+          await this.handleWorkerCrash(
+            pluginId,
+            error instanceof Error ? error.message : String(error)
+          );
+          return;
+        }
+
         const id = composeId(pluginId, message.panel.id);
         this.uiPanels = this.uiPanels
           .filter((item) => item.id !== id)
@@ -857,6 +1237,7 @@ export class PluginManager {
               maxWidth: message.panel.maxWidth,
               priority: message.panel.priority,
               content: message.panel.content,
+              when: message.panel.when,
             },
           ]);
         this.notifyListeners();
@@ -1029,6 +1410,7 @@ export class PluginManager {
     session.shuttingDown = true;
     session.worker.terminate();
     this.sessions.delete(pluginId);
+    this.activationStates.set(pluginId, 'failed');
 
     for (const [requestId, pending] of session.pending.entries()) {
       clearTimeout(pending.timeoutId);
@@ -1082,6 +1464,24 @@ export class PluginManager {
     }
   }
 
+  private getContributionIndex(pluginId: string): ManifestContributionIndex {
+    const found = this.contributionsByPlugin.get(pluginId);
+    if (found) {
+      return found;
+    }
+
+    return {
+      commands: new Set(),
+      exporters: new Set(),
+      importers: new Set(),
+      statusBadges: new Set(),
+      inlineAnnotationProviders: new Set(),
+      uiControls: new Set(),
+      uiPanels: new Set(),
+      transforms: new Set(),
+    };
+  }
+
   private getPluginById(pluginId: string): InstalledPlugin | undefined {
     return this.installedPlugins.find((item) => item.id === pluginId);
   }
@@ -1089,6 +1489,46 @@ export class PluginManager {
 
 function composeId(pluginId: string, localId: string): string {
   return `${pluginId}:${localId}`;
+}
+
+function normalizeManifestContributions(contributes: PluginContributions | undefined): PluginContributions {
+  if (!contributes || typeof contributes !== 'object') {
+    return {
+      commands: [],
+      exporters: [],
+      importers: [],
+      statusBadges: [],
+      inlineAnnotationProviders: [],
+      uiControls: [],
+      uiPanels: [],
+      transforms: [],
+    };
+  }
+
+  const transforms = Array.isArray(contributes.transforms)
+    ? contributes.transforms.filter((transform): transform is ContributedTransform => {
+        return Boolean(
+          transform
+          && typeof transform.id === 'string'
+          && (transform.hook === 'post-open'
+            || transform.hook === 'pre-save'
+            || transform.hook === 'pre-export')
+        );
+      })
+    : [];
+
+  return {
+    commands: Array.isArray(contributes.commands) ? contributes.commands : [],
+    exporters: Array.isArray(contributes.exporters) ? contributes.exporters : [],
+    importers: Array.isArray(contributes.importers) ? contributes.importers : [],
+    statusBadges: Array.isArray(contributes.statusBadges) ? contributes.statusBadges : [],
+    inlineAnnotationProviders: Array.isArray(contributes.inlineAnnotationProviders)
+      ? contributes.inlineAnnotationProviders
+      : [],
+    uiControls: Array.isArray(contributes.uiControls) ? contributes.uiControls : [],
+    uiPanels: Array.isArray(contributes.uiPanels) ? contributes.uiPanels : [],
+    transforms,
+  };
 }
 
 function splitCompositeId(id: string): [string | null, string | null] {

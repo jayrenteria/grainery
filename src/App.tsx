@@ -35,6 +35,7 @@ import { PluginUIHost } from './components/PluginUI';
 import './styles/screenplay.css';
 
 const AUTO_SAVE_DELAY_MS = 30_000;
+const INLINE_ANNOTATION_REFRESH_DEBOUNCE_MS = 120;
 const NON_DIALOGUE_CYCLE: ScreenplayElementType[] = ['sceneHeading', 'action', 'character', 'transition'];
 const DIALOGUE_BLOCK_CYCLE: ScreenplayElementType[] = ['dialogue', 'parenthetical'];
 
@@ -700,6 +701,7 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
     const refreshInlineAnnotations = async () => {
       try {
@@ -724,10 +726,15 @@ function App() {
       }
     };
 
-    void refreshInlineAnnotations();
+    timer = setTimeout(() => {
+      void refreshInlineAnnotations();
+    }, INLINE_ANNOTATION_REFRESH_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
     };
   }, [document.meta.filename, document.meta.id, editorAdapter, editorVersion, pluginManager, pluginStateVersion]);
 

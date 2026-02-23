@@ -18,6 +18,7 @@ import type {
   PluginCommand,
   PluginCommandContext,
   PluginManifest,
+  ProposedPluginApi,
   StatusBadge,
   StatusBadgeContext,
   UIControlDefinition,
@@ -66,6 +67,7 @@ const pendingHostRequests = new Map<
 
 let currentPluginId = '';
 let pluginInstance: GraineryPlugin | null = null;
+const ALLOWED_API_PROPOSALS = new Set<string>([]);
 
 function postWorkerMessage(message: unknown): void {
   self.postMessage(message);
@@ -117,7 +119,21 @@ function requestPermission(permission: string): Promise<boolean> {
   });
 }
 
-function createPluginApi(): PluginApi {
+function createProposedApi(enabledApiProposals: string[] | undefined): ProposedPluginApi | undefined {
+  if (!Array.isArray(enabledApiProposals) || enabledApiProposals.length === 0) {
+    return undefined;
+  }
+
+  const allowed = enabledApiProposals.filter((proposal) => ALLOWED_API_PROPOSALS.has(proposal));
+  if (allowed.length === 0) {
+    return undefined;
+  }
+
+  return {};
+}
+
+function createPluginApi(manifest: PluginManifest): PluginApi {
+  const proposed = createProposedApi(manifest.enabledApiProposals);
   return {
     registerElementLoopProvider(provider) {
       throwIfInvalidPluginId();
@@ -236,6 +252,7 @@ function createPluginApi(): PluginApi {
           group: control.group,
           hotkeyHint: control.hotkeyHint,
           action: control.action,
+          when: control.when,
         },
       });
     },
@@ -261,6 +278,7 @@ function createPluginApi(): PluginApi {
           maxWidth: panel.maxWidth,
           priority: panel.priority,
           content: panel.content,
+          when: panel.when,
         },
       });
     },
@@ -282,6 +300,7 @@ function createPluginApi(): PluginApi {
     hostCall(operation, payload) {
       return requestHost(operation, payload);
     },
+    proposed,
   };
 }
 
@@ -298,7 +317,7 @@ async function loadPlugin(entrySource: string, _manifest: PluginManifest): Promi
     }
 
     pluginInstance = candidate as GraineryPlugin;
-    await pluginInstance.setup(createPluginApi());
+    await pluginInstance.setup(createPluginApi(_manifest));
 
     postWorkerMessage({
       type: 'worker:ready',
