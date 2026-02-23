@@ -2,8 +2,8 @@
 
 This guide is for developers building plugins for Grainery.
 
-If you want deep internals, read `/Users/jay/git/screenwrite/docs/plugin-system.md`.  
-If you want UI extension details, read `/Users/jay/git/screenwrite/docs/plugin-ui-extension.md`.
+If you want deep internals, read `docs/plugin-system.md`.  
+If you want UI extension details, read `docs/plugin-ui-extension.md`.
 
 ## 1. Mental model: what a Grainery plugin is
 
@@ -21,10 +21,10 @@ Core ideas:
 
 Use one of these existing examples:
 
-- `/Users/jay/git/screenwrite/examples/plugins/wordcount/`
-- `/Users/jay/git/screenwrite/examples/plugins/element-toolbar/`
-- `/Users/jay/git/screenwrite/examples/plugins/scene-outline/`
-- `/Users/jay/git/screenwrite/examples/plugins/review-notes/`
+- `examples/plugins/wordcount/`
+- `examples/plugins/element-toolbar/`
+- `examples/plugins/scene-outline/`
+- `examples/plugins/review-notes/`
 
 What each example demonstrates:
 
@@ -133,7 +133,7 @@ Why: this keeps your plugin testable and minimizes permission scope.
 
 ## 8. Step-by-step walkthrough: `wordcount`
 
-Source: `/Users/jay/git/screenwrite/examples/plugins/wordcount/dist/main.js`
+Source: `examples/plugins/wordcount/dist/main.js`
 
 Step sequence:
 
@@ -155,7 +155,7 @@ This is a good baseline architecture for utility plugins.
 
 ## 9. Step-by-step walkthrough: `element-toolbar`
 
-Source: `/Users/jay/git/screenwrite/examples/plugins/element-toolbar/dist/main.js`
+Source: `examples/plugins/element-toolbar/dist/main.js`
 
 Step sequence:
 
@@ -252,6 +252,6 @@ Before sharing a plugin:
 
 ## 14. Where to go next
 
-- Internals and architecture: `/Users/jay/git/screenwrite/docs/plugin-system.md`
-- UI extension API: `/Users/jay/git/screenwrite/docs/plugin-ui-extension.md`
-- Schema reference: `/Users/jay/git/screenwrite/grainery-plugin.manifest.json`
+- Internals and architecture: `docs/plugin-system.md`
+- UI extension API: `docs/plugin-ui-extension.md`
+- Schema reference: `grainery-plugin.manifest.json`
