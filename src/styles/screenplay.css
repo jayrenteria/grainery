@@ -298,6 +298,14 @@
   @apply bg-warning text-warning-content rounded-[2px];
 }
 
+.plugin-inline-annotation {
+  @apply bg-info/30 rounded-[2px];
+}
+
+.plugin-inline-annotation-active {
+  @apply bg-info/55;
+}
+
 @media (max-width: 920px) {
   .find-replace-bar {
     @apply left-4 right-4 top-4 min-w-0;

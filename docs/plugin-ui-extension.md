@@ -1,4 +1,4 @@
-# Plugin UI Extension Surface (v1)
+# Plugin UI Extension Surface (v1.2)
 
 This document describes Grainery's declarative plugin UI surface.
 
@@ -51,7 +51,50 @@ Panel content model (v1 primitives):
 - `text`
 - `list`
 - `keyValue`
+- `input`
+- `textarea`
 - `actions`
+
+`input` / `textarea` fields:
+
+- are host-rendered and sanitized
+- are keyed by `fieldId`
+- flow through `onAction(context.formValues)` when an actions block button is clicked
+- preserve typed values across panel rerenders unless the plugin returns explicit replacement defaults
+
+## Inline annotations
+
+Plugins can register inline range highlights rendered by the host editor layer:
+
+- `registerInlineAnnotationProvider(provider)`
+
+Permission gate:
+
+- requires `document:read` + optional `editor:annotations`
+
+Provider output shape:
+
+- `id`: stable annotation id (plugin-local)
+- `from` / `to`: ProseMirror range positions
+- `kind`: host style token (`note` or `note-active`)
+
+Notes:
+
+- host clamps/validates ranges before rendering
+- annotations are hidden when plugin is disabled or lacks required permissions
+- plugins still cannot inject DOM into editor content
+- `ui:mount` is not required for annotation-only plugins
+
+## `when` expressions
+
+UI controls and panels can declare `when` expressions in manifest contributions.
+
+Supported keys:
+
+- `editor.hasSelection`
+- `editor.isCurrentEmpty`
+- `editor.element.sceneHeading|action|character|dialogue|parenthetical|transition`
+- `plugin.enabled`
 
 ## Runtime mechanics
 

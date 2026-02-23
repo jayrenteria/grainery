@@ -3,15 +3,27 @@ import type { EvaluatedUIPanel, UIPanelBlock } from '../../plugins';
 
 interface PluginSidePanelProps {
   panel: EvaluatedUIPanel | null;
+  formValues: Record<string, string>;
   onClose: () => void;
   onAction: (panelId: string, actionId: string) => void;
+  onFormValueChange: (panelId: string, fieldId: string, value: string) => void;
+}
+
+const DEFAULT_INPUT_MAX_LENGTH = 200;
+const DEFAULT_TEXTAREA_MAX_LENGTH = 4000;
+
+function sanitizeInputValue(value: string, maxLength: number): string {
+  const normalized = value.replace(/\u0000/g, '');
+  return normalized.slice(0, maxLength);
 }
 
 function renderBlock(
   panelId: string,
   block: UIPanelBlock,
   index: number,
-  onAction: (panelId: string, actionId: string) => void
+  formValues: Record<string, string>,
+  onAction: (panelId: string, actionId: string) => void,
+  onFormValueChange: (panelId: string, fieldId: string, value: string) => void
 ) {
   const isSceneOutlinePanel =
     panelId.endsWith(':scene-outline-panel') || panelId === 'scene-outline-panel';
@@ -65,12 +77,82 @@ function renderBlock(
           ))}
         </div>
       );
+    case 'input': {
+      const maxLength =
+        typeof block.maxLength === 'number' && Number.isFinite(block.maxLength)
+          ? Math.max(1, Math.floor(block.maxLength))
+          : DEFAULT_INPUT_MAX_LENGTH;
+      const currentValue =
+        typeof formValues[block.fieldId] === 'string'
+          ? formValues[block.fieldId]
+          : (block.value ?? '');
+
+      return (
+        <label key={`${panelId}-input-${index}`} className="plugin-panel-field">
+          {block.label ? <span className="plugin-panel-field-label">{block.label}</span> : null}
+          <input
+            type="text"
+            className="input input-xs plugin-panel-input"
+            value={currentValue}
+            maxLength={maxLength}
+            placeholder={block.placeholder ?? ''}
+            onChange={(event) =>
+              onFormValueChange(
+                panelId,
+                block.fieldId,
+                sanitizeInputValue(event.target.value, maxLength)
+              )
+            }
+          />
+        </label>
+      );
+    }
+    case 'textarea': {
+      const maxLength =
+        typeof block.maxLength === 'number' && Number.isFinite(block.maxLength)
+          ? Math.max(1, Math.floor(block.maxLength))
+          : DEFAULT_TEXTAREA_MAX_LENGTH;
+      const rows =
+        typeof block.rows === 'number' && Number.isFinite(block.rows)
+          ? Math.min(16, Math.max(2, Math.floor(block.rows)))
+          : 4;
+      const currentValue =
+        typeof formValues[block.fieldId] === 'string'
+          ? formValues[block.fieldId]
+          : (block.value ?? '');
+
+      return (
+        <label key={`${panelId}-textarea-${index}`} className="plugin-panel-field">
+          {block.label ? <span className="plugin-panel-field-label">{block.label}</span> : null}
+          <textarea
+            className="textarea textarea-xs plugin-panel-textarea"
+            value={currentValue}
+            rows={rows}
+            maxLength={maxLength}
+            placeholder={block.placeholder ?? ''}
+            onChange={(event) =>
+              onFormValueChange(
+                panelId,
+                block.fieldId,
+                sanitizeInputValue(event.target.value, maxLength)
+              )
+            }
+          />
+        </label>
+      );
+    }
     default:
       return null;
   }
 }
 
-export function PluginSidePanel({ panel, onClose, onAction }: PluginSidePanelProps) {
+export function PluginSidePanel({
+  panel,
+  formValues,
+  onClose,
+  onAction,
+  onFormValueChange,
+}: PluginSidePanelProps) {
   if (!panel) {
     return null;
   }
@@ -89,7 +171,16 @@ export function PluginSidePanel({ panel, onClose, onAction }: PluginSidePanelPro
         </button>
       </header>
       <div className="plugin-side-panel-body">
-        {panel.content.blocks.map((block, index) => renderBlock(panel.id, block, index, onAction))}
+        {panel.content.blocks.map((block, index) =>
+          renderBlock(
+            panel.id,
+            block,
+            index,
+            formValues,
+            onAction,
+            onFormValueChange
+          )
+        )}
       </div>
     </aside>
   );

@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "com.grainery.scene-outline",
   "name": "Scene Outline",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Adds a side panel scene outline with jump navigation.",
   "engine": {
     "grainery": ">=0.1.0",
-    "pluginApi": "^1.0.0"
+    "pluginApi": "^1.2.0"
   },
   "entry": "dist/main.js",
   "permissions": [],
@@ -14,6 +14,46 @@
     "ui:mount"
   ],
   "networkAllowlist": [],
+  "activationEvents": [
+    "onUIControl:toggle-scene-outline",
+    "onUIPanel:scene-outline-panel"
+  ],
+  "contributes": {
+    "commands": [],
+    "exporters": [],
+    "importers": [],
+    "statusBadges": [],
+    "inlineAnnotationProviders": [],
+    "uiControls": [
+      {
+        "id": "toggle-scene-outline",
+        "mount": "bottom-bar",
+        "kind": "button",
+        "label": "Scenes",
+        "icon": "scene-heading",
+        "priority": 5,
+        "tooltip": "Open scene outline panel",
+        "action": {
+          "type": "panel:toggle",
+          "panelId": "scene-outline-panel"
+        },
+        "when": "plugin.enabled"
+      }
+    ],
+    "uiPanels": [
+      {
+        "id": "scene-outline-panel",
+        "title": "Scene Outline",
+        "icon": "scene-heading",
+        "defaultWidth": 320,
+        "minWidth": 260,
+        "maxWidth": 420,
+        "priority": 5,
+        "when": "plugin.enabled"
+      }
+    ],
+    "transforms": []
+  },
   "signature": {
     "keyId": "main-2026",
     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",

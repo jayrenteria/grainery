@@ -10,11 +10,15 @@ import type {
   HostOperation,
   HostResponseMessage,
   HostToWorkerMessage,
+  InlineAnnotation,
+  InlineAnnotationContext,
+  InlineAnnotationProvider,
   Importer,
   PluginApi,
   PluginCommand,
   PluginCommandContext,
   PluginManifest,
+  ProposedPluginApi,
   StatusBadge,
   StatusBadgeContext,
   UIControlDefinition,
@@ -33,6 +37,7 @@ const transformHandlers = new Map<string, DocumentTransform['handler']>();
 const exporterHandlers = new Map<string, Exporter['handler']>();
 const importerHandlers = new Map<string, Importer['handler']>();
 const statusBadgeHandlers = new Map<string, StatusBadge['handler']>();
+const inlineAnnotationHandlers = new Map<string, InlineAnnotationProvider['handler']>();
 const uiControlTriggerHandlers = new Map<
   string,
   NonNullable<UIControlDefinition['onTrigger']>
@@ -62,6 +67,7 @@ const pendingHostRequests = new Map<
 
 let currentPluginId = '';
 let pluginInstance: GraineryPlugin | null = null;
+const ALLOWED_API_PROPOSALS = new Set<string>([]);
 
 function postWorkerMessage(message: unknown): void {
   self.postMessage(message);
@@ -113,7 +119,21 @@ function requestPermission(permission: string): Promise<boolean> {
   });
 }
 
-function createPluginApi(): PluginApi {
+function createProposedApi(enabledApiProposals: string[] | undefined): ProposedPluginApi | undefined {
+  if (!Array.isArray(enabledApiProposals) || enabledApiProposals.length === 0) {
+    return undefined;
+  }
+
+  const allowed = enabledApiProposals.filter((proposal) => ALLOWED_API_PROPOSALS.has(proposal));
+  if (allowed.length === 0) {
+    return undefined;
+  }
+
+  return {};
+}
+
+function createPluginApi(manifest: PluginManifest): PluginApi {
+  const proposed = createProposedApi(manifest.enabledApiProposals);
   return {
     registerElementLoopProvider(provider) {
       throwIfInvalidPluginId();
@@ -189,6 +209,19 @@ function createPluginApi(): PluginApi {
         },
       });
     },
+    registerInlineAnnotationProvider(provider) {
+      throwIfInvalidPluginId();
+      inlineAnnotationHandlers.set(provider.id, provider.handler);
+      postWorkerMessage({
+        type: 'worker:register-inline-annotation-provider',
+        pluginId: currentPluginId,
+        provider: {
+          id: provider.id,
+          title: provider.title,
+          priority: provider.priority,
+        },
+      });
+    },
     registerUIControl(control) {
       throwIfInvalidPluginId();
 
@@ -219,6 +252,7 @@ function createPluginApi(): PluginApi {
           group: control.group,
           hotkeyHint: control.hotkeyHint,
           action: control.action,
+          when: control.when,
         },
       });
     },
@@ -244,6 +278,7 @@ function createPluginApi(): PluginApi {
           maxWidth: panel.maxWidth,
           priority: panel.priority,
           content: panel.content,
+          when: panel.when,
         },
       });
     },
@@ -253,12 +288,19 @@ function createPluginApi(): PluginApi {
     replaceDocument(next) {
       return requestHost('document:replace', next);
     },
+    getPluginData<T = unknown>() {
+      return requestHost<T | null>('document:get-plugin-data', null);
+    },
+    setPluginData(value) {
+      return requestHost('document:set-plugin-data', { value }).then(() => undefined);
+    },
     requestPermission(permission) {
       return requestPermission(permission);
     },
     hostCall(operation, payload) {
       return requestHost(operation, payload);
     },
+    proposed,
   };
 }
 
@@ -275,7 +317,7 @@ async function loadPlugin(entrySource: string, _manifest: PluginManifest): Promi
     }
 
     pluginInstance = candidate as GraineryPlugin;
-    await pluginInstance.setup(createPluginApi());
+    await pluginInstance.setup(createPluginApi(_manifest));
 
     postWorkerMessage({
       type: 'worker:ready',
@@ -405,6 +447,18 @@ async function handleInvokeMessage(
         respond(true, result ?? null);
         return;
       }
+      case 'inline-annotations': {
+        const handler = inlineAnnotationHandlers.get(message.id);
+        if (!handler) {
+          respond(true, []);
+          return;
+        }
+
+        const result = await handler(message.payload as InlineAnnotationContext);
+        const output = Array.isArray(result) ? (result as InlineAnnotation[]) : [];
+        respond(true, output);
+        return;
+      }
       case 'ui-control': {
         const handler = uiControlTriggerHandlers.get(message.id);
         if (!handler) {
@@ -461,6 +515,7 @@ async function handleShutdown(): Promise<void> {
   exporterHandlers.clear();
   importerHandlers.clear();
   statusBadgeHandlers.clear();
+  inlineAnnotationHandlers.clear();
   uiControlTriggerHandlers.clear();
   uiControlVisibleHandlers.clear();
   uiControlDisabledHandlers.clear();

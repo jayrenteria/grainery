@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "com.grainery.element-toolbar",
   "name": "Element Toolbar",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Adds icon-based top bar controls for screenplay element switching.",
   "engine": {
     "grainery": ">=0.1.0",
-    "pluginApi": "^1.0.0"
+    "pluginApi": "^1.2.0"
   },
   "entry": "dist/main.js",
   "permissions": [],
@@ -14,6 +14,46 @@
     "ui:mount"
   ],
   "networkAllowlist": [],
+  "activationEvents": [
+    "onUIControl:toggle-element-panel",
+    "onUIPanel:element-toolbar-panel"
+  ],
+  "contributes": {
+    "commands": [],
+    "exporters": [],
+    "importers": [],
+    "statusBadges": [],
+    "inlineAnnotationProviders": [],
+    "uiControls": [
+      {
+        "id": "toggle-element-panel",
+        "mount": "bottom-bar",
+        "kind": "button",
+        "label": "Elements",
+        "icon": "panel",
+        "priority": 2,
+        "tooltip": "Open element toolbar panel",
+        "action": {
+          "type": "panel:toggle",
+          "panelId": "element-toolbar-panel"
+        },
+        "when": "plugin.enabled"
+      }
+    ],
+    "uiPanels": [
+      {
+        "id": "element-toolbar-panel",
+        "title": "Element Toolbar",
+        "icon": "settings",
+        "defaultWidth": 280,
+        "minWidth": 240,
+        "maxWidth": 360,
+        "priority": 1,
+        "when": "plugin.enabled"
+      }
+    ],
+    "transforms": []
+  },
   "signature": {
     "keyId": "main-2026",
     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",

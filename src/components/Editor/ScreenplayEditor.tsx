@@ -20,16 +20,18 @@ import {
   PaginationExtension,
   FindReplaceExtension,
   getFindReplaceState,
+  PluginAnnotationsExtension,
 } from '../../extensions';
 import { ElementTypeIndicator } from './ElementTypeIndicator';
 import { FindReplaceBar } from './FindReplaceBar';
 import { PaginatedEditor } from './PaginatedEditor';
 import type { ScreenplayElementType, CharacterExtension } from '../../lib/types';
 import type { Editor, JSONContent } from '@tiptap/react';
-import type { ElementLoopContext } from '../../plugins';
+import type { ElementLoopContext, RenderedInlineAnnotation } from '../../plugins';
 
 interface ScreenplayEditorProps {
   initialContent?: JSONContent;
+  inlineAnnotations?: RenderedInlineAnnotation[];
   onChange?: (content: JSONContent) => void;
   onSelectionChange?: () => void;
   resolveElementLoop?: (context: ElementLoopContext) => ScreenplayElementType | null;
@@ -95,6 +97,7 @@ const DEFAULT_CONTENT: JSONContent = {
 
 export function ScreenplayEditor({
   initialContent,
+  inlineAnnotations = [],
   onChange,
   onSelectionChange,
   resolveElementLoop,
@@ -120,6 +123,7 @@ export function ScreenplayEditor({
       Transition,
       PageBreak,
       FindReplaceExtension,
+      PluginAnnotationsExtension,
       ScreenplayKeymap.configure({
         resolveElementLoop,
       }),
@@ -187,6 +191,14 @@ export function ScreenplayEditor({
       editor.off('transaction', syncFindOpen);
     };
   }, [editor]);
+
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+
+    editor.commands.setPluginAnnotations(inlineAnnotations);
+  }, [editor, inlineAnnotations]);
 
   return (
     <>

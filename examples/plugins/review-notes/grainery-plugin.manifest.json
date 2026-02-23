@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "id": "com.grainery.review-notes",
+  "name": "Review Notes",
+  "version": "1.2.0",
+  "description": "Reviewer-attributed notes with inline highlight anchors.",
+  "engine": {
+    "grainery": ">=0.1.0",
+    "pluginApi": "^1.2.0"
+  },
+  "entry": "dist/main.js",
+  "permissions": [
+    "document:read",
+    "document:write"
+  ],
+  "optionalPermissions": [
+    "ui:mount",
+    "editor:annotations"
+  ],
+  "networkAllowlist": [],
+  "activationEvents": [
+    "onUIControl:toggle-review-notes",
+    "onUIPanel:review-notes-panel",
+    "onInlineAnnotations:review-note-highlights"
+  ],
+  "contributes": {
+    "commands": [],
+    "exporters": [],
+    "importers": [],
+    "statusBadges": [],
+    "inlineAnnotationProviders": [
+      {
+        "id": "review-note-highlights",
+        "title": "Review Note Highlights",
+        "priority": 20
+      }
+    ],
+    "uiControls": [
+      {
+        "id": "toggle-review-notes",
+        "mount": "bottom-bar",
+        "kind": "button",
+        "label": "Notes",
+        "icon": "panel",
+        "priority": 20,
+        "tooltip": "Open review notes panel",
+        "action": {
+          "type": "panel:toggle",
+          "panelId": "review-notes-panel"
+        },
+        "when": "plugin.enabled"
+      }
+    ],
+    "uiPanels": [
+      {
+        "id": "review-notes-panel",
+        "title": "Review Notes",
+        "icon": "panel",
+        "defaultWidth": 360,
+        "minWidth": 280,
+        "maxWidth": 460,
+        "priority": 20,
+        "when": "plugin.enabled"
+      }
+    ],
+    "transforms": []
+  },
+  "signature": {
+    "keyId": "main-2026",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "sig": "PLACEHOLDER"
+  }
+}

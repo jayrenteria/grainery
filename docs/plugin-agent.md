@@ -16,7 +16,8 @@ Grainery plugins are JavaScript modules loaded into isolated Web Workers.
 
 Current plugin model:
 
-- Runtime: worker-isolated, one worker per enabled plugin
+- Runtime: worker-isolated, one worker per active plugin
+- Activation: manifest-driven (`activationEvents`)
 - Install: sideload zip + curated registry
 - Permissions: deny-by-default for optional scopes
 - UI extensions: declarative, host-rendered only
@@ -61,9 +62,10 @@ Manifest and validation:
 - `scripts/validate-plugin-manifest.mjs`
 
 Examples:
-
 - `examples/plugins/wordcount/`
 - `examples/plugins/element-toolbar/`
+- `examples/plugins/review-notes/`
+
 
 ## Non-Negotiable Constraints
 
@@ -71,10 +73,11 @@ Examples:
 2. Plugins must not directly call Tauri `invoke` from plugin code.
 3. Optional permissions must remain deny-by-default.
 4. UI definitions must be ignored unless `ui:mount` is granted.
-5. Zip install expects `grainery-plugin.manifest.json` at archive root.
-6. Worker crashes/timeouts must not crash editor host.
+5. Inline annotation providers require `editor:annotations`.
+6. Zip install expects `grainery-plugin.manifest.json` at archive root.
+7. Worker crashes/timeouts must not crash editor host.
 
-## Extension Points (v1)
+## Extension Points (v1.2)
 
 Supported plugin registrations:
 
@@ -83,8 +86,9 @@ Supported plugin registrations:
 - document transforms (`post-open`, `pre-save`, `pre-export`)
 - exporters/importers
 - status badges
+- inline annotation providers
 - UI controls (`top-bar`, `bottom-bar`)
-- single side panel with primitive blocks (`text`, `list`, `keyValue`, `actions`)
+- single side panel with primitive blocks (`text`, `list`, `keyValue`, `input`, `textarea`, `actions`)
 
 Not supported:
 
@@ -139,6 +143,7 @@ Validate manifests:
 ```bash
 npm run validate:plugin-manifest -- examples/plugins/wordcount/grainery-plugin.manifest.json
 npm run validate:plugin-manifest -- examples/plugins/element-toolbar/grainery-plugin.manifest.json
+npm run validate:plugin-manifest -- examples/plugins/review-notes/grainery-plugin.manifest.json
 ```
 
 If modifying example zips, rebuild and verify root layout:

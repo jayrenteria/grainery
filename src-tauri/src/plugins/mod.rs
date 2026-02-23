@@ -17,7 +17,8 @@ use zip::ZipArchive;
 const PLUGIN_STORE_FILE: &str = "plugins-state.json";
 const PLUGIN_AUDIT_LOG_FILE: &str = "plugin-audit.log";
 const MANIFEST_FILE_NAME: &str = "grainery-plugin.manifest.json";
-const PLUGIN_API_VERSION: &str = "1.0.0";
+const PLUGIN_API_VERSION: &str = "1.2.0";
+const REQUIRED_PLUGIN_API_RANGE: &str = "^1.2.0";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +33,125 @@ pub struct PluginSignature {
     pub key_id: String,
     pub sha256: String,
     pub sig: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginContributions {
+    #[serde(default)]
+    pub commands: Vec<ContributedCommand>,
+    #[serde(default)]
+    pub exporters: Vec<ContributedExporter>,
+    #[serde(default)]
+    pub importers: Vec<ContributedImporter>,
+    #[serde(default)]
+    pub status_badges: Vec<ContributedStatusBadge>,
+    #[serde(default)]
+    pub inline_annotation_providers: Vec<ContributedInlineAnnotationProvider>,
+    #[serde(default)]
+    pub ui_controls: Vec<ContributedUiControl>,
+    #[serde(default)]
+    pub ui_panels: Vec<ContributedUiPanel>,
+    #[serde(default)]
+    pub transforms: Vec<ContributedTransform>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContributedCommand {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub shortcut: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContributedExporter {
+    pub id: String,
+    pub title: String,
+    pub extension: String,
+    #[serde(default)]
+    pub mime_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContributedImporter {
+    pub id: String,
+    pub title: String,
+    pub extensions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContributedStatusBadge {
+    pub id: String,
+    pub label: String,
+    #[serde(default)]
+    pub priority: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContributedInlineAnnotationProvider {
+    pub id: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub priority: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContributedUiControl {
+    pub id: String,
+    pub mount: String,
+    pub kind: String,
+    pub label: String,
+    pub icon: String,
+    #[serde(default)]
+    pub priority: Option<i64>,
+    #[serde(default)]
+    pub tooltip: Option<String>,
+    #[serde(default)]
+    pub group: Option<String>,
+    #[serde(default)]
+    pub hotkey_hint: Option<String>,
+    #[serde(default)]
+    pub action: Option<Value>,
+    #[serde(default)]
+    pub when: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContributedUiPanel {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub default_width: Option<i64>,
+    #[serde(default)]
+    pub min_width: Option<i64>,
+    #[serde(default)]
+    pub max_width: Option<i64>,
+    #[serde(default)]
+    pub priority: Option<i64>,
+    #[serde(default)]
+    pub content: Option<Value>,
+    #[serde(default)]
+    pub when: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContributedTransform {
+    pub id: String,
+    pub hook: String,
+    #[serde(default)]
+    pub priority: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +169,12 @@ pub struct PluginManifest {
     pub optional_permissions: Vec<String>,
     #[serde(default)]
     pub network_allowlist: Vec<String>,
+    #[serde(default)]
+    pub activation_events: Vec<String>,
+    #[serde(default)]
+    pub contributes: PluginContributions,
+    #[serde(default)]
+    pub enabled_api_proposals: Vec<String>,
     #[serde(default)]
     pub signature: Option<PluginSignature>,
 }
@@ -148,7 +274,11 @@ fn validate_plugin_id(plugin_id: &str) -> bool {
 fn is_optional_permission(permission: &str) -> bool {
     matches!(
         permission,
-        "fs:pick-read" | "fs:pick-write" | "network:https" | "ui:mount"
+        "fs:pick-read"
+            | "fs:pick-write"
+            | "network:https"
+            | "ui:mount"
+            | "editor:annotations"
     )
 }
 
@@ -157,6 +287,46 @@ fn is_core_permission(permission: &str) -> bool {
         permission,
         "document:read" | "document:write" | "editor:commands" | "export:register"
     )
+}
+
+fn validate_local_contribution_id(id: &str) -> bool {
+    !id.is_empty()
+        && !id.contains(':')
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_')
+}
+
+fn is_supported_transform_hook(hook: &str) -> bool {
+    matches!(hook, "post-open" | "pre-save" | "pre-export")
+}
+
+fn is_valid_activation_event(event: &str) -> bool {
+    if event == "onStartup" {
+        return true;
+    }
+
+    const PREFIXES: [&str; 7] = [
+        "onCommand:",
+        "onExporter:",
+        "onImporter:",
+        "onUIControl:",
+        "onUIPanel:",
+        "onStatusBadge:",
+        "onInlineAnnotations:",
+    ];
+
+    for prefix in PREFIXES {
+        if let Some(local_id) = event.strip_prefix(prefix) {
+            return validate_local_contribution_id(local_id);
+        }
+    }
+
+    if let Some(hook) = event.strip_prefix("onTransform:") {
+        return is_supported_transform_hook(hook);
+    }
+
+    false
 }
 
 fn plugin_root(app: &AppHandle) -> Result<PathBuf, String> {
@@ -266,12 +436,28 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         .map_err(|error| format!("Failed to parse plugin API version: {}", error))?;
     let plugin_api_req = VersionReq::parse(&manifest.engine.plugin_api)
         .map_err(|error| format!("Invalid engine.pluginApi version requirement: {}", error))?;
+    let required_plugin_api_req = VersionReq::parse(REQUIRED_PLUGIN_API_RANGE)
+        .map_err(|error| format!("Failed to parse required plugin API range: {}", error))?;
 
     if !plugin_api_req.matches(&plugin_api_version) {
         return Err(format!(
             "Plugin API mismatch. Requires {}, current API version is {}",
             manifest.engine.plugin_api,
             plugin_api_version
+        ));
+    }
+
+    if !required_plugin_api_req.matches(&plugin_api_version) {
+        return Err(format!(
+            "Host plugin API range misconfigured. Expected {}, current API is {}",
+            REQUIRED_PLUGIN_API_RANGE, plugin_api_version
+        ));
+    }
+
+    if manifest.engine.plugin_api != REQUIRED_PLUGIN_API_RANGE {
+        return Err(format!(
+            "Plugin engine.pluginApi must be exactly {} (found {})",
+            REQUIRED_PLUGIN_API_RANGE, manifest.engine.plugin_api
         ));
     }
 
@@ -284,6 +470,170 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
     for permission in &manifest.optional_permissions {
         if !is_optional_permission(permission) {
             return Err(format!("Unknown optional permission: {}", permission));
+        }
+    }
+
+    if manifest.activation_events.is_empty() {
+        return Err("activationEvents must include at least one event".to_string());
+    }
+
+    for event in &manifest.activation_events {
+        if !is_valid_activation_event(event) {
+            return Err(format!("Invalid activation event '{}'", event));
+        }
+    }
+
+    for command in &manifest.contributes.commands {
+        if !validate_local_contribution_id(&command.id) {
+            return Err(format!("Invalid command contribution id '{}'", command.id));
+        }
+    }
+
+    for exporter in &manifest.contributes.exporters {
+        if !validate_local_contribution_id(&exporter.id) {
+            return Err(format!("Invalid exporter contribution id '{}'", exporter.id));
+        }
+    }
+
+    for importer in &manifest.contributes.importers {
+        if !validate_local_contribution_id(&importer.id) {
+            return Err(format!("Invalid importer contribution id '{}'", importer.id));
+        }
+    }
+
+    for badge in &manifest.contributes.status_badges {
+        if !validate_local_contribution_id(&badge.id) {
+            return Err(format!("Invalid status badge contribution id '{}'", badge.id));
+        }
+    }
+
+    for provider in &manifest.contributes.inline_annotation_providers {
+        if !validate_local_contribution_id(&provider.id) {
+            return Err(format!(
+                "Invalid inline annotation provider contribution id '{}'",
+                provider.id
+            ));
+        }
+    }
+
+    for control in &manifest.contributes.ui_controls {
+        if !validate_local_contribution_id(&control.id) {
+            return Err(format!("Invalid UI control contribution id '{}'", control.id));
+        }
+    }
+
+    for panel in &manifest.contributes.ui_panels {
+        if !validate_local_contribution_id(&panel.id) {
+            return Err(format!("Invalid UI panel contribution id '{}'", panel.id));
+        }
+    }
+
+    for transform in &manifest.contributes.transforms {
+        if !validate_local_contribution_id(&transform.id) {
+            return Err(format!("Invalid transform contribution id '{}'", transform.id));
+        }
+
+        if !is_supported_transform_hook(&transform.hook) {
+            return Err(format!(
+                "Invalid transform hook '{}' for transform '{}'",
+                transform.hook, transform.id
+            ));
+        }
+    }
+
+    for event in &manifest.activation_events {
+        if event == "onStartup" {
+            continue;
+        }
+
+        if let Some(local_id) = event.strip_prefix("onCommand:") {
+            if !manifest.contributes.commands.iter().any(|item| item.id == local_id) {
+                return Err(format!(
+                    "Activation event '{}' references missing command contribution",
+                    event
+                ));
+            }
+            continue;
+        }
+
+        if let Some(local_id) = event.strip_prefix("onExporter:") {
+            if !manifest.contributes.exporters.iter().any(|item| item.id == local_id) {
+                return Err(format!(
+                    "Activation event '{}' references missing exporter contribution",
+                    event
+                ));
+            }
+            continue;
+        }
+
+        if let Some(local_id) = event.strip_prefix("onImporter:") {
+            if !manifest.contributes.importers.iter().any(|item| item.id == local_id) {
+                return Err(format!(
+                    "Activation event '{}' references missing importer contribution",
+                    event
+                ));
+            }
+            continue;
+        }
+
+        if let Some(local_id) = event.strip_prefix("onUIControl:") {
+            if !manifest.contributes.ui_controls.iter().any(|item| item.id == local_id) {
+                return Err(format!(
+                    "Activation event '{}' references missing UI control contribution",
+                    event
+                ));
+            }
+            continue;
+        }
+
+        if let Some(local_id) = event.strip_prefix("onUIPanel:") {
+            if !manifest.contributes.ui_panels.iter().any(|item| item.id == local_id) {
+                return Err(format!(
+                    "Activation event '{}' references missing UI panel contribution",
+                    event
+                ));
+            }
+            continue;
+        }
+
+        if let Some(local_id) = event.strip_prefix("onStatusBadge:") {
+            if !manifest
+                .contributes
+                .status_badges
+                .iter()
+                .any(|item| item.id == local_id)
+            {
+                return Err(format!(
+                    "Activation event '{}' references missing status badge contribution",
+                    event
+                ));
+            }
+            continue;
+        }
+
+        if let Some(local_id) = event.strip_prefix("onInlineAnnotations:") {
+            if !manifest
+                .contributes
+                .inline_annotation_providers
+                .iter()
+                .any(|item| item.id == local_id)
+            {
+                return Err(format!(
+                    "Activation event '{}' references missing inline annotation contribution",
+                    event
+                ));
+            }
+            continue;
+        }
+
+        if let Some(hook) = event.strip_prefix("onTransform:") {
+            if !manifest.contributes.transforms.iter().any(|item| item.hook == hook) {
+                return Err(format!(
+                    "Activation event '{}' references missing transform hook contribution",
+                    event
+                ));
+            }
+            continue;
         }
     }
 

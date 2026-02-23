@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "com.grainery.wordcount",
   "name": "Word Count Utilities",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Adds a word-count command and plain-text export.",
   "engine": {
     "grainery": ">=0.1.0",
-    "pluginApi": "^1.0.0"
+    "pluginApi": "^1.2.0"
   },
   "entry": "dist/main.js",
   "permissions": [
@@ -20,6 +20,47 @@
   "networkAllowlist": [
     "example.com"
   ],
+  "activationEvents": [
+    "onCommand:word-count",
+    "onStatusBadge:wordcount-status",
+    "onExporter:plain-text",
+    "onTransform:pre-save"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "id": "word-count",
+        "title": "Show Word Count",
+        "shortcut": "Mod+Shift+W"
+      }
+    ],
+    "exporters": [
+      {
+        "id": "plain-text",
+        "title": "Plain Text",
+        "extension": "txt",
+        "mimeType": "text/plain"
+      }
+    ],
+    "importers": [],
+    "statusBadges": [
+      {
+        "id": "wordcount-status",
+        "label": "Wordcount",
+        "priority": 10
+      }
+    ],
+    "inlineAnnotationProviders": [],
+    "uiControls": [],
+    "uiPanels": [],
+    "transforms": [
+      {
+        "id": "trim-trailing-whitespace",
+        "hook": "pre-save",
+        "priority": 5
+      }
+    ]
+  },
   "signature": {
     "keyId": "main-2026",
     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",

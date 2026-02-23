@@ -9,9 +9,11 @@ import type {
   UIControlAction,
   UIControlState,
   UIControlStateContext,
+  UIPanelBlock,
   UIPanelContent,
 } from '../../plugins';
 import type { ScreenplayElementType } from '../../lib/types';
+import { createWhenContext, evaluateWhenClause } from '../../plugins/when';
 
 interface EditorAdapter {
   getCurrentElementType: () => ScreenplayElementType | null;
@@ -36,6 +38,93 @@ function defaultPanelContent(): UIPanelContent {
   return { blocks: [] };
 }
 
+const DEFAULT_INPUT_MAX_LENGTH = 200;
+const DEFAULT_TEXTAREA_MAX_LENGTH = 4000;
+
+interface PanelFormField {
+  fieldId: string;
+  defaultValue: string;
+  maxLength: number;
+}
+
+function sanitizePanelFieldValue(value: string, maxLength: number): string {
+  const normalized = value.replace(/\u0000/g, '');
+  return normalized.slice(0, maxLength);
+}
+
+function getPanelFormField(block: UIPanelBlock): PanelFormField | null {
+  if (block.type === 'input') {
+    const maxLength = Number.isFinite(block.maxLength ?? NaN)
+      ? Math.max(1, Math.floor(block.maxLength ?? DEFAULT_INPUT_MAX_LENGTH))
+      : DEFAULT_INPUT_MAX_LENGTH;
+    return {
+      fieldId: block.fieldId,
+      defaultValue: typeof block.value === 'string' ? block.value : '',
+      maxLength,
+    };
+  }
+
+  if (block.type === 'textarea') {
+    const maxLength = Number.isFinite(block.maxLength ?? NaN)
+      ? Math.max(1, Math.floor(block.maxLength ?? DEFAULT_TEXTAREA_MAX_LENGTH))
+      : DEFAULT_TEXTAREA_MAX_LENGTH;
+    return {
+      fieldId: block.fieldId,
+      defaultValue: typeof block.value === 'string' ? block.value : '',
+      maxLength,
+    };
+  }
+
+  return null;
+}
+
+function reconcilePanelFormState(
+  content: UIPanelContent,
+  previousValues: Record<string, string>,
+  previousDefaults: Record<string, string>
+): {
+  values: Record<string, string>;
+  defaults: Record<string, string>;
+} {
+  const values: Record<string, string> = {};
+  const defaults: Record<string, string> = {};
+
+  for (const block of content.blocks) {
+    const field = getPanelFormField(block);
+    if (!field || !field.fieldId) {
+      continue;
+    }
+
+    const defaultValue = sanitizePanelFieldValue(field.defaultValue, field.maxLength);
+    defaults[field.fieldId] = defaultValue;
+
+    const previousValue = previousValues[field.fieldId];
+    const previousDefault = previousDefaults[field.fieldId];
+
+    if (typeof previousValue !== 'string') {
+      values[field.fieldId] = defaultValue;
+      continue;
+    }
+
+    const sanitizedPreviousValue = sanitizePanelFieldValue(previousValue, field.maxLength);
+
+    if (
+      typeof previousDefault === 'string' &&
+      sanitizedPreviousValue === sanitizePanelFieldValue(previousDefault, field.maxLength)
+    ) {
+      values[field.fieldId] = defaultValue;
+      continue;
+    }
+
+    values[field.fieldId] = sanitizedPreviousValue;
+  }
+
+  return {
+    values,
+    defaults,
+  };
+}
+
 export function PluginUIHost({
   pluginManager,
   pluginStateVersion,
@@ -43,22 +132,19 @@ export function PluginUIHost({
   document,
   editorAdapter,
 }: PluginUIHostProps) {
-  const topControls = useMemo(() => pluginManager.getUIControls('top-bar'), [pluginManager, pluginStateVersion]);
-  const bottomControls = useMemo(
+  const allTopControls = useMemo(() => pluginManager.getUIControls('top-bar'), [pluginManager, pluginStateVersion]);
+  const allBottomControls = useMemo(
     () => pluginManager.getUIControls('bottom-bar'),
     [pluginManager, pluginStateVersion]
   );
-  const panels = useMemo(() => pluginManager.getUIPanels(), [pluginManager, pluginStateVersion]);
+  const allPanels = useMemo(() => pluginManager.getUIPanels(), [pluginManager, pluginStateVersion]);
+  const installedPlugins = useMemo(() => pluginManager.getInstalledPlugins(), [pluginManager, pluginStateVersion]);
 
   const [controlStateMap, setControlStateMap] = useState<Record<string, UIControlState>>({});
   const [panelContentMap, setPanelContentMap] = useState<Record<string, UIPanelContent>>({});
+  const [panelFormValuesMap, setPanelFormValuesMap] = useState<Record<string, Record<string, string>>>({});
+  const [panelFormDefaultsMap, setPanelFormDefaultsMap] = useState<Record<string, Record<string, string>>>({});
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
-
-  const allControlIds = useMemo(
-    () => [...topControls, ...bottomControls].map((control) => control.id),
-    [topControls, bottomControls]
-  );
-  const allPanelIds = useMemo(() => panels.map((panel) => panel.id), [panels]);
 
   const context = useMemo<UIControlStateContext>(
     () => {
@@ -75,6 +161,45 @@ export function PluginUIHost({
     [document, editorAdapter, editorVersion]
   );
 
+  const pluginEnabledMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const plugin of installedPlugins) {
+      map[plugin.id] = plugin.enabled;
+    }
+    return map;
+  }, [installedPlugins]);
+
+  const topControls = useMemo(
+    () =>
+      allTopControls.filter((control) => {
+        const whenContext = createWhenContext(context, Boolean(pluginEnabledMap[control.pluginId]));
+        return evaluateWhenClause(control.when, whenContext);
+      }),
+    [allTopControls, context, pluginEnabledMap]
+  );
+  const bottomControls = useMemo(
+    () =>
+      allBottomControls.filter((control) => {
+        const whenContext = createWhenContext(context, Boolean(pluginEnabledMap[control.pluginId]));
+        return evaluateWhenClause(control.when, whenContext);
+      }),
+    [allBottomControls, context, pluginEnabledMap]
+  );
+  const panels = useMemo(
+    () =>
+      allPanels.filter((panel) => {
+        const whenContext = createWhenContext(context, Boolean(pluginEnabledMap[panel.pluginId]));
+        return evaluateWhenClause(panel.when, whenContext);
+      }),
+    [allPanels, context, pluginEnabledMap]
+  );
+
+  const allControlIds = useMemo(
+    () => [...topControls, ...bottomControls].map((control) => control.id),
+    [topControls, bottomControls]
+  );
+  const allPanelIds = useMemo(() => panels.map((panel) => panel.id), [panels]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -82,14 +207,42 @@ export function PluginUIHost({
       try {
         const evaluated = await pluginManager.evaluateUIState(allControlIds, allPanelIds, context);
         if (!cancelled) {
+          const nextPanelContentMap: Record<string, UIPanelContent> = {};
+          for (const panel of panels) {
+            nextPanelContentMap[panel.id] =
+              evaluated.panels[panel.id] ?? panel.content ?? defaultPanelContent();
+          }
+
           setControlStateMap(evaluated.controls);
-          setPanelContentMap(evaluated.panels);
+          setPanelContentMap(nextPanelContentMap);
+          setPanelFormValuesMap((prevValues) => {
+            const nextValues: Record<string, Record<string, string>> = {};
+            setPanelFormDefaultsMap((prevDefaults) => {
+              const nextDefaults: Record<string, Record<string, string>> = {};
+
+              for (const [panelId, content] of Object.entries(nextPanelContentMap)) {
+                const reconciled = reconcilePanelFormState(
+                  content,
+                  prevValues[panelId] ?? {},
+                  prevDefaults[panelId] ?? {}
+                );
+                nextValues[panelId] = reconciled.values;
+                nextDefaults[panelId] = reconciled.defaults;
+              }
+
+              return nextDefaults;
+            });
+
+            return nextValues;
+          });
         }
       } catch (error) {
         if (!cancelled) {
           console.error('[PluginUIHost] Failed to evaluate plugin UI state', error);
           setControlStateMap({});
           setPanelContentMap({});
+          setPanelFormValuesMap({});
+          setPanelFormDefaultsMap({});
         }
       }
     };
@@ -99,12 +252,14 @@ export function PluginUIHost({
     } else {
       setControlStateMap({});
       setPanelContentMap({});
+      setPanelFormValuesMap({});
+      setPanelFormDefaultsMap({});
     }
 
     return () => {
       cancelled = true;
     };
-  }, [allControlIds, allPanelIds, context, pluginManager, pluginStateVersion]);
+  }, [allControlIds, allPanelIds, context, panels, pluginManager, pluginStateVersion]);
 
   useEffect(() => {
     if (!activePanelId) {
@@ -139,6 +294,7 @@ export function PluginUIHost({
         editorAdapter.escapeToAction();
         break;
       case 'panel:open':
+        await pluginManager.activateUIPanel(action.panelId);
         setActivePanelId(action.panelId);
         break;
       case 'panel:close':
@@ -147,6 +303,9 @@ export function PluginUIHost({
         }
         break;
       case 'panel:toggle':
+        if (activePanelId !== action.panelId) {
+          await pluginManager.activateUIPanel(action.panelId);
+        }
         setActivePanelId((current) => (current === action.panelId ? null : action.panelId));
         break;
       default:
@@ -168,18 +327,48 @@ export function PluginUIHost({
   const handlePanelAction = (panelId: string, actionId: string) => {
     void (async () => {
       try {
-        const response = await pluginManager.dispatchUIPanelAction(panelId, actionId, context);
+        const formValues = panelFormValuesMap[panelId] ?? {};
+        const response = await pluginManager.dispatchUIPanelAction(panelId, actionId, context, formValues);
         if (response.content) {
           setPanelContentMap((prev) => ({
             ...prev,
             [panelId]: response.content as UIPanelContent,
           }));
+          setPanelFormValuesMap((prevValues) => {
+            const currentValues = prevValues[panelId] ?? {};
+            const currentDefaults = panelFormDefaultsMap[panelId] ?? {};
+            const reconciled = reconcilePanelFormState(
+              response.content as UIPanelContent,
+              currentValues,
+              currentDefaults
+            );
+
+            setPanelFormDefaultsMap((prevDefaults) => ({
+              ...prevDefaults,
+              [panelId]: reconciled.defaults,
+            }));
+
+            return {
+              ...prevValues,
+              [panelId]: reconciled.values,
+            };
+          });
         }
         await runAction(response.action);
       } catch (error) {
         console.error(`[PluginUIHost] Failed to dispatch panel action ${panelId}:${actionId}`, error);
       }
     })();
+  };
+
+  const handlePanelFormValueChange = (panelId: string, fieldId: string, value: string) => {
+    setPanelFormValuesMap((prev) => ({
+      ...prev,
+      [panelId]: {
+        ...(prev[panelId] ?? {}),
+        [fieldId]: value,
+      },
+    }));
   };
 
   const evaluatedTopControls: EvaluatedUIControl[] = topControls
@@ -227,8 +416,10 @@ export function PluginUIHost({
       />
       <PluginSidePanel
         panel={evaluatedPanel}
+        formValues={evaluatedPanel ? panelFormValuesMap[evaluatedPanel.id] ?? {} : {}}
         onClose={() => setActivePanelId(null)}
         onAction={handlePanelAction}
+        onFormValueChange={handlePanelFormValueChange}
       />
     </>
   );

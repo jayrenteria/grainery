@@ -86,3 +86,20 @@
 .plugin-panel-actions {
   @apply mt-2 flex flex-wrap gap-1;
 }
+
+.plugin-panel-field {
+  @apply mb-2 flex flex-col gap-1;
+}
+
+.plugin-panel-field-label {
+  @apply text-[11px] uppercase tracking-wide text-base-content/65;
+}
+
+.plugin-panel-input,
+.plugin-panel-textarea {
+  @apply w-full;
+}
+
+.plugin-panel-textarea {
+  @apply min-h-20 resize-y;
+}

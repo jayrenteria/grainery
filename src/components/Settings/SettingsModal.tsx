@@ -231,7 +231,7 @@ export function SettingsModal({
                 <label className="label">
                   <span className="label-text text-base font-bold">Theme</span>
                 </label>
-                <div className="grid grid-cols-2 gap-3 mt-2 sm:grid-cols-3 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 mt-2 p-2 sm:grid-cols-3 lg:grid-cols-4">
                   {THEMES.map((t) => (
                     <ThemeCard key={t} t={t} isSelected={theme === t} onClick={() => setTheme(t)} />
                   ))}

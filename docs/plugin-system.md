@@ -13,6 +13,7 @@ The plugin system is designed for a writer-first experience:
 - Keep Rust-side capabilities behind a strict broker
 
 The current implementation supports JavaScript plugins only (no native/dylib plugins).
+Current plugin API target is `^1.2.0` (older plugin API ranges are not supported).
 
 ## High-Level Architecture
 
@@ -64,6 +65,8 @@ Important fields:
 - `permissions` (core)
 - `optionalPermissions` (promptable)
 - `networkAllowlist`
+- `activationEvents` (required)
+- `contributes` (required)
 - `signature` metadata
 
 ### Persisted state
@@ -76,6 +79,10 @@ Rust persists:
 - `PluginLockRecord`
 
 Store location is under the app data plugins directory (`plugins-state.json` + install tree).
+
+Open screenplay documents can additionally persist plugin-scoped data in-file under:
+
+- `pluginData[pluginId]`
 
 ## Lifecycle: Install to Execution
 
@@ -100,8 +107,9 @@ Then Rust extracts plugin files to app data and records installation metadata.
 At app startup and after plugin state changes:
 
 - `PluginManager.initialize()` -> `plugin_list_installed`
-- Enabled plugins with readable entry source are started
-- Each plugin gets its own worker
+- Enabled plugins are contribution-indexed from manifest
+- Workers are activated lazily via `activationEvents` (`onStartup` can opt into eager activation)
+- Each active plugin runs in its own worker
 
 ### 3. Worker init
 
@@ -123,6 +131,7 @@ During `setup`, plugin calls SDK registration methods:
 - `registerExporter`
 - `registerImporter`
 - `registerStatusBadge`
+- `registerInlineAnnotationProvider`
 - `registerUIControl`
 - `registerUIPanel`
 
@@ -232,6 +241,23 @@ Key properties:
 
 See `docs/plugin-ui-extension.md` for the complete API and behavior details.
 
+## 7) Inline annotations
+
+Plugins can provide inline highlight ranges rendered by the host editor layer.
+
+Use:
+
+- `registerInlineAnnotationProvider`
+
+Provider handlers receive current document + selection context and return a list of range annotations.
+
+Behavior:
+
+- host validates and clamps returned ranges
+- annotations are rendered with host-owned style tokens (`note`, `note-active`)
+- annotations disappear immediately when plugin is disabled/uninstalled
+- no arbitrary plugin DOM injection is involved
+
 ## Permission and Security Model
 
 ### Deny-by-default
@@ -244,6 +270,7 @@ Optional permissions:
 - `fs:pick-write`
 - `network:https`
 - `ui:mount`
+- `editor:annotations`
 
 Core permissions are declared in manifest and validated:
 
@@ -258,6 +285,10 @@ Document operations are brokered through host API methods, not direct app state 
 
 - `document:get`
 - `document:replace`
+- `document:get-plugin-data`
+- `document:set-plugin-data`
+
+`document:get-plugin-data` / `document:set-plugin-data` are plugin-scoped persistence helpers backed by the open `.gwx` document payload (`pluginData[pluginId]`).
 
 ### Rust host-call broker
 
@@ -352,10 +383,17 @@ Available API surface:
 - `registerDocumentTransform`
 - `registerExporter`
 - `registerImporter`
+- `registerStatusBadge`
+- `registerInlineAnnotationProvider`
+- `registerUIControl`
+- `registerUIPanel`
 - `getDocument`
 - `replaceDocument`
+- `getPluginData`
+- `setPluginData`
 - `requestPermission`
 - `hostCall`
+- `proposed` (only when allowlisted via `enabledApiProposals`)
 
 ## Developer Tooling
 

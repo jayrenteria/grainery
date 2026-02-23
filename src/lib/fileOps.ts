@@ -46,6 +46,7 @@ export function createNewDocument(): ScreenplayDocument {
       showSceneNumbers: false,
       revision: null,
     },
+    pluginData: {},
   };
 }
 
