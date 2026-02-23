@@ -19,22 +19,33 @@ There is a subtle box at the top of the screen that indicates the current elemen
 
 You can also save your script at any time, and export it as a PDF or to a `.fountain` or a `.fdx` file if you want to take your script somewhere else or export to Final Draft.
 
-## Plugins (v1)
+## Plugins (v1.2)
 
 Grainery now includes a writer-first plugin system:
 
 - Isolated JavaScript plugins running in Web Workers
-- Deny-by-default optional permissions (`fs:pick-read`, `fs:pick-write`, `network:https`)
+- Deny-by-default optional permissions (`fs:pick-read`, `fs:pick-write`, `network:https`, `ui:mount`, `editor:annotations`)
 - Sideload install (`.grainery-plugin.zip`) and curated registry install flow
+- Lazy plugin activation via manifest `activationEvents`
+- Required manifest contributions via `contributes`
 - Plugin extension points for:
   - element loop rules
   - commands + shortcuts
   - document transforms (`post-open`, `pre-save`, `pre-export`)
   - importers/exporters
+  - status badges
+  - inline annotations (host-rendered)
+  - declarative toolbar controls + side panels (host-rendered)
+  - plugin-scoped document persistence (`pluginData`)
 
 Manifest schema: `grainery-plugin.manifest.json`
 
-Example plugin: `examples/plugins/wordcount/`
+Bundled example plugins:
+
+- `examples/plugins/wordcount/`
+- `examples/plugins/element-toolbar/`
+- `examples/plugins/scene-outline/`
+- `examples/plugins/review-notes/`
 
 Detailed mechanics: `docs/plugin-system.md`
 Developer guide: `docs/plugin-authoring-guide.md`
@@ -45,3 +56,5 @@ Validate a manifest:
 ```bash
 npm run validate:plugin-manifest -- examples/plugins/wordcount/grainery-plugin.manifest.json
 ```
+
+Note: plugin manifests must target `engine.pluginApi: "^1.2.0"`. Earlier plugin API ranges are not supported.
