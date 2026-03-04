@@ -17,6 +17,11 @@ struct PendingOpenFiles {
     paths: Mutex<Vec<String>>,
 }
 
+#[derive(Default)]
+struct ExitControl {
+    allow_exit: Mutex<bool>,
+}
+
 impl PendingOpenFiles {
     fn push_paths(&self, mut new_paths: Vec<String>) {
         if new_paths.is_empty() {
@@ -68,11 +73,20 @@ fn consume_pending_open_files(state: tauri::State<'_, PendingOpenFiles>) -> Vec<
     state.take_paths()
 }
 
+#[tauri::command]
+fn exit_app(app: tauri::AppHandle, state: tauri::State<'_, ExitControl>) {
+    if let Ok(mut allow_exit) = state.allow_exit.lock() {
+        *allow_exit = true;
+    }
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(PendingOpenFiles::default())
+        .manage(ExitControl::default())
         .setup(|app| {
             // File menu items
             let new_item = MenuItemBuilder::with_id("new", "New")
@@ -151,6 +165,9 @@ pub fn run() {
             let settings_item = MenuItemBuilder::with_id("settings", "Settings...")
                 .accelerator("CmdOrCtrl+,")
                 .build(app)?;
+            let quit_item = MenuItemBuilder::with_id("quit", "Quit Grainery")
+                .accelerator("CmdOrCtrl+Q")
+                .build(app)?;
 
             let app_menu = SubmenuBuilder::new(app, "Grainery")
                 .about(None)
@@ -163,7 +180,7 @@ pub fn run() {
                 .hide_others()
                 .show_all()
                 .separator()
-                .quit()
+                .item(&quit_item)
                 .build()?;
 
             // Window menu
@@ -247,6 +264,7 @@ pub fn run() {
             load_screenplay,
             file_exists,
             consume_pending_open_files,
+            exit_app,
             export_pdf,
             plugins::plugin_list_installed,
             plugins::plugin_get_lock_records,
@@ -262,6 +280,25 @@ pub fn run() {
         .expect("error while building tauri application");
 
     app.run(|app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { api, .. } = event {
+            let exit_control = app_handle.state::<ExitControl>();
+            let mut should_allow_exit = false;
+            if let Ok(mut allow_exit) = exit_control.allow_exit.lock() {
+                if *allow_exit {
+                    *allow_exit = false;
+                    should_allow_exit = true;
+                }
+            }
+
+            if !should_allow_exit {
+                api.prevent_exit();
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.emit("app-quit-requested", ());
+                }
+            }
+            return;
+        }
+
         #[cfg(any(target_os = "macos", target_os = "ios"))]
         if let tauri::RunEvent::Opened { urls } = event {
             let paths = urls
