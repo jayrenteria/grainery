@@ -3,7 +3,8 @@ import type { Editor, JSONContent } from '@tiptap/react';
 import { TextSelection } from '@tiptap/pm/state';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { ask as askDialog, open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 
 import { ScreenplayEditor, TitlePageEditor } from './components/Editor';
 import { SettingsModal } from './components/Settings';
@@ -106,6 +107,7 @@ function App() {
   const pluginManagerRef = useRef<PluginManager | null>(null);
   const viewRef = useRef(view);
   const isDirtyRef = useRef(isDirty);
+  const isClosingRef = useRef(false);
 
   const queueAutoSave = useCallback(() => {
     if (autoSaveTimerRef.current) {
@@ -496,6 +498,69 @@ function App() {
     }
   }, [document, refreshRecentFiles, runTransformHook]);
 
+  const saveCurrentDocument = useCallback(async (): Promise<boolean> => {
+    try {
+      const transformed = await runTransformHook('pre-save', editorContentRef.current);
+      editorContentRef.current = transformed;
+
+      const savedDoc = await saveFile(document, transformed);
+      if (!savedDoc) {
+        return false;
+      }
+
+      setDocument(savedDoc);
+      setIsDirty(false);
+      refreshRecentFiles();
+      await updateWindowTitle(savedDoc.meta.filename);
+      return true;
+    } catch (error) {
+      console.error('Failed to save file:', error);
+      return false;
+    }
+  }, [document, refreshRecentFiles, runTransformHook]);
+
+  const confirmQuitWithUnsavedChanges = useCallback(async (): Promise<boolean> => {
+    if (!(viewRef.current === 'editor' && isDirtyRef.current)) {
+      return true;
+    }
+
+    const shouldSave = await askDialog('You have unsaved changes. Save before quitting?', {
+      title: 'Unsaved Changes',
+      kind: 'warning',
+      okLabel: 'Save',
+      cancelLabel: "Don't Save",
+    });
+
+    if (shouldSave) {
+      return saveCurrentDocument();
+    }
+
+    return askDialog('Quit without saving your changes?', {
+      title: 'Unsaved Changes',
+      kind: 'warning',
+      okLabel: 'Quit',
+      cancelLabel: 'Cancel',
+    });
+  }, [saveCurrentDocument]);
+
+  const requestAppExit = useCallback(async () => {
+    if (isClosingRef.current) {
+      return;
+    }
+
+    const shouldQuit = await confirmQuitWithUnsavedChanges();
+    if (!shouldQuit) {
+      return;
+    }
+
+    isClosingRef.current = true;
+    try {
+      await invoke('exit_app');
+    } finally {
+      isClosingRef.current = false;
+    }
+  }, [confirmQuitWithUnsavedChanges]);
+
   const handleSaveAs = useCallback(async () => {
     try {
       const transformed = await runTransformHook('pre-save', editorContentRef.current);
@@ -798,6 +863,38 @@ function App() {
   }, [isDirty]);
 
   useEffect(() => {
+    const appWindow = getCurrentWindow();
+
+    const unlisten = appWindow.onCloseRequested(async (event) => {
+      if (isClosingRef.current) {
+        return;
+      }
+
+      if (!(viewRef.current === 'editor' && isDirtyRef.current)) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const shouldQuit = await confirmQuitWithUnsavedChanges();
+      if (!shouldQuit) {
+        return;
+      }
+
+      isClosingRef.current = true;
+      try {
+        await appWindow.close();
+      } finally {
+        isClosingRef.current = false;
+      }
+    });
+
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, [confirmQuitWithUnsavedChanges]);
+
+  useEffect(() => {
     pluginDataRef.current = document.pluginData ?? {};
   }, [document.pluginData]);
 
@@ -849,6 +946,9 @@ function App() {
         case 'settings':
           setShowSettings(true);
           break;
+        case 'quit':
+          void requestAppExit();
+          break;
       }
     });
 
@@ -868,8 +968,19 @@ function App() {
     handleReplace,
     handleSave,
     handleSaveAs,
+    requestAppExit,
     pluginManager,
   ]);
+
+  useEffect(() => {
+    const unlisten = listen('app-quit-requested', () => {
+      void requestAppExit();
+    });
+
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, [requestAppExit]);
 
   // Open files when the app is launched via file association / OS open-file events.
   useEffect(() => {
