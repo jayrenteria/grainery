@@ -9,15 +9,6 @@ const ELEMENT_LABELS: Record<ScreenplayElementType, string> = {
   transition: 'Transition',
 };
 
-const ELEMENT_HINTS: Record<ScreenplayElementType, string> = {
-  sceneHeading: 'Tab to cycle • Enter for Action',
-  action: 'Tab to cycle • Enter on empty for Character',
-  character: 'Tab to cycle • ⌘E for extension • Enter for Dialogue',
-  dialogue: 'Tab to cycle • Enter for Character',
-  parenthetical: 'Tab to cycle • Enter for Dialogue',
-  transition: 'Tab to cycle • Enter for Scene Heading',
-};
-
 interface ElementTypeIndicatorProps {
   currentType: ScreenplayElementType | null;
   characterExtension?: CharacterExtension;
@@ -34,8 +25,8 @@ export function ElementTypeIndicator({ currentType, characterExtension }: Elemen
 
   return (
     <div className="element-type-indicator">
-      <div className="element-type-label">{label}</div>
-      <div className="element-type-hint">{ELEMENT_HINTS[currentType]}</div>
+      <span className="element-type-dot" aria-hidden="true" />
+      <span className="element-type-label">{label}</span>
     </div>
   );
 }

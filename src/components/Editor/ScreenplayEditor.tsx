@@ -23,6 +23,7 @@ import {
   PluginAnnotationsExtension,
 } from '../../extensions';
 import { ElementTypeIndicator } from './ElementTypeIndicator';
+import { EditorStats } from './EditorStats';
 import { FindReplaceBar } from './FindReplaceBar';
 import { PaginatedEditor } from './PaginatedEditor';
 import type { ScreenplayElementType, CharacterExtension } from '../../lib/types';
@@ -216,6 +217,7 @@ export function ScreenplayEditor({
         currentType={currentElement}
         characterExtension={characterExtension}
       />
+      <EditorStats editor={editor} />
     </>
   );
 }
