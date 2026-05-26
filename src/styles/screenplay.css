@@ -250,14 +250,26 @@
 
 /* Element type indicator */
 .element-type-indicator {
-  @apply fixed top-4 left-1/2 -translate-x-1/2;
-  @apply bg-base-100/90 backdrop-blur-sm rounded-md px-3 py-2;
-  @apply font-sans text-[11px] text-base-content/60 text-center;
-  @apply shadow-sm z-[100];
+  @apply fixed bottom-4 left-6 z-[100];
+  @apply inline-flex items-center gap-2;
+  @apply font-sans text-[11px] tracking-wide;
+  @apply pointer-events-none select-none;
+}
+
+.element-type-dot {
+  @apply inline-block w-2 h-2 rounded-full bg-primary;
 }
 
 .element-type-label {
-  @apply uppercase tracking-wide font-medium text-base-content/80;
+  @apply uppercase tracking-wider font-medium text-base-content/70;
+}
+
+/* Editor stats (word + page count) */
+.editor-stats {
+  @apply fixed bottom-4 right-6 z-[100];
+  @apply inline-flex items-center gap-6;
+  @apply font-sans text-[11px] uppercase tracking-wider;
+  @apply text-base-content/50 pointer-events-none select-none;
 }
 
 .find-replace-bar {
@@ -320,12 +332,8 @@
   }
 }
 
-.element-type-hint {
-  @apply text-[10px] text-base-content/50 mt-0.5;
-}
-
 .plugin-status-badges {
-  @apply fixed right-4 bottom-3 z-[90] flex flex-col items-end gap-1 pointer-events-none;
+  @apply fixed right-4 bottom-10 z-[90] flex flex-col items-end gap-1 pointer-events-none;
 }
 
 .plugin-status-badge {
