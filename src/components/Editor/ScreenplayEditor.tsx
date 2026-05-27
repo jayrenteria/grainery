@@ -38,6 +38,7 @@ interface ScreenplayEditorProps {
   onSelectionChange?: () => void;
   resolveElementLoop?: (context: ElementLoopContext) => ScreenplayElementType | null;
   onEditorReady?: (editor: Editor | null) => void;
+  showKeymapHint?: boolean;
 }
 
 const VIEWPORT_TARGET_RATIO = 0.45;
@@ -115,6 +116,7 @@ export function ScreenplayEditor({
   onSelectionChange,
   resolveElementLoop,
   onEditorReady,
+  showKeymapHint = true,
 }: ScreenplayEditorProps) {
   const [currentElement, setCurrentElement] = useState<ScreenplayElementType | null>('sceneHeading');
   const [characterExtension, setCharacterExtension] = useState<CharacterExtension>(null);
@@ -230,12 +232,14 @@ export function ScreenplayEditor({
         currentType={currentElement}
         characterExtension={characterExtension}
       />
-      <KeymapHint
-        currentType={currentElement}
-        previousType={previousElement}
-        isCurrentEmpty={isCurrentElementEmpty}
-        resolveElementLoop={resolveElementLoop}
-      />
+      {showKeymapHint && (
+        <KeymapHint
+          currentType={currentElement}
+          previousType={previousElement}
+          isCurrentEmpty={isCurrentElementEmpty}
+          resolveElementLoop={resolveElementLoop}
+        />
+      )}
       <EditorStats editor={editor} />
     </>
   );

@@ -15,9 +15,11 @@ interface SettingsModalProps {
   pluginStateVersion: number;
   onRunPluginExporter: (exporterId: string) => Promise<void>;
   onRunPluginImporter: (importerId: string) => Promise<void>;
+  keymapHintsEnabled: boolean;
+  onKeymapHintsEnabledChange: (enabled: boolean) => void;
 }
 
-type SettingsTab = 'theme' | 'title-page' | 'plugins';
+type SettingsTab = 'theme' | 'editor' | 'title-page' | 'plugins';
 
 function capitalizeTheme(theme: string): string {
   return theme.charAt(0).toUpperCase() + theme.slice(1);
@@ -77,6 +79,8 @@ export function SettingsModal({
   pluginStateVersion,
   onRunPluginExporter,
   onRunPluginImporter,
+  keymapHintsEnabled,
+  onKeymapHintsEnabledChange,
 }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<SettingsTab>('theme');
@@ -192,6 +196,7 @@ export function SettingsModal({
 
   const tabs: Array<{ id: SettingsTab; label: string }> = [
     { id: 'theme', label: 'Theme' },
+    { id: 'editor', label: 'Editor' },
     { id: 'title-page', label: 'Title Page' },
     { id: 'plugins', label: 'Plugins' },
   ];
@@ -236,6 +241,29 @@ export function SettingsModal({
                     <ThemeCard key={t} t={t} isSelected={theme === t} onClick={() => setTheme(t)} />
                   ))}
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'editor' && (
+              <div className="form-control gap-3">
+                <label className="label">
+                  <span className="label-text text-base font-bold">Editor</span>
+                </label>
+
+                <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-base-300 p-3">
+                  <span>
+                    <span className="block text-sm font-semibold text-base-content">Keyboard hints</span>
+                    <span className="block text-xs text-base-content/60">
+                      Show contextual key options at the bottom of the editor.
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    className="toggle toggle-sm"
+                    checked={keymapHintsEnabled}
+                    onChange={(event) => onKeymapHintsEnabledChange(event.target.checked)}
+                  />
+                </label>
               </div>
             )}
 
