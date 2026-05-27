@@ -264,6 +264,32 @@
   @apply uppercase tracking-wider font-medium text-base-content/70;
 }
 
+/* Contextual keyboard hint */
+.keymap-hint {
+  @apply fixed bottom-4 left-1/2 z-[100] -translate-x-1/2;
+  @apply flex max-w-[min(720px,calc(100vw-48px))] flex-wrap items-center justify-center gap-x-3 gap-y-1.5;
+  @apply px-3 py-2;
+  @apply font-sans text-[11px] font-light text-base-content/55;
+  @apply pointer-events-none select-none opacity-0;
+  transition: opacity 700ms ease;
+}
+
+.keymap-hint-visible {
+  @apply opacity-100;
+}
+
+.keymap-hint-item {
+  @apply inline-flex items-center gap-1.5 whitespace-nowrap;
+}
+
+.keymap-hint-key {
+  @apply rounded bg-primary/15 px-1.5 py-0.5 font-sans text-[10px] font-medium leading-none text-primary;
+}
+
+.keymap-hint-label {
+  @apply leading-none;
+}
+
 /* Editor stats (word + page count) */
 .editor-stats {
   @apply fixed bottom-4 right-6 z-[100];
