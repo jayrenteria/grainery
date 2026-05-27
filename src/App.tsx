@@ -37,6 +37,7 @@ import './styles/screenplay.css';
 
 const AUTO_SAVE_DELAY_MS = 30_000;
 const INLINE_ANNOTATION_REFRESH_DEBOUNCE_MS = 120;
+const KEYMAP_HINTS_STORAGE_KEY = 'grainery-keymap-hints-enabled';
 const NON_DIALOGUE_CYCLE: ScreenplayElementType[] = ['sceneHeading', 'action', 'character', 'transition'];
 const DIALOGUE_BLOCK_CYCLE: ScreenplayElementType[] = ['dialogue', 'parenthetical'];
 
@@ -85,6 +86,10 @@ function getPreviousElementType(currentType: ScreenplayElementType, previousType
   return index === -1 ? 'action' : NON_DIALOGUE_CYCLE[(index - 1 + NON_DIALOGUE_CYCLE.length) % NON_DIALOGUE_CYCLE.length];
 }
 
+function getStoredKeymapHintsEnabled(): boolean {
+  return localStorage.getItem(KEYMAP_HINTS_STORAGE_KEY) !== 'false';
+}
+
 function App() {
   const [view, setView] = useState<'start' | 'editor'>('start');
   const [document, setDocument] = useState<ScreenplayDocument>(createNewDocument);
@@ -98,6 +103,7 @@ function App() {
   const [statusBadges, setStatusBadges] = useState<RenderedStatusBadge[]>([]);
   const [inlineAnnotations, setInlineAnnotations] = useState<RenderedInlineAnnotation[]>([]);
   const [isResolvingInitialOpen, setIsResolvingInitialOpen] = useState(true);
+  const [keymapHintsEnabled, setKeymapHintsEnabled] = useState(getStoredKeymapHintsEnabled);
 
   const editorRef = useRef<Editor | null>(null);
   const editorContentRef = useRef<JSONContent>(document.document);
@@ -619,6 +625,11 @@ function App() {
     setEditorVersion((prev) => prev + 1);
   }, []);
 
+  const handleKeymapHintsEnabledChange = useCallback((enabled: boolean) => {
+    setKeymapHintsEnabled(enabled);
+    localStorage.setItem(KEYMAP_HINTS_STORAGE_KEY, String(enabled));
+  }, []);
+
   const handleFindNext = useCallback(() => {
     const editor = editorRef.current;
     if (!editor) {
@@ -1055,6 +1066,7 @@ function App() {
               onEditorReady={(editor) => {
                 editorRef.current = editor;
               }}
+              showKeymapHint={keymapHintsEnabled}
             />
 
             <PluginUIHost
@@ -1082,6 +1094,8 @@ function App() {
                 pluginStateVersion={pluginStateVersion}
                 onRunPluginExporter={handleRunPluginExporter}
                 onRunPluginImporter={handleRunPluginImporter}
+                keymapHintsEnabled={keymapHintsEnabled}
+                onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
               />
             )}
 

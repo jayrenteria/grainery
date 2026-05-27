@@ -25,6 +25,7 @@ import {
 import { ElementTypeIndicator } from './ElementTypeIndicator';
 import { EditorStats } from './EditorStats';
 import { FindReplaceBar } from './FindReplaceBar';
+import { KeymapHint } from './KeymapHint';
 import { PaginatedEditor } from './PaginatedEditor';
 import type { ScreenplayElementType, CharacterExtension } from '../../lib/types';
 import type { Editor, JSONContent } from '@tiptap/react';
@@ -37,6 +38,7 @@ interface ScreenplayEditorProps {
   onSelectionChange?: () => void;
   resolveElementLoop?: (context: ElementLoopContext) => ScreenplayElementType | null;
   onEditorReady?: (editor: Editor | null) => void;
+  showKeymapHint?: boolean;
 }
 
 const VIEWPORT_TARGET_RATIO = 0.45;
@@ -96,6 +98,17 @@ const DEFAULT_CONTENT: JSONContent = {
   ],
 };
 
+function getPreviousNodeType(editor: Editor): string | null {
+  const { $from } = editor.state.selection;
+  const currentIndex = $from.index($from.depth - 1);
+
+  if (currentIndex > 0) {
+    return $from.doc.child(currentIndex - 1).type.name;
+  }
+
+  return null;
+}
+
 export function ScreenplayEditor({
   initialContent,
   inlineAnnotations = [],
@@ -103,10 +116,29 @@ export function ScreenplayEditor({
   onSelectionChange,
   resolveElementLoop,
   onEditorReady,
+  showKeymapHint = true,
 }: ScreenplayEditorProps) {
   const [currentElement, setCurrentElement] = useState<ScreenplayElementType | null>('sceneHeading');
   const [characterExtension, setCharacterExtension] = useState<CharacterExtension>(null);
+  const [previousElement, setPreviousElement] = useState<string | null>(null);
+  const [isCurrentElementEmpty, setIsCurrentElementEmpty] = useState(true);
   const [isFindOpen, setIsFindOpen] = useState(false);
+
+  const syncElementContext = (editor: Editor) => {
+    const { $from } = editor.state.selection;
+    const node = $from.parent;
+    const nodeName = node.type.name;
+
+    setCurrentElement(nodeName as ScreenplayElementType);
+    setPreviousElement(getPreviousNodeType(editor));
+    setIsCurrentElementEmpty(node.textContent.trim().length === 0);
+
+    if (nodeName === 'character') {
+      setCharacterExtension(node.attrs.extension as CharacterExtension);
+    } else {
+      setCharacterExtension(null);
+    }
+  };
 
   const editor = useEditor({
     extensions: [
@@ -137,31 +169,10 @@ export function ScreenplayEditor({
     onUpdate: ({ editor }) => {
       onChange?.(editor.getJSON());
       keepCaretNearViewportCenter(editor);
-      // Update current element type when content changes (e.g., Tab to switch element)
-      const { $from } = editor.state.selection;
-      const nodeName = $from.parent.type.name;
-      setCurrentElement(nodeName as ScreenplayElementType);
-      
-      // Also update character extension on content change
-      if (nodeName === 'character') {
-        setCharacterExtension($from.parent.attrs.extension as CharacterExtension);
-      } else {
-        setCharacterExtension(null);
-      }
+      syncElementContext(editor);
     },
     onSelectionUpdate: ({ editor }) => {
-      const { $from } = editor.state.selection;
-      const node = $from.parent;
-      const nodeName = node.type.name;
-      setCurrentElement(nodeName as ScreenplayElementType);
-
-      // Track character extension when on character node
-      if (nodeName === 'character') {
-        setCharacterExtension(node.attrs.extension as CharacterExtension);
-      } else {
-        setCharacterExtension(null);
-      }
-
+      syncElementContext(editor);
       onSelectionChange?.();
     },
     editorProps: {
@@ -173,6 +184,10 @@ export function ScreenplayEditor({
 
   useEffect(() => {
     onEditorReady?.(editor);
+
+    if (editor) {
+      syncElementContext(editor);
+    }
   }, [editor, onEditorReady]);
 
   useEffect(() => {
@@ -217,6 +232,14 @@ export function ScreenplayEditor({
         currentType={currentElement}
         characterExtension={characterExtension}
       />
+      {showKeymapHint && (
+        <KeymapHint
+          currentType={currentElement}
+          previousType={previousElement}
+          isCurrentEmpty={isCurrentElementEmpty}
+          resolveElementLoop={resolveElementLoop}
+        />
+      )}
       <EditorStats editor={editor} />
     </>
   );
