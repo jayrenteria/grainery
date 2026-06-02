@@ -25,18 +25,22 @@ Grainery now includes a writer-first plugin system:
 
 - Isolated JavaScript plugins running in Web Workers
 - Deny-by-default optional permissions (`fs:pick-read`, `fs:pick-write`, `network:https`, `ui:mount`, `editor:annotations`)
-- Sideload install (`.grainery-plugin.zip`) and curated registry install flow
+- Sideload install (`.grainery-plugin.zip`) for development/private plugins, clearly marked unverified
+- Curated registry install/update flow with signature verification, archive SHA-256 checks, and lock records
+- Permission prompts that show plugin name/id/version, permission descriptions, current allow/deny state, author rationales, and trust status
+- Persisted plugin diagnostics for activation errors, runtime crashes, permission denials, and invocation timeouts
 - Lazy plugin activation via manifest `activationEvents`
-- Required manifest contributions via `contributes`
+- Required manifest contributions via `contributes`, including menus, keybindings, and configuration schemas
 - Plugin extension points for:
   - element loop rules
-  - commands + shortcuts
+  - commands, command menus, and keybindings
   - document transforms (`post-open`, `pre-save`, `pre-export`)
   - importers/exporters
   - status badges
   - inline annotations (host-rendered)
   - declarative toolbar controls + side panels (host-rendered)
   - plugin-scoped document persistence (`pluginData`)
+  - plugin-scoped global storage for lightweight preferences
 
 Manifest schema: `grainery-plugin.manifest.json`
 
@@ -57,4 +61,11 @@ Validate a manifest:
 npm run validate:plugin-manifest -- examples/plugins/wordcount/grainery-plugin.manifest.json
 ```
 
-Note: plugin manifests must target `engine.pluginApi: "^1.2.0"`. Earlier plugin API ranges are not supported.
+Package and inspect an installable archive:
+
+```bash
+npm run plugin:pack -- examples/plugins/wordcount
+npm run plugin:check-archive -- examples/plugins/wordcount/com.grainery.wordcount.grainery-plugin.zip
+```
+
+Note: plugin manifests must target `engine.pluginApi: "^1.2.0"`. Earlier plugin API ranges are not supported. Optional permissions should include `permissionRationales` so users see why a plugin is asking for access.
