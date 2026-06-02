@@ -97,6 +97,8 @@ pub fn run() {
             let open_item = MenuItemBuilder::with_id("open", "Open...")
                 .accelerator("CmdOrCtrl+O")
                 .build(app)?;
+            let import_fdx_item =
+                MenuItemBuilder::with_id("import_fdx", "Import Final Draft...").build(app)?;
             let save_item = MenuItemBuilder::with_id("save", "Save")
                 .accelerator("CmdOrCtrl+S")
                 .build(app)?;
@@ -117,6 +119,7 @@ pub fn run() {
                 .item(&new_item)
                 .item(&new_comic_item)
                 .item(&open_item)
+                .item(&import_fdx_item)
                 .separator()
                 .item(&save_item)
                 .item(&save_as_item)
