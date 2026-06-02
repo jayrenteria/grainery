@@ -138,10 +138,21 @@ Create `grainery-plugin.manifest.json`:
   "entry": "dist/main.js",
   "permissions": ["document:read"],
   "optionalPermissions": [],
+  "permissionRationales": {},
   "networkAllowlist": [],
   "activationEvents": ["onCommand:my-command"],
   "contributes": {
     "commands": [{ "id": "my-command", "title": "My Command" }],
+    "menus": [
+      {
+        "id": "my-command-palette",
+        "command": "my-command",
+        "location": "command-palette",
+        "icon": "command",
+        "when": "plugin.enabled"
+      }
+    ],
+    "keybindings": [],
     "exporters": [],
     "importers": [],
     "statusBadges": [],
@@ -162,6 +173,19 @@ Permission sets:
 
 - Core permissions: `document:read`, `document:write`, `editor:commands`, `export:register`
 - Optional permissions: `fs:pick-read`, `fs:pick-write`, `network:https`, `ui:mount`, `editor:annotations`
+
+Use `permissionRationales` for every optional permission you expect users to grant. Grainery shows this text in permission prompts and Settings next to the permission description, current allow/deny state, plugin name/id/version, and trust status.
+
+Example:
+
+```json
+{
+  "optionalPermissions": ["ui:mount"],
+  "permissionRationales": {
+    "ui:mount": "Adds a screenplay utility panel and toolbar button."
+  }
+}
+```
 
 `activationEvents` + `contributes` are required in plugin API `1.2.0`.
 
@@ -198,6 +222,84 @@ export default {
 
 `api` is the plugin SDK surface. Register only the features you need.
 
+### Screenplay helper API
+
+Prefer `context.screenplay` or `api.screenplay.from(context.document, context)` over hand-walking raw TipTap JSON.
+
+Common helpers:
+
+```js
+api.registerCommand({
+  id: 'inspect-script',
+  title: 'Inspect Script',
+  async handler(context) {
+    const screenplay = context.screenplay || api.screenplay.from(context.document, context);
+    const scenes = screenplay.scenes();
+    const dialogue = screenplay.dialogue();
+    const current = screenplay.currentElement();
+
+    await api.hostCall('audit:log', {
+      scenes: scenes.length,
+      dialogueBlocks: dialogue.length,
+      currentElement: current?.type || null,
+      text: screenplay.plainText(),
+    });
+  },
+});
+```
+
+For common mutations, use `api.screenplay.mutate(...)`; it loads the current document, gives you a mutable helper clone, then replaces the document through the normal `document:write` permission gate:
+
+```js
+await api.screenplay.mutate((document) => {
+  document.appendBlock({ type: 'action', text: 'A new action line.' });
+});
+```
+
+For highlights and notes, create stable anchors from selections and resolve them after edits:
+
+```js
+const selection = context.screenplay.selection(context);
+const anchor = context.screenplay.createAnchor(selection);
+const resolved = context.screenplay.resolveAnchor(anchor);
+```
+
+### Plugin storage
+
+Existing `api.getPluginData()` and `api.setPluginData(value)` still work for document-scoped plugin data.
+New typed wrappers make state easier to manage:
+
+```js
+const documentState = api.screenplay.documentStorage({ notes: [] });
+const state = await documentState.get();
+await documentState.update((current) => ({
+  ...current,
+  notes: [...current.notes, nextNote],
+}));
+
+const preferences = api.screenplay.globalStorage('preferences', { compact: false });
+await preferences.set({ compact: true });
+```
+
+Document storage is saved inside the current `.gwx` file and uses the existing document read/write permission gates.
+Global storage is plugin-scoped app data for lightweight preferences.
+
+### Disposable registrations
+
+Registration methods now return a disposable. Ignoring the return value is fine, but long-running plugins can explicitly clean up dynamic registrations:
+
+```js
+const disposable = api.registerStatusBadge({
+  id: 'temporary-status',
+  label: 'Temporary',
+  handler() {
+    return 'Ready';
+  },
+});
+
+await disposable.dispose();
+```
+
 ## 9. Build features incrementally
 
 Recommended order:
@@ -217,7 +319,7 @@ Source: `examples/plugins/wordcount/dist/main.js`
 Step sequence:
 
 1. `registerElementLoopProvider` adds a custom Enter behavior: empty Action -> Character.
-2. `registerCommand` adds `word-count` with shortcut `Mod+Shift+W`.
+2. `registerCommand` adds `word-count`; the manifest exposes it through a command-palette menu entry and keybinding.
 3. Command calls `api.hostCall('audit:log', ...)` to write an audit event.
 4. `registerStatusBadge` shows subtle `Wordcount: X` in bottom-right.
 5. `registerDocumentTransform` trims trailing whitespace before save.
@@ -305,12 +407,17 @@ The archive must contain `grainery-plugin.manifest.json` at root, not nested und
 4. Select your `.grainery-plugin.zip`.
 5. Enable optional permissions you need (for example `ui:mount`).
 
+Sideloaded plugins remain marked **unverified** in Settings. That is expected for local development and private testing. Registry plugins are marked verified only after the registry signature and archive SHA-256 checks pass.
+
 Smoke-test checklist:
 
 - Install succeeds with no manifest error.
 - Plugin appears in installed list.
+- Trust/source and lock verification details look correct.
 - Registered commands/exporters/importers/status badges appear.
 - UI controls/panels appear only when `ui:mount` is granted.
+- Permission prompts show useful rationales and your plugin handles deny gracefully.
+- Diagnostics stay empty during normal use.
 - Disable/uninstall removes plugin behavior immediately.
 
 ## 15. Security and quality checklist
@@ -318,13 +425,26 @@ Smoke-test checklist:
 Before sharing a plugin:
 
 - Request the minimum permissions required.
+- Provide a clear `permissionRationales` entry for every optional permission.
 - Keep `networkAllowlist` as narrow as possible.
 - Handle malformed document content safely.
 - Avoid long-running handlers; return quickly.
 - Keep deterministic behavior for denied permissions.
 - Add clear plugin README usage notes.
+- Document support expectations: what data the plugin touches, known limitations, and how users should report diagnostics from Settings.
 
-## 16. Common pitfalls
+## 16. Publishing, signing, and updates
+
+Registry publishing requires a manifest entry, archive SHA-256, signing key id, and signature. Grainery treats registry installs as verified only when:
+
+- the registry entry id/version matches the manifest id/version;
+- the registry signature verifies with a trusted Grainery registry key;
+- the downloaded archive SHA-256 matches the registry record;
+- the archive passes the same manifest and package validation as sideloaded plugins.
+
+Settings exposes the lock record so users can see the archive hash, signing key, source, and registry/download URLs. If the fetched registry contains a higher semver for an installed plugin, Settings shows an update action and asks for confirmation before replacing the installed package. Keep updates compatible with existing granted permissions where possible, and mention breaking changes in your README.
+
+## 17. Common pitfalls
 
 - Zip has a top-level folder (manifest not at archive root).
 - Manifest `entry` path is wrong or absolute.
@@ -332,11 +452,12 @@ Before sharing a plugin:
 - Missing `editor:annotations` while trying to render inline highlights.
 - Forgetting `document:write` when using `setPluginData`.
 - Returning annotation ranges without validating stale anchors.
+- Omitting `permissionRationales`, which leaves users without author context in prompts.
 - Declaring optional permissions but not handling denied state.
 - Expecting direct DOM or Tauri API access from plugin code.
 - Importing SDK runtime helpers in an unbundled plugin; use `import type` with plain `tsc`.
 
-## 17. Where to go next
+## 18. Where to go next
 
 - Internals and architecture: `docs/plugin-system.md`
 - UI extension API: `docs/plugin-ui-extension.md`

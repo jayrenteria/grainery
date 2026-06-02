@@ -22,7 +22,26 @@
     "commands": [
       {
         "id": "hello-world",
-        "title": "Hello World"
+        "title": "Hello World",
+        "category": "Tools"
+      }
+    ],
+    "menus": [
+      {
+        "id": "hello-world-palette",
+        "command": "hello-world",
+        "location": "command-palette",
+        "group": "Tools",
+        "icon": "command",
+        "when": "plugin.enabled"
+      }
+    ],
+    "keybindings": [
+      {
+        "id": "hello-world-default",
+        "command": "hello-world",
+        "key": "Mod+Alt+H",
+        "when": "plugin.enabled"
       }
     ],
     "exporters": [],

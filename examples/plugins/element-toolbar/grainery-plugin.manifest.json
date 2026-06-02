@@ -20,6 +20,8 @@
   ],
   "contributes": {
     "commands": [],
+    "menus": [],
+    "keybindings": [],
     "exporters": [],
     "importers": [],
     "statusBadges": [],

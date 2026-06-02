@@ -6,12 +6,12 @@ const plugin: GraineryPlugin = {
       id: 'hello-world',
       title: 'Hello World',
       async handler(context) {
-        const childCount = Array.isArray(context.document.content)
-          ? context.document.content.length
-          : 0;
+        const screenplay = context.screenplay || api.screenplay.from(context.document, context);
+        const sceneCount = screenplay.scenes().length;
+        const wordCount = screenplay.plainText().split(/\s+/).filter(Boolean).length;
 
         await api.hostCall('audit:log', {
-          message: `Hello from __PLUGIN_NAME__. Document has ${childCount} top-level nodes.`,
+          message: `Hello from __PLUGIN_NAME__. Document has ${sceneCount} scenes and ${wordCount} words.`,
         });
       },
     });

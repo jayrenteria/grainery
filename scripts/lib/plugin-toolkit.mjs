@@ -36,9 +36,25 @@ export const BUILTIN_ICONS = new Set([
   'close',
   'settings',
   'spark',
+  'command',
+  'keyboard',
+  'template',
+  'title-page',
+  'export',
+  'diagnostics',
+  'warning',
+  'check',
+  'info',
 ]);
-export const UI_CONTROL_MOUNTS = new Set(['top-bar', 'bottom-bar']);
+export const UI_CONTROL_MOUNTS = new Set(['top-bar', 'bottom-bar', 'editor-floating']);
 export const UI_CONTROL_KINDS = new Set(['button', 'toggle', 'segmented']);
+export const MENU_LOCATIONS = new Set([
+  'command-palette',
+  'main-menu',
+  'editor-context',
+  'toolbar-overflow',
+]);
+export const CONFIGURATION_TYPES = new Set(['string', 'number', 'boolean', 'enum']);
 
 const TOP_LEVEL_KEYS = new Set([
   'schemaVersion',
@@ -54,11 +70,15 @@ const TOP_LEVEL_KEYS = new Set([
   'activationEvents',
   'contributes',
   'enabledApiProposals',
+  'permissionRationales',
   'signature',
 ]);
 
 const CONTRIBUTION_KEYS = [
   'commands',
+  'menus',
+  'keybindings',
+  'configuration',
   'exporters',
   'importers',
   'statusBadges',
@@ -191,6 +211,9 @@ function validateContributedIdUniqueness(items, errors, pathName) {
 function createEmptyContributions() {
   return {
     commands: [],
+    menus: [],
+    keybindings: [],
+    configuration: undefined,
     exporters: [],
     importers: [],
     statusBadges: [],
@@ -211,10 +234,16 @@ function validateContributes(contributes, errors) {
 
   const normalized = createEmptyContributions();
   for (const key of CONTRIBUTION_KEYS) {
+    if (key === 'configuration') {
+      continue;
+    }
     normalized[key] = ensureArray(contributes, errors, key);
   }
+  normalized.configuration = contributes.configuration;
 
   validateContributedIdUniqueness(normalized.commands, errors, 'contributes.commands');
+  validateContributedIdUniqueness(normalized.menus, errors, 'contributes.menus');
+  validateContributedIdUniqueness(normalized.keybindings, errors, 'contributes.keybindings');
   validateContributedIdUniqueness(normalized.exporters, errors, 'contributes.exporters');
   validateContributedIdUniqueness(normalized.importers, errors, 'contributes.importers');
   validateContributedIdUniqueness(normalized.statusBadges, errors, 'contributes.statusBadges');
@@ -233,6 +262,83 @@ function validateContributes(contributes, errors) {
     }
     if (!isNonEmptyString(item.title)) {
       pushError(errors, `contributes.commands '${String(item.id)}' title is required`);
+    }
+  }
+
+  for (const item of normalized.menus) {
+    if (!item || typeof item !== 'object') {
+      pushError(errors, 'contributes.menus entries must be objects');
+      continue;
+    }
+    if (!isValidLocalId(item.id)) {
+      pushError(errors, `Invalid contributes.menus id: ${String(item.id)}`);
+    }
+    if (!isValidLocalId(item.command)) {
+      pushError(errors, `contributes.menus '${String(item.id)}' command must reference a local command id`);
+    } else if (!normalized.commands.some((command) => command.id === item.command)) {
+      pushError(errors, `contributes.menus '${String(item.id)}' references missing command '${item.command}'`);
+    }
+    if (!MENU_LOCATIONS.has(item.location)) {
+      pushError(errors, `contributes.menus '${String(item.id)}' has invalid location`);
+    }
+    if (typeof item.icon === 'string' && !BUILTIN_ICONS.has(item.icon)) {
+      pushError(errors, `contributes.menus '${String(item.id)}' has invalid icon`);
+    }
+  }
+
+  for (const item of normalized.keybindings) {
+    if (!item || typeof item !== 'object') {
+      pushError(errors, 'contributes.keybindings entries must be objects');
+      continue;
+    }
+    if (!isValidLocalId(item.id)) {
+      pushError(errors, `Invalid contributes.keybindings id: ${String(item.id)}`);
+    }
+    if (!isValidLocalId(item.command)) {
+      pushError(errors, `contributes.keybindings '${String(item.id)}' command must reference a local command id`);
+    } else if (!normalized.commands.some((command) => command.id === item.command)) {
+      pushError(errors, `contributes.keybindings '${String(item.id)}' references missing command '${item.command}'`);
+    }
+    if (!isNonEmptyString(item.key)) {
+      pushError(errors, `contributes.keybindings '${String(item.id)}' key is required`);
+    }
+  }
+
+  if (normalized.configuration !== undefined) {
+    const configuration = normalized.configuration;
+    if (!configuration || typeof configuration !== 'object' || Array.isArray(configuration)) {
+      pushError(errors, 'contributes.configuration must be an object when provided');
+    } else {
+      validateNoUnknownKeys(configuration, new Set(['title', 'properties']), errors, 'contributes.configuration');
+      if (!Array.isArray(configuration.properties)) {
+        pushError(errors, 'contributes.configuration.properties must be an array');
+      } else {
+        validateContributedIdUniqueness(configuration.properties, errors, 'contributes.configuration.properties');
+        for (const property of configuration.properties) {
+          if (!property || typeof property !== 'object' || Array.isArray(property)) {
+            pushError(errors, 'contributes.configuration.properties entries must be objects');
+            continue;
+          }
+          validateNoUnknownKeys(
+            property,
+            new Set(['id', 'title', 'type', 'description', 'default', 'enum', 'minimum', 'maximum']),
+            errors,
+            `contributes.configuration.properties.${String(property.id)}`
+          );
+          if (!isValidLocalId(property.id)) {
+            pushError(errors, `Invalid contributes.configuration property id: ${String(property.id)}`);
+          }
+          if (!isNonEmptyString(property.title)) {
+            pushError(errors, `contributes.configuration property '${String(property.id)}' title is required`);
+          }
+          if (!CONFIGURATION_TYPES.has(property.type)) {
+            pushError(errors, `contributes.configuration property '${String(property.id)}' has invalid type`);
+          }
+          if (property.type === 'enum' && (!Array.isArray(property.enum) || property.enum.length === 0)) {
+            pushError(errors, `contributes.configuration property '${String(property.id)}' enum must include values`);
+          }
+        }
+      }
     }
   }
 
@@ -467,6 +573,31 @@ export function validatePluginManifest(manifest, options = {}) {
       validateUniqueStrings(manifest.enabledApiProposals, errors, 'enabledApiProposals');
       if (manifest.enabledApiProposals.some((value) => !isNonEmptyString(value))) {
         pushError(errors, 'enabledApiProposals entries must be non-empty strings');
+      }
+    }
+  }
+
+  if (manifest.permissionRationales !== undefined) {
+    if (
+      !manifest.permissionRationales ||
+      typeof manifest.permissionRationales !== 'object' ||
+      Array.isArray(manifest.permissionRationales)
+    ) {
+      pushError(errors, 'permissionRationales must be an object when provided');
+    } else {
+      validateNoUnknownKeys(
+        manifest.permissionRationales,
+        OPTIONAL_PERMISSIONS,
+        errors,
+        'permissionRationales'
+      );
+      for (const [permission, rationale] of Object.entries(manifest.permissionRationales)) {
+        if (!optionalPermissions.includes(permission)) {
+          pushError(errors, `permissionRationales.${permission} must match a declared optional permission`);
+        }
+        if (!isNonEmptyString(rationale)) {
+          pushError(errors, `permissionRationales.${permission} must be a non-empty string`);
+        }
       }
     }
   }

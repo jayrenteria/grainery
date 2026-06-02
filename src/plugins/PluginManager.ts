@@ -4,6 +4,7 @@ import type { ScreenplayElementType } from '../lib/types';
 import { hasPluginPermission } from './permissions';
 import { nextRequestId, parseWorkerMessage } from './rpc';
 import { PluginHost } from './PluginHost';
+import { evaluateWhenClause } from './when';
 import {
   assertContributedId,
   assertValidLocalId,
@@ -24,14 +25,18 @@ import type {
   InlineAnnotationContext,
   InstalledPlugin,
   OptionalPermission,
+  PluginDiagnosticKind,
   PluginContributions,
   PluginLockRecord,
   PluginPermissionGrant,
   PluginRegistryEntry,
   PluginStateSnapshot,
+  RegisteredCommandMenu,
   RegisteredExporter,
   RegisteredImporter,
+  RegisteredKeybinding,
   RegisteredPluginCommand,
+  RegisteredPluginConfiguration,
   RegisteredStatusBadge,
   RegisteredUIControl,
   RegisteredUIPanel,
@@ -45,6 +50,7 @@ import type {
   UIEvaluateResponse,
   UIPanelActionResult,
   UIPanelContent,
+  WorkerRegistrationKind,
 } from './types';
 
 interface PendingInvoke {
@@ -59,6 +65,10 @@ interface WorkerSession {
   ready: boolean;
   shuttingDown: boolean;
   pending: Map<string, PendingInvoke>;
+  shutdown?: {
+    resolve: () => void;
+    timeoutId: ReturnType<typeof setTimeout>;
+  };
 }
 
 interface RegisteredLoopProvider {
@@ -84,6 +94,8 @@ interface ManifestContributionIndex {
   uiControls: Set<string>;
   uiPanels: Set<string>;
   transforms: Set<string>;
+  menus: Set<string>;
+  keybindings: Set<string>;
 }
 
 interface PluginManagerOptions {
@@ -95,6 +107,7 @@ interface PluginManagerOptions {
 
 const MAX_CRASH_COUNT = 3;
 const INVOKE_TIMEOUT_MS = 8_000;
+const SHUTDOWN_TIMEOUT_MS = 2_000;
 
 export class PluginManager {
   private readonly pluginHost: PluginHost;
@@ -105,6 +118,9 @@ export class PluginManager {
   private installedPlugins: InstalledPlugin[] = [];
   private loopProviders: RegisteredLoopProvider[] = [];
   private commands: RegisteredPluginCommand[] = [];
+  private menus: RegisteredCommandMenu[] = [];
+  private keybindings: RegisteredKeybinding[] = [];
+  private configurations: RegisteredPluginConfiguration[] = [];
   private transforms: RegisteredTransform[] = [];
   private exporters: RegisteredExporter[] = [];
   private importers: RegisteredImporter[] = [];
@@ -141,6 +157,9 @@ export class PluginManager {
     return {
       installedPlugins: [...this.installedPlugins],
       commands: [...this.commands],
+      menus: [...this.menus],
+      keybindings: [...this.keybindings],
+      configurations: [...this.configurations],
       exporters: [...this.exporters],
       importers: [...this.importers],
       statusBadges: [...this.statusBadges],
@@ -156,6 +175,29 @@ export class PluginManager {
 
   getCommands(): RegisteredPluginCommand[] {
     return [...this.commands];
+  }
+
+  getCommandMenus(location?: RegisteredCommandMenu['location']): RegisteredCommandMenu[] {
+    const filtered = location
+      ? this.menus.filter((menu) => menu.location === location)
+      : this.menus;
+
+    return [...filtered].sort((a, b) => {
+      const pa = a.priority ?? 0;
+      const pb = b.priority ?? 0;
+      if (pb !== pa) {
+        return pb - pa;
+      }
+      return a.title.localeCompare(b.title);
+    });
+  }
+
+  getKeybindings(): RegisteredKeybinding[] {
+    return [...this.keybindings];
+  }
+
+  getConfigurations(): RegisteredPluginConfiguration[] {
+    return [...this.configurations];
   }
 
   getExporters(): RegisteredExporter[] {
@@ -222,6 +264,9 @@ export class PluginManager {
     this.installedPlugins = installed;
     this.loopProviders = [];
     this.commands = [];
+    this.menus = [];
+    this.keybindings = [];
+    this.configurations = [];
     this.transforms = [];
     this.exporters = [];
     this.importers = [];
@@ -232,8 +277,13 @@ export class PluginManager {
     this.activationStates.clear();
     this.activationPromises.clear();
     this.contributionsByPlugin.clear();
+    this.crashCounts.clear();
 
     const enabled = this.installedPlugins.filter((plugin) => plugin.enabled);
+
+    for (const plugin of this.installedPlugins) {
+      this.crashCounts.set(plugin.id, plugin.crashCount ?? 0);
+    }
 
     for (const plugin of enabled) {
       this.indexManifestContributions(plugin);
@@ -302,6 +352,13 @@ export class PluginManager {
     return invoke<PluginLockRecord[]>('plugin_get_lock_records');
   }
 
+  async clearDiagnostics(pluginId: string): Promise<void> {
+    const updated = await invoke<InstalledPlugin>('plugin_clear_diagnostics', { pluginId });
+    this.replaceInstalledPlugin(updated);
+    this.crashCounts.set(pluginId, updated.crashCount);
+    this.notifyListeners();
+  }
+
   resolveElementLoop(context: ElementLoopContext): ScreenplayElementType | null {
     const providers = [...this.loopProviders].sort((a, b) => {
       const aPriority = a.provider.priority ?? 0;
@@ -366,6 +423,25 @@ export class PluginManager {
     const shortcut = normalizeKeyboardShortcut(event);
     if (!shortcut) {
       return false;
+    }
+
+    const keybinding = this.keybindings.find((item) => {
+      if (normalizeDeclaredShortcut(getPlatformKeybinding(item)) !== shortcut) {
+        return false;
+      }
+
+      const plugin = this.getPluginById(item.pluginId);
+      return evaluateWhenClause(item.when, {
+        'plugin.enabled': Boolean(plugin?.enabled),
+      });
+    });
+    if (keybinding) {
+      event.preventDefault();
+      await this.executeCommand(keybinding.command, {
+        source: 'keybinding',
+        keybindingId: keybinding.id,
+      });
+      return true;
     }
 
     const command = this.commands.find(
@@ -734,6 +810,8 @@ export class PluginManager {
       uiControls: new Set(contributes.uiControls.map((item) => item.id)),
       uiPanels: new Set(contributes.uiPanels.map((item) => item.id)),
       transforms: new Set(contributes.transforms.map((item) => item.id)),
+      menus: new Set(contributes.menus.map((item) => item.id)),
+      keybindings: new Set(contributes.keybindings.map((item) => item.id)),
     };
 
     this.contributionsByPlugin.set(plugin.id, index);
@@ -744,7 +822,54 @@ export class PluginManager {
         id: composeId(plugin.id, command.id),
         pluginId: plugin.id,
         title: command.title,
+        category: command.category,
         shortcut: command.shortcut,
+      });
+    }
+
+    for (const menu of contributes.menus) {
+      assertValidLocalId(menu.id, 'Command menu');
+      assertContributedCommandReference(menu.command, index.commands, `Command menu '${menu.id}'`);
+      this.menus.push({
+        id: composeId(plugin.id, menu.id),
+        pluginId: plugin.id,
+        command: composeId(plugin.id, menu.command),
+        location: menu.location,
+        title:
+          menu.title ??
+          contributes.commands.find((command) => command.id === menu.command)?.title ??
+          menu.command,
+        group: menu.group,
+        icon: menu.icon,
+        priority: menu.priority,
+        when: menu.when,
+      });
+    }
+
+    for (const keybinding of contributes.keybindings) {
+      assertValidLocalId(keybinding.id, 'Keybinding');
+      assertContributedCommandReference(
+        keybinding.command,
+        index.commands,
+        `Keybinding '${keybinding.id}'`
+      );
+      this.keybindings.push({
+        id: composeId(plugin.id, keybinding.id),
+        pluginId: plugin.id,
+        command: composeId(plugin.id, keybinding.command),
+        key: keybinding.key,
+        mac: keybinding.mac,
+        windows: keybinding.windows,
+        linux: keybinding.linux,
+        when: keybinding.when,
+      });
+    }
+
+    if (contributes.configuration?.properties?.length) {
+      this.configurations.push({
+        pluginId: plugin.id,
+        title: contributes.configuration.title ?? plugin.name,
+        properties: contributes.configuration.properties,
       });
     }
 
@@ -893,6 +1018,12 @@ export class PluginManager {
       await promise;
     } catch (error) {
       this.activationStates.set(pluginId, 'failed');
+      await this.recordDiagnostic(
+        pluginId,
+        'activation-error',
+        error instanceof Error ? error.message : String(error),
+        activationEvent
+      );
       throw error;
     } finally {
       this.activationPromises.delete(pluginId);
@@ -1013,6 +1144,7 @@ export class PluginManager {
               id,
               pluginId,
               title: message.command.title,
+              category: message.command.category,
               shortcut: message.command.shortcut,
             },
           ]);
@@ -1244,6 +1376,12 @@ export class PluginManager {
         return;
       }
 
+      case 'worker:dispose-registration': {
+        this.disposeRegistration(pluginId, message.kind, message.id);
+        this.notifyListeners();
+        return;
+      }
+
       case 'worker:host-request': {
         const plugin = this.getPluginById(pluginId);
         if (!plugin) {
@@ -1259,12 +1397,21 @@ export class PluginManager {
           );
           this.respondToWorker(pluginId, message.requestId, true, result);
         } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (errorMessage.startsWith('Permission denied:')) {
+            await this.recordDiagnostic(
+              pluginId,
+              'permission-denial',
+              errorMessage,
+              message.operation
+            );
+          }
           this.respondToWorker(
             pluginId,
             message.requestId,
             false,
             null,
-            error instanceof Error ? error.message : String(error)
+            errorMessage
           );
         }
 
@@ -1283,6 +1430,14 @@ export class PluginManager {
             plugin,
             message.permission as OptionalPermission
           );
+          if (!granted) {
+            await this.recordDiagnostic(
+              pluginId,
+              'permission-denial',
+              `Permission denied: ${message.permission}`,
+              'permission-request'
+            );
+          }
           this.respondToWorker(pluginId, message.requestId, true, granted);
           this.notifyListeners();
         } catch (error) {
@@ -1318,6 +1473,24 @@ export class PluginManager {
           pending.reject(new Error(message.error ?? 'Worker invocation failed'));
         }
 
+        return;
+      }
+
+      case 'worker:shutdown-complete': {
+        const session = this.sessions.get(pluginId);
+        if (!session?.shutdown) {
+          return;
+        }
+
+        if (!message.ok) {
+          console.error(
+            `[PluginManager] Plugin dispose failed (${pluginId}): ${message.error ?? 'unknown error'}`
+          );
+        }
+
+        clearTimeout(session.shutdown.timeoutId);
+        session.shutdown.resolve();
+        session.shutdown = undefined;
         return;
       }
 
@@ -1376,7 +1549,9 @@ export class PluginManager {
     return new Promise<unknown>((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         session.pending.delete(requestId);
-        reject(new Error(`Plugin invocation timed out: ${pluginId}:${id}`));
+        const message = `Plugin invocation timed out: ${pluginId}:${method}:${id}`;
+        void this.recordDiagnostic(pluginId, 'invocation-timeout', message, `${method}:${id}`);
+        reject(new Error(message));
       }, INVOKE_TIMEOUT_MS);
 
       session.pending.set(requestId, {
@@ -1418,7 +1593,10 @@ export class PluginManager {
       session.pending.delete(requestId);
     }
 
-    const crashes = (this.crashCounts.get(pluginId) ?? 0) + 1;
+    const previousCrashes = this.crashCounts.get(pluginId) ?? 0;
+    await this.recordDiagnostic(pluginId, 'runtime-crash', reason, 'worker');
+
+    const crashes = this.crashCounts.get(pluginId) ?? previousCrashes + 1;
     this.crashCounts.set(pluginId, crashes);
 
     if (crashes >= MAX_CRASH_COUNT) {
@@ -1437,7 +1615,7 @@ export class PluginManager {
 
   private async disposeAllWorkers(): Promise<void> {
     const sessions = Array.from(this.sessions.values());
-    this.sessions.clear();
+    const shutdowns: Promise<void>[] = [];
 
     for (const session of sessions) {
       session.shuttingDown = true;
@@ -1451,10 +1629,72 @@ export class PluginManager {
       try {
         session.worker.postMessage({ type: 'host:shutdown' } satisfies HostToWorkerMessage);
       } catch {
-        // no-op
+        session.worker.terminate();
+        this.sessions.delete(session.pluginId);
+        continue;
       }
 
-      session.worker.terminate();
+      shutdowns.push(
+        new Promise<void>((resolve) => {
+          const timeoutId = setTimeout(resolve, SHUTDOWN_TIMEOUT_MS);
+          session.shutdown = { resolve, timeoutId };
+        }).finally(() => {
+          if (session.shutdown) {
+            clearTimeout(session.shutdown.timeoutId);
+            session.shutdown = undefined;
+          }
+          session.worker.terminate();
+          this.sessions.delete(session.pluginId);
+        })
+      );
+    }
+
+    await Promise.allSettled(shutdowns);
+  }
+
+  private disposeRegistration(
+    pluginId: string,
+    kind: WorkerRegistrationKind,
+    localId: string
+  ): void {
+    const id = composeId(pluginId, localId);
+
+    switch (kind) {
+      case 'element-loop-provider':
+        this.loopProviders = this.loopProviders.filter(
+          (item) => !(item.pluginId === pluginId && item.provider.id === localId)
+        );
+        return;
+      case 'command':
+        this.commands = this.commands.filter((item) => item.id !== id);
+        return;
+      case 'transform':
+        this.transforms = this.transforms.filter(
+          (item) => !(item.pluginId === pluginId && item.id === localId)
+        );
+        return;
+      case 'exporter':
+        this.exporters = this.exporters.filter((item) => item.id !== id);
+        return;
+      case 'importer':
+        this.importers = this.importers.filter((item) => item.id !== id);
+        return;
+      case 'status-badge':
+        this.statusBadges = this.statusBadges.filter((item) => item.id !== id);
+        return;
+      case 'inline-annotation-provider':
+        this.inlineAnnotationProviders = this.inlineAnnotationProviders.filter(
+          (item) => item.id !== id
+        );
+        return;
+      case 'ui-control':
+        this.uiControls = this.uiControls.filter((item) => item.id !== id);
+        return;
+      case 'ui-panel':
+        this.uiPanels = this.uiPanels.filter((item) => item.id !== id);
+        return;
+      default:
+        return;
     }
   }
 
@@ -1462,6 +1702,35 @@ export class PluginManager {
     for (const listener of this.listeners) {
       listener();
     }
+  }
+
+  private async recordDiagnostic(
+    pluginId: string,
+    kind: PluginDiagnosticKind,
+    message: string,
+    operation?: string
+  ): Promise<void> {
+    try {
+      const updated = await invoke<InstalledPlugin>('plugin_record_diagnostic', {
+        pluginId,
+        diagnostic: {
+          kind,
+          message,
+          operation,
+        },
+      });
+      this.replaceInstalledPlugin(updated);
+      this.crashCounts.set(pluginId, updated.crashCount ?? 0);
+      this.notifyListeners();
+    } catch (error) {
+      console.error(`[PluginManager] Failed to persist diagnostic for ${pluginId}`, error);
+    }
+  }
+
+  private replaceInstalledPlugin(updated: InstalledPlugin): void {
+    this.installedPlugins = this.installedPlugins.map((plugin) =>
+      plugin.id === updated.id ? updated : plugin
+    );
   }
 
   private getContributionIndex(pluginId: string): ManifestContributionIndex {
@@ -1479,6 +1748,8 @@ export class PluginManager {
       uiControls: new Set(),
       uiPanels: new Set(),
       transforms: new Set(),
+      menus: new Set(),
+      keybindings: new Set(),
     };
   }
 
@@ -1499,6 +1770,8 @@ function normalizeManifestContributions(contributes: PluginContributions | undef
       importers: [],
       statusBadges: [],
       inlineAnnotationProviders: [],
+      menus: [],
+      keybindings: [],
       uiControls: [],
       uiPanels: [],
       transforms: [],
@@ -1519,6 +1792,14 @@ function normalizeManifestContributions(contributes: PluginContributions | undef
 
   return {
     commands: Array.isArray(contributes.commands) ? contributes.commands : [],
+    menus: Array.isArray(contributes.menus) ? contributes.menus : [],
+    keybindings: Array.isArray(contributes.keybindings) ? contributes.keybindings : [],
+    configuration:
+      contributes.configuration &&
+      typeof contributes.configuration === 'object' &&
+      Array.isArray(contributes.configuration.properties)
+        ? contributes.configuration
+        : undefined,
     exporters: Array.isArray(contributes.exporters) ? contributes.exporters : [],
     importers: Array.isArray(contributes.importers) ? contributes.importers : [],
     statusBadges: Array.isArray(contributes.statusBadges) ? contributes.statusBadges : [],
@@ -1546,6 +1827,15 @@ function getLocalId(id: string): string {
     throw new Error(`Invalid composite id: ${id}`);
   }
   return localId;
+}
+
+function assertContributedCommandReference(
+  localId: string,
+  allowedIds: Set<string>,
+  scope: string
+): void {
+  assertValidLocalId(localId, scope);
+  assertContributedId(localId, allowedIds, scope);
 }
 
 function isJsonContent(value: unknown): value is JSONContent {
@@ -1640,6 +1930,20 @@ function normalizeDeclaredShortcut(shortcut?: string): string | null {
     .filter(Boolean)
     .sort()
     .join('+');
+}
+
+function getPlatformKeybinding(keybinding: RegisteredKeybinding): string {
+  const platform = navigator.platform.toLowerCase();
+  if (platform.includes('mac') && keybinding.mac) {
+    return keybinding.mac;
+  }
+  if (platform.includes('win') && keybinding.windows) {
+    return keybinding.windows;
+  }
+  if (keybinding.linux && !platform.includes('mac') && !platform.includes('win')) {
+    return keybinding.linux;
+  }
+  return keybinding.key;
 }
 
 function normalizeKeyboardShortcut(event: KeyboardEvent): string | null {

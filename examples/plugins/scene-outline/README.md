@@ -4,6 +4,8 @@ This plugin adds a `Scenes` button to the plugin toolbar and opens a side panel 
 
 Click any scene in the panel to jump directly to that scene in the editor.
 
+The implementation uses `context.screenplay.scenes()` instead of walking raw ProseMirror JSON.
+
 ## Permissions
 
 - Optional: `ui:mount`

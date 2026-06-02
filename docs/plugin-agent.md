@@ -87,13 +87,15 @@ Supported plugin registrations:
 - exporters/importers
 - status badges
 - inline annotation providers
-- UI controls (`top-bar`, `bottom-bar`)
-- single side panel with primitive blocks (`text`, `list`, `keyValue`, `input`, `textarea`, `actions`)
+- command menu metadata, keybindings, and configuration schemas
+- UI controls (`top-bar`, `bottom-bar`, `editor-floating`)
+- single side panel with host-rendered blocks (`heading`, `text`, `divider`, `callout`, `badgeList`, `progress`, `list`, `keyValue`, `input`, `textarea`, `actions`)
 
 Not supported:
 
 - arbitrary plugin React components
 - custom schema/node mutation from plugins
+- arbitrary DOM injection or unsandboxed custom UI
 - native dylib plugins
 
 ## Known Integration Gotchas
@@ -122,12 +124,13 @@ When adding a new plugin capability:
 
 1. Add types to `src/plugins/types.ts`.
 2. Extend SDK exposure in `src/plugins/sdk.ts`.
-3. Extend worker/host RPC parsing in `src/plugins/rpc.ts`.
-4. Implement worker handler paths in `src/plugins/worker-runtime.ts`.
+3. Extend worker/host RPC parsing in `src/plugins/rpc.ts` when the capability is dynamic.
+4. Implement worker handler paths in `src/plugins/worker-runtime.ts` when the capability has worker handlers.
 5. Implement manager storage + dispatch in `src/plugins/PluginManager.ts`.
 6. Wire host behavior in app/components as needed.
-7. Update docs + at least one example plugin.
-8. Validate with build checks below.
+7. Update JSON Schema, Rust validation, and `scripts/lib/plugin-toolkit.mjs`.
+8. Update docs + at least one example plugin.
+9. Validate with build checks below.
 
 ## Validation Checklist
 

@@ -31,9 +31,41 @@
       {
         "id": "word-count",
         "title": "Show Word Count",
+        "category": "Analysis",
         "shortcut": "Mod+Shift+W"
       }
     ],
+    "menus": [
+      {
+        "id": "word-count-palette",
+        "command": "word-count",
+        "location": "command-palette",
+        "group": "Analysis",
+        "icon": "command",
+        "priority": 10,
+        "when": "plugin.enabled"
+      }
+    ],
+    "keybindings": [
+      {
+        "id": "word-count-default",
+        "command": "word-count",
+        "key": "Mod+Shift+W",
+        "when": "plugin.enabled"
+      }
+    ],
+    "configuration": {
+      "title": "Word Count",
+      "properties": [
+        {
+          "id": "includeTitlePage",
+          "title": "Include title page",
+          "type": "boolean",
+          "description": "Include title page text when calculating document statistics.",
+          "default": false
+        }
+      ]
+    },
     "exporters": [
       {
         "id": "plain-text",

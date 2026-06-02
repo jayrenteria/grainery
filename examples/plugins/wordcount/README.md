@@ -7,10 +7,15 @@ This plugin demonstrates the Grainery plugin SDK surface:
 - `registerDocumentTransform`
 - `registerExporter`
 - `registerStatusBadge`
+- manifest command menu + keybinding contributions
+- manifest configuration schema
+- `api.screenplay.from(...)`
 
 Runtime behavior:
 
 - Adds a subtle bottom-right `Wordcount: X` status badge
+- Declares a command-palette menu entry and configurable `Mod+Shift+W` keybinding
+- Uses the screenplay helper API for plain-text extraction and whitespace cleanup
 
 From the repo root:
 

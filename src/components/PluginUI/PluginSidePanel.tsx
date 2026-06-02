@@ -29,12 +29,67 @@ function renderBlock(
     panelId.endsWith(':scene-outline-panel') || panelId === 'scene-outline-panel';
 
   switch (block.type) {
+    case 'heading': {
+      const HeadingTag = block.level === 4 ? 'h4' : block.level === 3 ? 'h3' : 'h2';
+      return (
+        <HeadingTag key={`${panelId}-heading-${index}`} className="plugin-panel-heading">
+          {block.text}
+        </HeadingTag>
+      );
+    }
     case 'text':
       return (
         <p key={`${panelId}-text-${index}`} className="plugin-panel-text">
           {block.text}
         </p>
       );
+    case 'divider':
+      return <hr key={`${panelId}-divider-${index}`} className="plugin-panel-divider" />;
+    case 'callout':
+      return (
+        <div
+          key={`${panelId}-callout-${index}`}
+          className={`plugin-panel-callout plugin-panel-callout-${block.tone ?? 'info'}`}
+        >
+          {block.title ? <div className="plugin-panel-callout-title">{block.title}</div> : null}
+          <div>{block.text}</div>
+        </div>
+      );
+    case 'badgeList':
+      return (
+        <div key={`${panelId}-badges-${index}`} className="plugin-panel-badges">
+          {block.items.map((item, itemIndex) => (
+            <span
+              key={`${panelId}-badge-${itemIndex}`}
+              className={`plugin-panel-badge plugin-panel-badge-${item.tone ?? 'neutral'}`}
+            >
+              <span>{item.label}</span>
+              {item.value ? <strong>{item.value}</strong> : null}
+            </span>
+          ))}
+        </div>
+      );
+    case 'progress': {
+      const max = typeof block.max === 'number' && Number.isFinite(block.max) && block.max > 0
+        ? block.max
+        : 100;
+      const value = Number.isFinite(block.value) ? Math.min(max, Math.max(0, block.value)) : 0;
+      const percent = Math.round((value / max) * 100);
+
+      return (
+        <div key={`${panelId}-progress-${index}`} className="plugin-panel-progress">
+          <div className="plugin-panel-progress-label">
+            <span>{block.label}</span>
+            <span>{percent}%</span>
+          </div>
+          <progress
+            className={`progress plugin-panel-progress-bar plugin-panel-progress-${block.tone ?? 'neutral'}`}
+            value={value}
+            max={max}
+          />
+        </div>
+      );
+    }
     case 'list':
       return (
         <ul key={`${panelId}-list-${index}`} className="plugin-panel-list">

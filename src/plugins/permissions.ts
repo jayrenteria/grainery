@@ -21,6 +21,14 @@ export const OPTIONAL_PERMISSIONS: OptionalPermission[] = [
   'editor:annotations',
 ];
 
+export const PERMISSION_DESCRIPTIONS: Record<OptionalPermission, string> = {
+  'fs:pick-read': 'Ask you to choose a local file the plugin can read.',
+  'fs:pick-write': 'Ask you to choose a local destination the plugin can write.',
+  'network:https': 'Make HTTPS requests to hosts declared in the plugin allowlist.',
+  'ui:mount': 'Render host-controlled toolbar controls or side panels.',
+  'editor:annotations': 'Show host-rendered inline annotations in the editor.',
+};
+
 export function isOptionalPermission(value: string): value is OptionalPermission {
   return OPTIONAL_PERMISSIONS.includes(value as OptionalPermission);
 }

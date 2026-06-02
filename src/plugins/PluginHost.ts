@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { JSONContent } from '@tiptap/react';
-import { hasPluginPermission } from './permissions';
+import { hasPluginPermission, PERMISSION_DESCRIPTIONS } from './permissions';
 import type {
   HostOperation,
   InstalledPlugin,
@@ -16,6 +16,7 @@ interface PluginHostOptions {
 }
 
 const MAX_PLUGIN_DATA_BYTES = 256 * 1024;
+const GLOBAL_PLUGIN_DATA_PREFIX = 'grainery:plugin-global-data:';
 
 export class PluginHost {
   private getDocument: () => JSONContent;
@@ -89,6 +90,18 @@ export class PluginHost {
         return true;
       }
 
+      case 'plugin:get-global-data': {
+        return this.getGlobalPluginData(plugin.id);
+      }
+
+      case 'plugin:set-global-data': {
+        const value = extractPluginDataPayload(payload);
+        const normalized = normalizePluginDataValue(value);
+        assertPluginDataSize(normalized);
+        this.setGlobalPluginData(plugin.id, normalized);
+        return true;
+      }
+
       default:
         return invoke('plugin_host_call', {
           pluginId: plugin.id,
@@ -111,8 +124,20 @@ export class PluginHost {
       return true;
     }
 
+    const rationale = plugin.manifest.permissionRationales?.[permission];
     const message = [
-      `Plugin ${plugin.name} (${plugin.id}) requests permission: ${permission}.`,
+      `${plugin.name} ${plugin.version}`,
+      plugin.id,
+      '',
+      `Requests: ${permission}`,
+      PERMISSION_DESCRIPTIONS[permission],
+      '',
+      `Current state: ${existing?.granted ? 'Allowed' : 'Denied'}`,
+      rationale ? `Author rationale: ${rationale}` : 'Author rationale: Not provided.',
+      '',
+      plugin.trust === 'verified'
+        ? 'Trust: verified registry install.'
+        : 'Trust: unverified sideload install.',
       '',
       'Allow this permission?',
     ].join('\n');
@@ -172,6 +197,26 @@ export class PluginHost {
       };
     });
   }
+
+  private getGlobalPluginData(pluginId: string): unknown | null {
+    const raw = window.localStorage.getItem(`${GLOBAL_PLUGIN_DATA_PREFIX}${pluginId}`);
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(raw) as unknown;
+    } catch {
+      return null;
+    }
+  }
+
+  private setGlobalPluginData(pluginId: string, value: unknown): void {
+    window.localStorage.setItem(
+      `${GLOBAL_PLUGIN_DATA_PREFIX}${pluginId}`,
+      JSON.stringify(value)
+    );
+  }
 }
 
 function extractPluginDataPayload(payload: unknown): unknown {
@@ -193,4 +238,12 @@ function normalizePluginDataValue(value: unknown): unknown {
   }
 
   return JSON.parse(serialized) as unknown;
+}
+
+function assertPluginDataSize(value: unknown): void {
+  const serialized = JSON.stringify(value);
+  const sizeBytes = new TextEncoder().encode(serialized).length;
+  if (sizeBytes > MAX_PLUGIN_DATA_BYTES) {
+    throw new Error(`Plugin data exceeds ${MAX_PLUGIN_DATA_BYTES} byte limit.`);
+  }
 }

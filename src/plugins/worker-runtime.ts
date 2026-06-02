@@ -1,7 +1,13 @@
 /// <reference lib="webworker" />
 
 import { nextRequestId, parseHostMessage } from './rpc';
+import {
+  ScreenplayDocument,
+  createScreenplayDocument,
+  isScreenplayDocument,
+} from './document-helpers';
 import type {
+  Disposable,
   DocumentTransform,
   DocumentTransformContext,
   Exporter,
@@ -15,10 +21,12 @@ import type {
   InlineAnnotationProvider,
   Importer,
   PluginApi,
+  PluginStorage,
   PluginCommand,
   PluginCommandContext,
   PluginManifest,
   ProposedPluginApi,
+  ScreenplayMutationApi,
   StatusBadge,
   StatusBadgeContext,
   UIControlDefinition,
@@ -30,6 +38,7 @@ import type {
   UIPanelContent,
   UIPanelDefinition,
   UIPanelStateContext,
+  WorkerRegistrationKind,
 } from './types';
 
 const commandHandlers = new Map<string, PluginCommand['handler']>();
@@ -64,9 +73,11 @@ const pendingHostRequests = new Map<
     reject: (error: unknown) => void;
   }
 >();
+const registrationTokens = new Map<string, number>();
 
 let currentPluginId = '';
 let pluginInstance: GraineryPlugin | null = null;
+let nextRegistrationToken = 0;
 const ALLOWED_API_PROPOSALS = new Set<string>([]);
 
 function postWorkerMessage(message: unknown): void {
@@ -119,6 +130,162 @@ function requestPermission(permission: string): Promise<boolean> {
   });
 }
 
+function createRegistrationDisposable(
+  kind: WorkerRegistrationKind,
+  id: string,
+  cleanup: () => void
+): Disposable {
+  const key = `${kind}:${id}`;
+  const token = nextRegistrationToken + 1;
+  nextRegistrationToken = token;
+  registrationTokens.set(key, token);
+  let disposed = false;
+
+  return {
+    dispose() {
+      if (disposed || registrationTokens.get(key) !== token) {
+        return;
+      }
+
+      disposed = true;
+      registrationTokens.delete(key);
+      cleanup();
+      postWorkerMessage({
+        type: 'worker:dispose-registration',
+        pluginId: currentPluginId,
+        kind,
+        id,
+      });
+    },
+  };
+}
+
+function createStorage<T>(
+  getAll: () => Promise<unknown>,
+  setAll: (value: unknown) => Promise<void>,
+  keyOrDefault: string | T,
+  maybeDefault?: T
+): PluginStorage<T> {
+  const keyed = typeof keyOrDefault === 'string' && maybeDefault !== undefined;
+  const key = keyed ? keyOrDefault : null;
+  const defaultValue = (keyed ? maybeDefault : keyOrDefault) as T;
+
+  return {
+    async get() {
+      const current = await getAll();
+      if (!key) {
+        return current == null ? defaultValue : (current as T);
+      }
+
+      if (!current || typeof current !== 'object') {
+        return defaultValue;
+      }
+
+      const value = (current as Record<string, unknown>)[key];
+      return value === undefined || value === null ? defaultValue : (value as T);
+    },
+    async set(value) {
+      if (!key) {
+        await setAll(value);
+        return;
+      }
+
+      const current = await getAll();
+      const next = current && typeof current === 'object' && !Array.isArray(current)
+        ? { ...(current as Record<string, unknown>) }
+        : {};
+      next[key] = value;
+      await setAll(next);
+    },
+    async update(updater) {
+      const current = await this.get();
+      const next = await updater(current);
+      await this.set(next);
+      return next;
+    },
+    async clear() {
+      if (!key) {
+        await setAll(null);
+        return;
+      }
+
+      const current = await getAll();
+      if (!current || typeof current !== 'object' || Array.isArray(current)) {
+        return;
+      }
+
+      const next = { ...(current as Record<string, unknown>) };
+      delete next[key];
+      await setAll(next);
+    },
+  };
+}
+
+function toJsonContent(value: unknown): unknown {
+  return isScreenplayDocument(value) ? value.toJSON() : value;
+}
+
+function contextFromPayload(payload: unknown): { document: unknown } & Record<string, unknown> {
+  if (!payload || typeof payload !== 'object' || !('document' in payload)) {
+    throw new Error('Plugin context payload is missing document.');
+  }
+
+  return payload as { document: unknown } & Record<string, unknown>;
+}
+
+function enrichDocumentContext<T extends { document: unknown } & Record<string, unknown>>(
+  payload: T
+): T & { screenplay: ScreenplayDocument } {
+  const document = payload.document as Parameters<typeof createScreenplayDocument>[0];
+  return {
+    ...payload,
+    screenplay: createScreenplayDocument(document, {
+      selectionFrom: Number(payload.selectionFrom),
+      selectionTo: Number(payload.selectionTo),
+      currentElementType: payload.currentElementType as never,
+    }),
+  };
+}
+
+function enrichContext<T>(payload: unknown): T {
+  return enrichDocumentContext(contextFromPayload(payload)) as unknown as T;
+}
+
+function createScreenplayApi(): ScreenplayMutationApi {
+  const getDocumentData = () => requestHost<unknown | null>('document:get-plugin-data', null);
+  const setDocumentData = (value: unknown) =>
+    requestHost('document:set-plugin-data', { value }).then(() => undefined);
+  const getGlobalData = () => requestHost<unknown | null>('plugin:get-global-data', null);
+  const setGlobalData = (value: unknown) =>
+    requestHost('plugin:set-global-data', { value }).then(() => undefined);
+
+  return {
+    from(document, context) {
+      return createScreenplayDocument(document, context);
+    },
+    async getDocument(context) {
+      const document = await requestHost<Parameters<typeof createScreenplayDocument>[0]>('document:get', null);
+      return createScreenplayDocument(document, context);
+    },
+    replaceDocument(next) {
+      return requestHost('document:replace', toJsonContent(next)).then(() => undefined);
+    },
+    async mutate(mutator) {
+      const document = await this.getDocument();
+      const result = await mutator(document);
+      const next = toJsonContent(result ?? document) as Parameters<typeof createScreenplayDocument>[0];
+      await requestHost('document:replace', next);
+      return next;
+    },
+    documentStorage<T = unknown>(keyOrDefault: string | T, maybeDefault?: T) {
+      return createStorage<T>(getDocumentData, setDocumentData, keyOrDefault, maybeDefault);
+    },
+    globalStorage<T = unknown>(keyOrDefault: string | T, maybeDefault?: T) {
+      return createStorage<T>(getGlobalData, setGlobalData, keyOrDefault, maybeDefault);
+    },
+  };
+}
+
 function createProposedApi(enabledApiProposals: string[] | undefined): ProposedPluginApi | undefined {
   if (!Array.isArray(enabledApiProposals) || enabledApiProposals.length === 0) {
     return undefined;
@@ -134,6 +301,7 @@ function createProposedApi(enabledApiProposals: string[] | undefined): ProposedP
 
 function createPluginApi(manifest: PluginManifest): PluginApi {
   const proposed = createProposedApi(manifest.enabledApiProposals);
+  const screenplay = createScreenplayApi();
   return {
     registerElementLoopProvider(provider) {
       throwIfInvalidPluginId();
@@ -142,6 +310,7 @@ function createPluginApi(manifest: PluginManifest): PluginApi {
         pluginId: currentPluginId,
         provider,
       });
+      return createRegistrationDisposable('element-loop-provider', provider.id, () => undefined);
     },
     registerCommand(command) {
       throwIfInvalidPluginId();
@@ -152,8 +321,12 @@ function createPluginApi(manifest: PluginManifest): PluginApi {
         command: {
           id: command.id,
           title: command.title,
+          category: command.category,
           shortcut: command.shortcut,
         },
+      });
+      return createRegistrationDisposable('command', command.id, () => {
+        commandHandlers.delete(command.id);
       });
     },
     registerDocumentTransform(transform) {
@@ -167,6 +340,9 @@ function createPluginApi(manifest: PluginManifest): PluginApi {
           hook: transform.hook,
           priority: transform.priority,
         },
+      });
+      return createRegistrationDisposable('transform', transform.id, () => {
+        transformHandlers.delete(transform.id);
       });
     },
     registerExporter(exporter) {
@@ -182,6 +358,9 @@ function createPluginApi(manifest: PluginManifest): PluginApi {
           mimeType: exporter.mimeType,
         },
       });
+      return createRegistrationDisposable('exporter', exporter.id, () => {
+        exporterHandlers.delete(exporter.id);
+      });
     },
     registerImporter(importer) {
       throwIfInvalidPluginId();
@@ -194,6 +373,9 @@ function createPluginApi(manifest: PluginManifest): PluginApi {
           title: importer.title,
           extensions: importer.extensions,
         },
+      });
+      return createRegistrationDisposable('importer', importer.id, () => {
+        importerHandlers.delete(importer.id);
       });
     },
     registerStatusBadge(badge) {
@@ -208,6 +390,9 @@ function createPluginApi(manifest: PluginManifest): PluginApi {
           priority: badge.priority,
         },
       });
+      return createRegistrationDisposable('status-badge', badge.id, () => {
+        statusBadgeHandlers.delete(badge.id);
+      });
     },
     registerInlineAnnotationProvider(provider) {
       throwIfInvalidPluginId();
@@ -220,6 +405,9 @@ function createPluginApi(manifest: PluginManifest): PluginApi {
           title: provider.title,
           priority: provider.priority,
         },
+      });
+      return createRegistrationDisposable('inline-annotation-provider', provider.id, () => {
+        inlineAnnotationHandlers.delete(provider.id);
       });
     },
     registerUIControl(control) {
@@ -255,6 +443,12 @@ function createPluginApi(manifest: PluginManifest): PluginApi {
           when: control.when,
         },
       });
+      return createRegistrationDisposable('ui-control', control.id, () => {
+        uiControlTriggerHandlers.delete(control.id);
+        uiControlVisibleHandlers.delete(control.id);
+        uiControlDisabledHandlers.delete(control.id);
+        uiControlActiveHandlers.delete(control.id);
+      });
     },
     registerUIPanel(panel) {
       throwIfInvalidPluginId();
@@ -281,6 +475,10 @@ function createPluginApi(manifest: PluginManifest): PluginApi {
           when: panel.when,
         },
       });
+      return createRegistrationDisposable('ui-panel', panel.id, () => {
+        uiPanelActionHandlers.delete(panel.id);
+        uiPanelRenderHandlers.delete(panel.id);
+      });
     },
     getDocument() {
       return requestHost('document:get', null);
@@ -294,6 +492,7 @@ function createPluginApi(manifest: PluginManifest): PluginApi {
     setPluginData(value) {
       return requestHost('document:set-plugin-data', { value }).then(() => undefined);
     },
+    screenplay,
     requestPermission(permission) {
       return requestPermission(permission);
     },
@@ -355,6 +554,7 @@ async function evaluateUIState(
 
   const panelContext: UIPanelStateContext = {
     document: context.document,
+    screenplay: context.screenplay,
     currentElementType: context.currentElementType,
     selectionFrom: context.selectionFrom,
     selectionTo: context.selectionTo,
@@ -400,7 +600,7 @@ async function handleInvokeMessage(
         if (!handler) {
           throw new Error(`Command not found: ${message.id}`);
         }
-        await handler(message.payload as PluginCommandContext);
+        await handler(enrichContext<PluginCommandContext>(message.payload));
         respond(true, null);
         return;
       }
@@ -409,8 +609,8 @@ async function handleInvokeMessage(
         if (!handler) {
           throw new Error(`Transform not found: ${message.id}`);
         }
-        const result = await handler(message.payload as DocumentTransformContext);
-        respond(true, result ?? null);
+        const result = await handler(enrichContext<DocumentTransformContext>(message.payload));
+        respond(true, toJsonContent(result) ?? null);
         return;
       }
       case 'exporter': {
@@ -418,7 +618,7 @@ async function handleInvokeMessage(
         if (!handler) {
           throw new Error(`Exporter not found: ${message.id}`);
         }
-        const result = await handler(message.payload as ExporterContext);
+        const result = await handler(enrichContext<ExporterContext>(message.payload));
 
         if (result instanceof Uint8Array) {
           respond(true, Array.from(result));
@@ -443,7 +643,7 @@ async function handleInvokeMessage(
           throw new Error(`Status badge handler not found: ${message.id}`);
         }
 
-        const result = await handler(message.payload as StatusBadgeContext);
+        const result = await handler(enrichContext<StatusBadgeContext>(message.payload));
         respond(true, result ?? null);
         return;
       }
@@ -454,7 +654,7 @@ async function handleInvokeMessage(
           return;
         }
 
-        const result = await handler(message.payload as InlineAnnotationContext);
+        const result = await handler(enrichContext<InlineAnnotationContext>(message.payload));
         const output = Array.isArray(result) ? (result as InlineAnnotation[]) : [];
         respond(true, output);
         return;
@@ -466,7 +666,7 @@ async function handleInvokeMessage(
           return;
         }
 
-        const result = await handler(message.payload as UIControlStateContext);
+        const result = await handler(enrichContext<UIControlStateContext>(message.payload));
         respond(true, result ?? { action: null } satisfies UIControlTriggerResult);
         return;
       }
@@ -477,7 +677,7 @@ async function handleInvokeMessage(
           return;
         }
 
-        const result = await handler(message.payload as UIPanelActionContext);
+        const result = await handler(enrichContext<UIPanelActionContext>(message.payload));
         respond(true, result ?? { action: null } satisfies UIPanelActionResult);
         return;
       }
@@ -491,7 +691,7 @@ async function handleInvokeMessage(
         const evaluated = await evaluateUIState(
           payload.controlIds ?? [],
           payload.panelIds ?? [],
-          payload.context
+          enrichContext<UIControlStateContext>(payload.context)
         );
 
         respond(true, evaluated);
@@ -506,8 +706,16 @@ async function handleInvokeMessage(
 }
 
 async function handleShutdown(): Promise<void> {
-  if (pluginInstance?.dispose) {
-    await pluginInstance.dispose();
+  let ok = true;
+  let error: string | undefined;
+
+  try {
+    if (pluginInstance?.dispose) {
+      await pluginInstance.dispose();
+    }
+  } catch (caught) {
+    ok = false;
+    error = caught instanceof Error ? caught.message : String(caught);
   }
 
   commandHandlers.clear();
@@ -523,8 +731,15 @@ async function handleShutdown(): Promise<void> {
   uiPanelActionHandlers.clear();
   uiPanelRenderHandlers.clear();
   pendingHostRequests.clear();
+  registrationTokens.clear();
 
-  self.close();
+  postWorkerMessage({
+    type: 'worker:shutdown-complete',
+    pluginId: currentPluginId,
+    ok,
+    error,
+  });
+  setTimeout(() => self.close(), 0);
 }
 
 self.onmessage = async (event: MessageEvent<unknown>) => {

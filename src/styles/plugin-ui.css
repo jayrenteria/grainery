@@ -7,12 +7,16 @@
   @apply px-1 py-1;
 }
 
-.plugin-toolbar-top {
+.plugin-toolbar-top-bar {
   @apply top-14;
 }
 
-.plugin-toolbar-bottom {
+.plugin-toolbar-bottom-bar {
   @apply bottom-2 left-2 -translate-x-0;
+}
+
+.plugin-toolbar-editor-floating {
+  @apply top-28 right-3 left-auto translate-x-0 flex-col;
 }
 
 .plugin-toolbar-button {
@@ -61,6 +65,95 @@
 
 .plugin-panel-text {
   @apply mb-2 leading-relaxed;
+}
+
+.plugin-panel-heading {
+  @apply mt-3 mb-1 text-xs font-semibold uppercase text-base-content/70;
+}
+
+.plugin-panel-divider {
+  @apply my-3 border-base-300/70;
+}
+
+.plugin-panel-callout {
+  @apply mb-2 rounded-md border px-2 py-2 text-xs leading-relaxed;
+}
+
+.plugin-panel-callout-title {
+  @apply mb-0.5 font-semibold;
+}
+
+.plugin-panel-callout-info {
+  @apply border-info/25 bg-info/10 text-info-content;
+}
+
+.plugin-panel-callout-success {
+  @apply border-success/25 bg-success/10 text-success-content;
+}
+
+.plugin-panel-callout-warning {
+  @apply border-warning/30 bg-warning/15 text-warning-content;
+}
+
+.plugin-panel-callout-danger {
+  @apply border-error/30 bg-error/10 text-error-content;
+}
+
+.plugin-panel-badges {
+  @apply mb-2 flex flex-wrap gap-1;
+}
+
+.plugin-panel-badge {
+  @apply inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] uppercase;
+  @apply bg-base-200 text-base-content/70;
+}
+
+.plugin-panel-badge strong {
+  @apply font-semibold normal-case text-base-content/90;
+}
+
+.plugin-panel-badge-info {
+  @apply bg-info/15 text-info;
+}
+
+.plugin-panel-badge-success {
+  @apply bg-success/15 text-success;
+}
+
+.plugin-panel-badge-warning {
+  @apply bg-warning/20 text-warning;
+}
+
+.plugin-panel-badge-danger {
+  @apply bg-error/15 text-error;
+}
+
+.plugin-panel-progress {
+  @apply mb-2 space-y-1;
+}
+
+.plugin-panel-progress-label {
+  @apply flex items-center justify-between text-[11px] uppercase text-base-content/60;
+}
+
+.plugin-panel-progress-bar {
+  @apply h-1.5 w-full;
+}
+
+.plugin-panel-progress-primary {
+  @apply progress-primary;
+}
+
+.plugin-panel-progress-success {
+  @apply progress-success;
+}
+
+.plugin-panel-progress-warning {
+  @apply progress-warning;
+}
+
+.plugin-panel-progress-danger {
+  @apply progress-error;
 }
 
 .plugin-panel-list {

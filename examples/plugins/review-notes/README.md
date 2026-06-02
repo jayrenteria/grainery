@@ -3,9 +3,10 @@
 Demonstrates the declarative review-note workflow:
 
 - Reviewer name + note entry via host-rendered panel input blocks
-- Notes persisted in document plugin data (`document:set-plugin-data`)
+- Notes persisted with `api.screenplay.documentStorage(...)`
 - Inline highlights via `registerInlineAnnotationProvider`
 - Jump/delete note actions from panel
+- Anchors resolved with `ScreenplayDocument.createAnchor(...)` and `resolveAnchor(...)`
 
 From the repo root:
 

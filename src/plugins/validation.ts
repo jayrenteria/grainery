@@ -12,6 +12,31 @@ export const MAX_ACTIONS_PER_BLOCK = 64;
 export const MAX_ANNOTATIONS_PER_PROVIDER = 500;
 
 const LOCAL_ID_RE = /^[a-zA-Z0-9._-]+$/;
+const UI_CONTROL_MOUNTS = new Set(['top-bar', 'bottom-bar', 'editor-floating']);
+const UI_CONTROL_KINDS = new Set(['button', 'toggle', 'segmented']);
+const BUILTIN_ICONS = new Set([
+  'scene-heading',
+  'action',
+  'character',
+  'dialogue',
+  'parenthetical',
+  'transition',
+  'chevron-left',
+  'chevron-right',
+  'panel',
+  'close',
+  'settings',
+  'spark',
+  'command',
+  'keyboard',
+  'template',
+  'title-page',
+  'export',
+  'diagnostics',
+  'warning',
+  'check',
+  'info',
+]);
 
 export function isValidLocalId(value: string): boolean {
   return value.length > 0 && value.length <= 64 && LOCAL_ID_RE.test(value) && !value.includes(':');
@@ -38,6 +63,15 @@ export function validateUiControlDefinition(control: UIControlDefinition): void 
   if (typeof control.label !== 'string' || control.label.trim().length === 0) {
     throw new Error(`UI control '${control.id}' label is required`);
   }
+  if (!UI_CONTROL_MOUNTS.has(control.mount)) {
+    throw new Error(`UI control '${control.id}' has unsupported mount '${String(control.mount)}'`);
+  }
+  if (!UI_CONTROL_KINDS.has(control.kind)) {
+    throw new Error(`UI control '${control.id}' has unsupported kind '${String(control.kind)}'`);
+  }
+  if (!BUILTIN_ICONS.has(control.icon)) {
+    throw new Error(`UI control '${control.id}' has unsupported icon '${String(control.icon)}'`);
+  }
   if (control.when !== undefined && typeof control.when !== 'string') {
     throw new Error(`UI control '${control.id}' when must be a string when provided`);
   }
@@ -50,6 +84,9 @@ export function validateUiPanelDefinition(panel: UIPanelDefinition): void {
   assertValidLocalId(panel.id, 'UI panel');
   if (typeof panel.title !== 'string' || panel.title.trim().length === 0) {
     throw new Error(`UI panel '${panel.id}' title is required`);
+  }
+  if (panel.icon !== undefined && !BUILTIN_ICONS.has(panel.icon)) {
+    throw new Error(`UI panel '${panel.id}' has unsupported icon '${String(panel.icon)}'`);
   }
   if (panel.when !== undefined && typeof panel.when !== 'string') {
     throw new Error(`UI panel '${panel.id}' when must be a string when provided`);
@@ -76,6 +113,33 @@ export function validatePanelContent(content: UIPanelContent, scope: string): vo
 function validatePanelBlock(block: UIPanelBlock, scope: string): void {
   if (!block || typeof block !== 'object') {
     throw new Error(`${scope} contains an invalid panel block`);
+  }
+
+  if (block.type === 'heading' || block.type === 'text') {
+    if (typeof block.text !== 'string') {
+      throw new Error(`${scope} ${block.type} block must include text`);
+    }
+  }
+
+  if (block.type === 'callout') {
+    if (typeof block.text !== 'string') {
+      throw new Error(`${scope} callout block must include text`);
+    }
+  }
+
+  if (block.type === 'badgeList') {
+    if (!Array.isArray(block.items)) {
+      throw new Error(`${scope} badgeList block must include items[]`);
+    }
+  }
+
+  if (block.type === 'progress') {
+    if (typeof block.label !== 'string' || block.label.trim().length === 0) {
+      throw new Error(`${scope} progress block must include label`);
+    }
+    if (!Number.isFinite(block.value)) {
+      throw new Error(`${scope} progress block must include numeric value`);
+    }
   }
 
   if (block.type === 'actions') {

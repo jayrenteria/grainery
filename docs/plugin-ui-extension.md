@@ -29,6 +29,7 @@ Control mounts:
 
 - `'top-bar'`
 - `'bottom-bar'`
+- `'editor-floating'`
 
 Control action model:
 
@@ -48,7 +49,12 @@ Control action model:
 
 Panel content model (v1 primitives):
 
+- `heading`
 - `text`
+- `divider`
+- `callout`
+- `badgeList`
+- `progress`
 - `list`
 - `keyValue`
 - `input`
@@ -89,12 +95,70 @@ Notes:
 
 UI controls and panels can declare `when` expressions in manifest contributions.
 
+Supported operators:
+
+- `!`, `&&`, `||`
+- parentheses
+- string equality: `editor.currentElement == "sceneHeading"`
+- string inequality: `editor.previousElement != "character"`
+
 Supported keys:
 
 - `editor.hasSelection`
+- `editor.selection.empty`
 - `editor.isCurrentEmpty`
+- `editor.currentElement`
+- `editor.previousElement`
+- `editor.hasPreviousElement`
 - `editor.element.sceneHeading|action|character|dialogue|parenthetical|transition`
 - `plugin.enabled`
+
+Unknown identifiers evaluate as false. Use quoted strings for equality checks.
+
+## Command surfaces
+
+Manifest `contributes.menus` can place declared commands into host-owned command surfaces:
+
+- `command-palette`
+- `main-menu`
+- `editor-context`
+- `toolbar-overflow`
+
+Menu entries reference local command ids and can include `group`, `icon`, `priority`, and `when`.
+The host indexes these entries before worker activation so a future command palette can render
+available commands without waking every plugin.
+
+Manifest `contributes.keybindings` declares configurable shortcuts separately from command metadata:
+
+```json
+{
+  "id": "word-count-default",
+  "command": "word-count",
+  "key": "Mod+Shift+W",
+  "when": "plugin.enabled"
+}
+```
+
+Optional `mac`, `windows`, and `linux` values override `key` on specific platforms.
+
+## Plugin configuration
+
+Manifest `contributes.configuration` describes plugin settings using host-renderable property schemas.
+Current property types are:
+
+- `string`
+- `number`
+- `boolean`
+- `enum`
+
+This milestone indexes and validates configuration schemas and shows them in Settings. A full editor
+for configuration values should store values through plugin-scoped global storage and remain host-rendered.
+
+## Advanced custom UI
+
+Arbitrary DOM injection remains unsupported. Any future custom UI surface must be deliberately sandboxed,
+loaded in an isolated frame or equivalent boundary, and guarded by an explicit optional permission separate
+from `ui:mount`.
 
 ## Runtime mechanics
 
