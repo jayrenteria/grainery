@@ -12,6 +12,7 @@ import { StartScreen } from './components/StartScreen';
 import { ThemeProvider } from './contexts/ThemeContext';
 import {
   createNewDocument,
+  importFdxFile,
   openFile,
   openFileAtPath,
   saveFile,
@@ -456,6 +457,37 @@ function App() {
       if (view === 'start') {
         const message = error instanceof Error ? error.message : String(error);
         setStartScreenError(`Failed to open file. ${message}`);
+      }
+    }
+  }, [isDirty, refreshRecentFiles, runTransformHook, view]);
+
+  const handleImportFdx = useCallback(async () => {
+    if (view === 'editor' && isDirty) {
+      const discard = await confirmUnsavedChanges();
+      if (!discard) return;
+    }
+
+    try {
+      const doc = await importFdxFile();
+      if (!doc) {
+        return;
+      }
+
+      const transformed = await runTransformHook('post-open', doc.document);
+      doc.document = transformed;
+
+      setDocument(doc);
+      editorContentRef.current = transformed;
+      setIsDirty(false);
+      setView('editor');
+      setStartScreenError(null);
+      refreshRecentFiles();
+      await updateWindowTitle(doc.meta.filename);
+    } catch (error) {
+      console.error('Failed to import Final Draft file:', error);
+      if (view === 'start') {
+        const message = error instanceof Error ? error.message : String(error);
+        setStartScreenError(`Failed to import Final Draft file. ${message}`);
       }
     }
   }, [isDirty, refreshRecentFiles, runTransformHook, view]);
@@ -924,6 +956,9 @@ function App() {
         case 'open':
           void handleOpen();
           break;
+        case 'import_fdx':
+          void handleImportFdx();
+          break;
         case 'save':
           void handleSave();
           break;
@@ -974,6 +1009,7 @@ function App() {
     handleFind,
     handleFindNext,
     handleFindPrevious,
+    handleImportFdx,
     handleNew,
     handleOpen,
     handleReplace,
@@ -1046,6 +1082,9 @@ function App() {
             }}
             onOpenFile={() => {
               void handleOpen();
+            }}
+            onImportFdx={() => {
+              void handleImportFdx();
             }}
             onOpenRecent={(path) => {
               void handleOpenRecent(path);

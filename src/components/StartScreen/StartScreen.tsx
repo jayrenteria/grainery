@@ -6,6 +6,7 @@ interface StartScreenProps {
   onDismissError: () => void;
   onNewScreenplay: () => void;
   onOpenFile: () => void;
+  onImportFdx: () => void;
   onOpenRecent: (path: string) => void;
 }
 
@@ -61,6 +62,7 @@ export function StartScreen({
   onDismissError,
   onNewScreenplay,
   onOpenFile,
+  onImportFdx,
   onOpenRecent,
 }: StartScreenProps) {
   return (
@@ -98,9 +100,14 @@ export function StartScreen({
         <section className="start-screen-recent">
           <div className="start-screen-recent-header">
             <h2>Recent</h2>
-            <button type="button" onClick={onOpenFile}>
-              Open a file...
-            </button>
+            <div className="start-screen-file-actions">
+              <button type="button" onClick={onOpenFile}>
+                Open a file...
+              </button>
+              <button type="button" onClick={onImportFdx}>
+                Import Final Draft...
+              </button>
+            </div>
           </div>
 
           {recentFiles.length === 0 ? (

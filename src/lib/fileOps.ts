@@ -4,7 +4,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { ScreenplayDocument, TitlePageData } from './types';
 import type { JSONContent } from '@tiptap/react';
 import { exportToFountain } from './fountain';
-import { exportToFdx } from './fdx';
+import { exportToFdx, importFromFdx } from './fdx';
 import { recordRecentFile } from './recentFiles';
 
 export async function updateWindowTitle(filename: string | null, isDirty: boolean = false): Promise<void> {
@@ -13,6 +13,7 @@ export async function updateWindowTitle(filename: string | null, isDirty: boolea
 }
 
 const FILE_EXTENSION = 'gwx';
+const FDX_EXTENSION = 'fdx';
 const APP_NAME = 'Grainery';
 const APP_VERSION = '0.1.0';
 
@@ -61,8 +62,52 @@ function populateDocumentMetaFromPath(doc: ScreenplayDocument, filePath: string)
   };
 }
 
+function getPathExtension(path: string): string {
+  const filename = path.split(/[\\/]/).pop() ?? path;
+  const match = filename.match(/\.([^.]+)$/);
+  return match ? match[1].toLowerCase() : '';
+}
+
+function getFilenameFromPath(path: string): string {
+  return path.split(/[\\/]/).pop() || 'untitled';
+}
+
+function replacePathExtension(filename: string, extension: string): string {
+  return `${filename.replace(/\.[^.]+$/, '')}.${extension}`;
+}
+
+function createImportedDocument(
+  imported: ReturnType<typeof importFromFdx>,
+  sourcePath: string
+): ScreenplayDocument {
+  const now = new Date().toISOString();
+  const sourceFilename = getFilenameFromPath(sourcePath);
+  const importedFilename = replacePathExtension(sourceFilename, FILE_EXTENSION);
+
+  return {
+    ...createNewDocument(),
+    meta: {
+      id: crypto.randomUUID(),
+      filename: importedFilename,
+      filePath: null,
+      createdAt: now,
+      modifiedAt: now,
+      version: APP_VERSION,
+    },
+    titlePage: imported.titlePage,
+    document: imported.document,
+  };
+}
+
 export async function openFileAtPath(path: string): Promise<ScreenplayDocument> {
   const content = await invoke<string>('load_screenplay', { path });
+
+  if (getPathExtension(path) === FDX_EXTENSION) {
+    const doc = createImportedDocument(importFromFdx(content), path);
+    recordRecentFile(path);
+    return doc;
+  }
+
   const doc = JSON.parse(content) as ScreenplayDocument;
   const normalized = populateDocumentMetaFromPath(doc, path);
   recordRecentFile(path);
@@ -75,7 +120,35 @@ export async function openFile(): Promise<ScreenplayDocument | null> {
     filters: [
       {
         name: 'Screenplay',
+        extensions: [FILE_EXTENSION, FDX_EXTENSION],
+      },
+      {
+        name: 'Grainery',
         extensions: [FILE_EXTENSION],
+      },
+      {
+        name: 'Final Draft',
+        extensions: [FDX_EXTENSION],
+      },
+      {
+        name: 'All Files',
+        extensions: ['*'],
+      },
+    ],
+  });
+
+  if (!filePath) return null;
+
+  return openFileAtPath(filePath);
+}
+
+export async function importFdxFile(): Promise<ScreenplayDocument | null> {
+  const filePath = await open({
+    multiple: false,
+    filters: [
+      {
+        name: 'Final Draft',
+        extensions: [FDX_EXTENSION],
       },
       {
         name: 'All Files',

@@ -53,6 +53,7 @@ pub struct PdfGenerator {
     current_page: PdfPageIndex,
     current_layer: PdfLayerIndex,
     font: IndirectFontRef,
+    bold_font: IndirectFontRef,
     y_position: f32,
     page_number: i32,
     has_title_page: bool,
@@ -71,12 +72,16 @@ impl PdfGenerator {
         let font = doc
             .add_builtin_font(BuiltinFont::Courier)
             .map_err(|e| format!("Failed to add font: {}", e))?;
+        let bold_font = doc
+            .add_builtin_font(BuiltinFont::CourierBold)
+            .map_err(|e| format!("Failed to add bold font: {}", e))?;
 
         Ok(Self {
             doc,
             current_page: page1,
             current_layer: layer1,
             font,
+            bold_font,
             y_position: PAGE_HEIGHT - MARGIN_TOP,
             page_number: 1,
             has_title_page: false,
@@ -132,6 +137,14 @@ impl PdfGenerator {
     }
 
     fn write_line(&mut self, text: &str, x_offset: f32) {
+        self.write_line_with_font(text, x_offset, self.font.clone());
+    }
+
+    fn write_bold_line(&mut self, text: &str, x_offset: f32) {
+        self.write_line_with_font(text, x_offset, self.bold_font.clone());
+    }
+
+    fn write_line_with_font(&mut self, text: &str, x_offset: f32, font: IndirectFontRef) {
         self.check_page_break(1);
 
         let layer = self
@@ -144,7 +157,7 @@ impl PdfGenerator {
             FONT_SIZE,
             Mm::from(Pt(MARGIN_LEFT + x_offset)),
             Mm::from(Pt(self.y_position)),
-            &self.font,
+            &font,
         );
 
         self.y_position -= LINE_HEIGHT;
@@ -200,7 +213,7 @@ impl PdfGenerator {
 
     pub fn render_title_page(&mut self, title_page: &TitlePageData) {
         self.has_title_page = true;
-        
+
         // Title page is vertically centered
         let mut lines_to_render: Vec<(String, bool)> = Vec::new(); // (text, is_title)
 
@@ -287,7 +300,7 @@ impl PdfGenerator {
             "sceneHeading" => {
                 self.write_blank_line();
                 self.check_page_break(2);
-                self.write_line(&text.to_uppercase(), 0.0);
+                self.write_bold_line(&text.to_uppercase(), 0.0);
                 self.write_blank_line();
             }
             "action" => {

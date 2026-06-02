@@ -592,6 +592,10 @@
   color: color-mix(in oklch, var(--color-base-content) 44%, transparent);
 }
 
+.start-screen-file-actions {
+  @apply flex flex-wrap justify-end gap-2;
+}
+
 .start-screen-recent-header button:hover {
   background: color-mix(in oklch, var(--color-primary) 8%, transparent);
   color: color-mix(in oklch, var(--color-base-content) 68%, transparent);
@@ -663,7 +667,12 @@
   }
 
   .start-screen-recent-header {
-    @apply mb-4;
+    @apply mb-4 items-start;
+    grid-template-columns: 1fr;
+  }
+
+  .start-screen-file-actions {
+    @apply justify-start;
   }
 
   .start-screen-list {
