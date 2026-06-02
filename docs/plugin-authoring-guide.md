@@ -17,9 +17,38 @@ Core ideas:
 - Optional permissions are deny-by-default.
 - Plugin UI is declarative and host-rendered (no arbitrary DOM injection).
 
-## 2. Start from an example
+## 2. Fast path: generate a plugin
 
-Use one of these existing examples:
+From the Grainery repo root:
+
+```bash
+npm run plugin:create -- examples/plugins/my-plugin --id com.example.my-plugin --name "My Plugin"
+cd examples/plugins/my-plugin
+npm install
+npm run build
+npm run validate
+npm run pack
+```
+
+The generated archive is installable from Settings -> Plugins -> Install from file.
+
+The generator creates:
+
+```text
+my-plugin/
+  grainery-plugin.manifest.json
+  package.json
+  tsconfig.json
+  README.md
+  src/
+    main.ts
+```
+
+The TypeScript starter imports SDK types from the local `@grainery/plugin-sdk` package and compiles to `dist/main.js`.
+
+## 3. Start from an example
+
+You can also use one of these existing examples:
 
 - `examples/plugins/wordcount/`
 - `examples/plugins/element-toolbar/`
@@ -33,7 +62,15 @@ What each example demonstrates:
 - `scene-outline`: side panel scene list with click-to-jump navigation.
 - `review-notes`: reviewer-attributed notes with panel form fields, document plugin data, and inline highlights.
 
-## 3. Plugin folder structure
+Validate and package any example from the repo root:
+
+```bash
+npm run plugin:validate -- examples/plugins/wordcount --check-entry
+npm run plugin:pack -- examples/plugins/wordcount
+npm run plugin:check-archive -- examples/plugins/wordcount/com.grainery.wordcount.grainery-plugin.zip
+```
+
+## 4. Plugin folder structure
 
 Use this structure:
 
@@ -50,7 +87,43 @@ Important:
 - `grainery-plugin.manifest.json` must be at archive root.
 - `entry` in manifest must point to your runtime JS file (for example `dist/main.js`).
 
-## 4. Write the manifest
+## 5. Use the SDK types
+
+Generated plugins use `@grainery/plugin-sdk` for TypeScript authoring:
+
+```ts
+import type { GraineryPlugin } from '@grainery/plugin-sdk';
+
+const plugin: GraineryPlugin = {
+  setup(api) {
+    api.registerCommand({
+      id: 'hello-world',
+      title: 'Hello World',
+      handler() {
+        // plugin work
+      }
+    });
+  }
+};
+
+export default plugin;
+```
+
+If you use a bundler, you can also use the identity helpers:
+
+```ts
+import { definePlugin } from '@grainery/plugin-sdk';
+
+export default definePlugin({
+  setup(api) {
+    // strongly typed api
+  }
+});
+```
+
+For plain `tsc` builds, prefer `import type` so the emitted worker module has no runtime SDK import.
+
+## 6. Write the manifest
 
 Create `grainery-plugin.manifest.json`:
 
@@ -92,17 +165,23 @@ Permission sets:
 
 `activationEvents` + `contributes` are required in plugin API `1.2.0`.
 
-## 5. Validate the manifest
+## 7. Validate the manifest
 
 From repo root:
 
 ```bash
-npm run validate:plugin-manifest -- examples/plugins/wordcount/grainery-plugin.manifest.json
+npm run plugin:validate -- examples/plugins/wordcount --check-entry
 ```
 
-Use this command for your own manifest path as well.
+You can pass either a plugin directory or a direct manifest path:
 
-## 6. Write plugin code (`dist/main.js`)
+```bash
+npm run plugin:validate -- examples/plugins/wordcount/grainery-plugin.manifest.json
+```
+
+`validate:plugin-manifest` remains as a compatibility alias for direct manifest validation.
+
+## 8. Write plugin code (`dist/main.js`)
 
 Your plugin should export a default object:
 
@@ -119,7 +198,7 @@ export default {
 
 `api` is the plugin SDK surface. Register only the features you need.
 
-## 7. Build features incrementally
+## 9. Build features incrementally
 
 Recommended order:
 
@@ -131,7 +210,7 @@ Recommended order:
 
 Why: this keeps your plugin testable and minimizes permission scope.
 
-## 8. Step-by-step walkthrough: `wordcount`
+## 10. Step-by-step walkthrough: `wordcount`
 
 Source: `examples/plugins/wordcount/dist/main.js`
 
@@ -153,7 +232,7 @@ How it fits together:
 
 This is a good baseline architecture for utility plugins.
 
-## 9. Step-by-step walkthrough: `element-toolbar`
+## 11. Step-by-step walkthrough: `element-toolbar`
 
 Source: `examples/plugins/element-toolbar/dist/main.js`
 
@@ -178,7 +257,7 @@ Panel form fields:
 - values are delivered to `onAction(context.formValues)`.
 - use stable `fieldId` keys to keep form state predictable.
 
-## 9b. Step-by-step walkthrough: `review-notes`
+## 12. Step-by-step walkthrough: `review-notes`
 
 Source: `/Users/jay/git/screenwrite/examples/plugins/review-notes/dist/main.js`
 
@@ -196,23 +275,29 @@ How it fits together:
 - annotations stay host-rendered and sandbox-safe.
 - note anchors can be re-resolved from stored quote context after document edits.
 
-## 10. Package the plugin zip
+## 13. Package the plugin zip
 
-From inside your plugin folder:
-
-```bash
-zip -q -r my-plugin.grainery-plugin.zip grainery-plugin.manifest.json README.md dist/main.js
-```
-
-Then verify contents:
+From the repo root:
 
 ```bash
-unzip -l my-plugin.grainery-plugin.zip
+npm run plugin:pack -- examples/plugins/my-plugin
 ```
 
-You should see `grainery-plugin.manifest.json` at root, not nested under another folder.
+Write to a custom archive path:
 
-## 11. Install and test in Grainery
+```bash
+npm run plugin:pack -- examples/plugins/my-plugin --out /tmp/my-plugin.grainery-plugin.zip
+```
+
+Then verify contents and manifest consistency:
+
+```bash
+npm run plugin:check-archive -- examples/plugins/my-plugin/com.example.my-plugin.grainery-plugin.zip
+```
+
+The archive must contain `grainery-plugin.manifest.json` at root, not nested under another folder. The manifest `entry` file must also exist inside the archive.
+
+## 14. Install and test in Grainery
 
 1. Open Grainery.
 2. Go to Settings -> Plugins.
@@ -228,7 +313,7 @@ Smoke-test checklist:
 - UI controls/panels appear only when `ui:mount` is granted.
 - Disable/uninstall removes plugin behavior immediately.
 
-## 12. Security and quality checklist
+## 15. Security and quality checklist
 
 Before sharing a plugin:
 
@@ -239,7 +324,7 @@ Before sharing a plugin:
 - Keep deterministic behavior for denied permissions.
 - Add clear plugin README usage notes.
 
-## 13. Common pitfalls
+## 16. Common pitfalls
 
 - Zip has a top-level folder (manifest not at archive root).
 - Manifest `entry` path is wrong or absolute.
@@ -249,8 +334,9 @@ Before sharing a plugin:
 - Returning annotation ranges without validating stale anchors.
 - Declaring optional permissions but not handling denied state.
 - Expecting direct DOM or Tauri API access from plugin code.
+- Importing SDK runtime helpers in an unbundled plugin; use `import type` with plain `tsc`.
 
-## 14. Where to go next
+## 17. Where to go next
 
 - Internals and architecture: `docs/plugin-system.md`
 - UI extension API: `docs/plugin-ui-extension.md`

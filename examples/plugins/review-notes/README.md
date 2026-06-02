@@ -7,4 +7,11 @@ Demonstrates the declarative review-note workflow:
 - Inline highlights via `registerInlineAnnotationProvider`
 - Jump/delete note actions from panel
 
-Install by zipping with the manifest at archive root.
+From the repo root:
+
+```bash
+npm run plugin:validate -- examples/plugins/review-notes --check-entry
+npm run plugin:pack -- examples/plugins/review-notes
+```
+
+Install the generated `.grainery-plugin.zip` via Settings -> Plugins -> Install from file.

@@ -1,0 +1,14 @@
+{
+  "name": "@grainery/plugin-sdk",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript SDK surface for Grainery plugins.",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  }
+}

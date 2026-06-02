@@ -1,0 +1,15 @@
+{
+  "name": "__PACKAGE_NAME__",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "validate": "node __TOOL_PATH__ validate . --check-entry",
+    "pack": "npm run build && node __TOOL_PATH__ pack ."
+  },
+  "devDependencies": {
+    "@grainery/plugin-sdk": "file:__SDK_FILE_SPEC__",
+    "typescript": "~5.8.3"
+  }
+}
