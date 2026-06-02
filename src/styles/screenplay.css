@@ -455,65 +455,237 @@
 }
 
 .start-screen {
-  @apply relative overflow-hidden;
-  @apply flex h-full w-full items-center justify-center p-6 md:p-10;
-  @apply bg-gradient-to-b from-base-200 to-base-300;
+  @apply relative flex h-full w-full items-center justify-center overflow-hidden px-6 py-16;
+  background: var(--color-base-100);
+  color: var(--color-base-content);
 }
 
-.start-screen-background {
-  @apply absolute inset-0 bg-center bg-no-repeat bg-contain opacity-10;
-  @apply pointer-events-none;
+.start-screen::after {
+  @apply pointer-events-none absolute right-0 top-8 h-[82%] w-1.5 rounded-l-full content-[''];
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--color-base-content) 16%, transparent),
+    color-mix(in oklch, var(--color-base-content) 46%, transparent)
+  );
 }
 
-.start-screen-card {
-  @apply relative z-10;
-  @apply flex w-full max-w-3xl flex-col gap-6 rounded-2xl border border-base-300 bg-base-100/95 p-6 shadow-xl md:p-8;
+.start-screen-shell {
+  @apply relative z-10 flex w-full max-w-[540px] flex-col;
+}
+
+.start-screen-header h1 {
+  margin: 0;
+  color: var(--color-base-content);
+  font-family: Courier, monospace;
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-align: left;
+}
+
+.start-screen-header h1 span {
+  color: var(--color-primary);
 }
 
 .start-screen-header p {
-  @apply mt-1 text-sm text-base-content/70;
+  @apply mt-5 text-sm;
+  color: color-mix(in oklch, var(--color-base-content) 42%, transparent);
+  letter-spacing: 0.02em;
 }
 
-.start-screen-actions {
-  @apply flex flex-col gap-2 sm:flex-row;
+.start-screen-error {
+  @apply mt-8 flex items-center justify-between gap-4 rounded-lg border px-4 py-3 text-sm;
+  border-color: color-mix(in oklch, var(--color-error) 28%, transparent);
+  background: color-mix(in oklch, var(--color-error) 8%, var(--color-base-100));
+  color: var(--color-error);
 }
 
-.start-screen-actions .btn {
-  @apply sm:min-w-40;
+.start-screen-error button {
+  @apply shrink-0 rounded-md px-2 py-1 text-xs font-medium transition-colors;
+  color: var(--color-error);
+}
+
+.start-screen-error button:hover {
+  background: color-mix(in oklch, var(--color-error) 12%, transparent);
+}
+
+.start-screen-new {
+  @apply mt-12 grid w-full cursor-pointer items-center gap-4 rounded-xl border px-5 text-left transition-colors;
+  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+  min-height: 5.375rem;
+  border-color: color-mix(in oklch, var(--color-base-content) 16%, transparent);
+  background: color-mix(in oklch, var(--color-base-200) 72%, var(--color-base-100));
+}
+
+.start-screen-new:hover,
+.start-screen-new:focus-visible {
+  border-color: color-mix(in oklch, var(--color-primary) 42%, transparent);
+  background: color-mix(in oklch, var(--color-base-200) 96%, var(--color-base-100));
+}
+
+.start-screen-new:focus-visible,
+.start-screen-recent-header button:focus-visible,
+.start-screen-list-item:focus-visible,
+.start-screen-error button:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--color-primary) 52%, transparent);
+  outline-offset: 3px;
+}
+
+.start-screen-new-icon {
+  @apply flex h-10 w-10 items-center justify-center rounded-lg text-2xl leading-none;
+  background: color-mix(in oklch, var(--color-primary) 14%, var(--color-base-200));
+  color: var(--color-primary);
+  font-family: Courier, monospace;
+}
+
+.start-screen-new-copy {
+  @apply flex min-w-0 flex-col gap-1;
+}
+
+.start-screen-new-copy span:first-child {
+  @apply truncate;
+  color: var(--color-base-content);
+  font-family: Courier, monospace;
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+}
+
+.start-screen-new-copy span:last-child {
+  @apply truncate text-xs;
+  color: color-mix(in oklch, var(--color-base-content) 38%, transparent);
+  letter-spacing: 0.01em;
+}
+
+.start-screen-shortcut {
+  @apply flex items-center gap-1;
+}
+
+.start-screen-shortcut kbd {
+  @apply inline-flex h-5 min-w-5 items-center justify-center rounded px-1 text-[0.625rem] leading-none;
+  background: color-mix(in oklch, var(--color-base-content) 8%, var(--color-base-200));
+  color: color-mix(in oklch, var(--color-base-content) 36%, transparent);
+  font-family: Courier, monospace;
 }
 
 .start-screen-recent {
-  @apply flex min-h-0 flex-col gap-3;
+  @apply mt-11 flex min-h-0 flex-col;
+}
+
+.start-screen-recent-header {
+  @apply mb-5 grid items-center gap-4;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .start-screen-recent-header h2 {
-  @apply text-base font-semibold text-base-content;
+  margin: 0;
+  color: color-mix(in oklch, var(--color-base-content) 38%, transparent);
+  font-size: 0.69rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.start-screen-recent-header button {
+  @apply cursor-pointer rounded-md px-2 py-1 text-xs transition-colors;
+  color: color-mix(in oklch, var(--color-base-content) 44%, transparent);
+}
+
+.start-screen-recent-header button:hover {
+  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+  color: color-mix(in oklch, var(--color-base-content) 68%, transparent);
 }
 
 .start-screen-empty {
-  @apply rounded-lg border border-dashed border-base-300 bg-base-200/50 p-4 text-sm text-base-content/60;
+  @apply py-6 text-sm;
+  color: color-mix(in oklch, var(--color-base-content) 36%, transparent);
+  font-family: Courier, monospace;
 }
 
 .start-screen-list {
-  @apply flex flex-col gap-2;
+  @apply flex flex-col gap-5;
 }
 
 .start-screen-list-item {
-  @apply grid w-full cursor-pointer grid-cols-1 gap-1 rounded-lg border border-base-300 bg-base-200/30 px-4 py-3 text-left transition-colors;
-  @apply hover:border-primary/40 hover:bg-base-200 sm:grid-cols-[1fr_auto];
+  @apply grid w-full cursor-pointer items-baseline gap-4 rounded-md py-1 text-left transition-colors;
+  grid-template-columns: minmax(0, 1fr) auto;
+  color: var(--color-base-content);
+}
+
+.start-screen-list-item:hover {
+  background: color-mix(in oklch, var(--color-primary) 6%, transparent);
 }
 
 .start-screen-filename {
-  @apply truncate text-sm font-medium text-base-content;
-  @apply sm:col-start-1 sm:row-start-1;
-}
-
-.start-screen-directory {
-  @apply truncate text-xs text-base-content/60;
-  @apply sm:col-span-2 sm:row-start-2;
+  @apply truncate;
+  font-family: Courier, monospace;
+  font-size: 0.93rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
 }
 
 .start-screen-time {
-  @apply text-xs text-base-content/50;
-  @apply sm:col-start-2 sm:row-start-1 sm:justify-self-end sm:self-start;
+  @apply whitespace-nowrap text-xs;
+  color: color-mix(in oklch, var(--color-base-content) 40%, transparent);
+}
+
+.start-screen-version {
+  @apply absolute bottom-4 left-7 m-0 text-[0.68rem] font-medium leading-none;
+  color: color-mix(in oklch, var(--color-base-content) 28%, transparent);
+  letter-spacing: 0.12em;
+}
+
+.start-screen-mark {
+  @apply absolute bottom-4 right-9 text-sm leading-none;
+  color: color-mix(in oklch, var(--color-base-content) 28%, transparent);
+}
+
+@media (max-width: 760px) {
+  .start-screen {
+    @apply overflow-y-auto;
+  }
+
+  .start-screen::after {
+    @apply hidden;
+  }
+
+  .start-screen-shell {
+    max-width: none;
+  }
+
+  .start-screen-new {
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+  }
+
+  .start-screen-shortcut {
+    @apply hidden;
+  }
+
+  .start-screen-recent-header {
+    @apply mb-4;
+  }
+
+  .start-screen-list {
+    @apply gap-4;
+  }
+}
+
+@media (max-width: 420px) {
+  .start-screen-new {
+    @apply px-4;
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+  }
+
+  .start-screen-new-icon {
+    @apply h-9 w-9;
+  }
+
+  .start-screen-list-item {
+    @apply grid-cols-1 gap-1;
+  }
+
+  .start-screen-time {
+    @apply justify-self-start;
+  }
 }

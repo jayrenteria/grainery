@@ -1,5 +1,4 @@
 import type { RecentFileEntry } from '../../lib/types';
-import logo from '../../assets/logo.png';
 
 interface StartScreenProps {
   recentFiles: RecentFileEntry[];
@@ -52,6 +51,10 @@ function getDirectoryPath(path: string): string {
   return segments.slice(0, -1).join('/');
 }
 
+function getApplicationVersion(): string {
+  return '1.0';
+}
+
 export function StartScreen({
   recentFiles,
   errorMessage,
@@ -62,37 +65,42 @@ export function StartScreen({
 }: StartScreenProps) {
   return (
     <div className="start-screen">
-      <div
-        className="start-screen-background"
-        style={{ backgroundImage: `url(${logo})` }}
-        aria-hidden="true"
-      />
-      <div className="start-screen-card">
+      <main className="start-screen-shell" aria-labelledby="start-screen-title">
         <div className="start-screen-header">
-          <p>Choose a recent screenplay or start a new one.</p>
+          <h1 id="start-screen-title">
+            GRAINERY<span aria-hidden="true">•</span>
+          </h1>
         </div>
 
         {errorMessage && (
-          <div role="alert" className="alert alert-error text-sm">
+          <div role="alert" className="start-screen-error">
             <span>{errorMessage}</span>
-            <button type="button" className="btn btn-xs btn-ghost" onClick={onDismissError}>
+            <button type="button" onClick={onDismissError}>
               Dismiss
             </button>
           </div>
         )}
 
-        <div className="start-screen-actions">
-          <button type="button" className="btn btn-primary" onClick={onNewScreenplay}>
-            New Screenplay
-          </button>
-          <button type="button" className="btn btn-outline" onClick={onOpenFile}>
-            Open File...
-          </button>
-        </div>
+        <button type="button" className="start-screen-new" onClick={onNewScreenplay}>
+          <span className="start-screen-new-icon" aria-hidden="true">
+            +
+          </span>
+          <span className="start-screen-new-copy">
+            <span>Start a new screenplay</span>
+            <span>Blank page - formatting handles itself</span>
+          </span>
+          <span className="start-screen-shortcut" aria-hidden="true">
+            <kbd>⌘</kbd>
+            <kbd>N</kbd>
+          </span>
+        </button>
 
         <section className="start-screen-recent">
           <div className="start-screen-recent-header">
-            <h2>Recent Files</h2>
+            <h2>Recent</h2>
+            <button type="button" onClick={onOpenFile}>
+              Open a file...
+            </button>
           </div>
 
           {recentFiles.length === 0 ? (
@@ -105,9 +113,9 @@ export function StartScreen({
                     type="button"
                     className="start-screen-list-item"
                     onClick={() => onOpenRecent(entry.path)}
+                    title={getDirectoryPath(entry.path)}
                   >
                     <span className="start-screen-filename">{entry.filename}</span>
-                    <span className="start-screen-directory">{getDirectoryPath(entry.path)}</span>
                     <span className="start-screen-time">{formatRelativeTime(entry.lastOpenedAt)}</span>
                   </button>
                 </li>
@@ -115,7 +123,8 @@ export function StartScreen({
             </ul>
           )}
         </section>
-      </div>
+      </main>
+      <p className="start-screen-version">GRAINERY {getApplicationVersion()}</p>
     </div>
   );
 }
