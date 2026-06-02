@@ -290,7 +290,7 @@ impl PdfGenerator {
         }
     }
 
-    fn render_node(&mut self, node: &DocumentNode, document_mode: &str) {
+    fn render_node(&mut self, node: &DocumentNode, _document_mode: &str) {
         let text = Self::get_node_text(node);
         if text.trim().is_empty() && node.node_type != "pageBreak" {
             return;
@@ -298,9 +298,6 @@ impl PdfGenerator {
 
         match node.node_type.as_str() {
             "comicPage" => {
-                if document_mode == "comic" && self.y_position < PAGE_HEIGHT - MARGIN_TOP {
-                    self.new_page();
-                }
                 self.check_page_break(2);
                 self.write_line(&text.to_uppercase(), 0.0);
                 self.write_blank_line();

@@ -52,7 +52,7 @@ function wrapText(text: string, maxWidthPt: number): string[] {
  * Computes pagination for a ProseMirror document, mirroring the Rust PDF logic exactly.
  * This ensures WYSIWYG: what you see in the editor matches the PDF output.
  */
-export function computePagination(doc: ProseMirrorNode, documentMode: DocumentMode = 'screenplay'): PaginationResult {
+export function computePagination(doc: ProseMirrorNode, _documentMode: DocumentMode = 'screenplay'): PaginationResult {
   let page = 1;
   let lineCursor = 0;
   const breaks: PageBreakInfo[] = [];
@@ -89,11 +89,6 @@ export function computePagination(doc: ProseMirrorNode, documentMode: DocumentMo
 
     switch (type) {
       case 'comicPage': {
-        if (documentMode === 'comic' && lineCursor > 0) {
-          page += 1;
-          lineCursor = 0;
-          breaks.push({ pos: nodePos, page, isManual: false });
-        }
         checkPageBreak(2, nodePos);
         consumeLines(1);
         consumeLines(1);

@@ -6,7 +6,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Bold from '@tiptap/extension-bold';
 import Italic from '@tiptap/extension-italic';
 import Underline from '@tiptap/extension-underline';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   SceneHeading,
@@ -89,11 +89,6 @@ function keepCaretNearViewportCenter(editor: Editor): void {
   });
 }
 
-// Custom document that only allows Grainery script elements
-const ScreenplayDocument = Document.extend({
-  content: getDocumentSchemaContentExpression(),
-});
-
 function getPreviousNodeType(editor: Editor): string | null {
   const { $from } = editor.state.selection;
   const currentIndex = $from.index($from.depth - 1);
@@ -122,6 +117,13 @@ export function ScreenplayEditor({
   const [previousElement, setPreviousElement] = useState<string | null>(null);
   const [isCurrentElementEmpty, setIsCurrentElementEmpty] = useState(true);
   const [isFindOpen, setIsFindOpen] = useState(false);
+  const scriptDocument = useMemo(
+    () =>
+      Document.extend({
+        content: getDocumentSchemaContentExpression(documentMode),
+      }),
+    [documentMode]
+  );
 
   const syncElementContext = (editor: Editor) => {
     const { $from } = editor.state.selection;
@@ -141,7 +143,7 @@ export function ScreenplayEditor({
 
   const editor = useEditor({
     extensions: [
-      ScreenplayDocument,
+      scriptDocument,
       Text,
       History,
       Bold,

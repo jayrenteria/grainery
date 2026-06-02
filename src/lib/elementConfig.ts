@@ -67,7 +67,11 @@ export function getDefaultContent(mode: DocumentMode): JSONContent {
   };
 }
 
-export function getDocumentSchemaContentExpression(): string {
+export function getDocumentSchemaContentExpression(mode: DocumentMode): string {
+  if (mode === 'comic') {
+    return '(comicPage | comicPanel | action | character | dialogue | parenthetical | caption | soundEffect | sceneHeading | transition | pageBreak)+';
+  }
+
   return '(sceneHeading | action | character | dialogue | parenthetical | transition | comicPage | comicPanel | caption | soundEffect | pageBreak)+';
 }
 
