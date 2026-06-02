@@ -2,6 +2,7 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { computePagination, type PageBreakInfo } from '../lib/computePagination';
+import type { DocumentMode } from '../lib/types';
 
 export interface PaginationStorage {
   breaks: PageBreakInfo[];
@@ -14,8 +15,18 @@ export const paginationPluginKey = new PluginKey<{
   totalPages: number;
 }>('pagination');
 
-export const PaginationExtension = Extension.create({
+export interface PaginationOptions {
+  documentMode: DocumentMode;
+}
+
+export const PaginationExtension = Extension.create<PaginationOptions>({
   name: 'pagination',
+
+  addOptions() {
+    return {
+      documentMode: 'screenplay',
+    };
+  },
 
   addStorage(): PaginationStorage {
     return {
@@ -33,7 +44,7 @@ export const PaginationExtension = Extension.create({
 
         state: {
           init(_, { doc }) {
-            const { breaks, totalPages } = computePagination(doc);
+            const { breaks, totalPages } = computePagination(doc, extension.options.documentMode);
             const decorations = createPageBreakDecorations(breaks);
             return {
               decorationSet: DecorationSet.create(doc, decorations),
@@ -52,7 +63,7 @@ export const PaginationExtension = Extension.create({
               };
             }
 
-            const { breaks, totalPages } = computePagination(newState.doc);
+            const { breaks, totalPages } = computePagination(newState.doc, extension.options.documentMode);
             const decorations = createPageBreakDecorations(breaks);
 
             return {

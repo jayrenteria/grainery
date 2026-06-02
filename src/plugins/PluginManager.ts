@@ -372,6 +372,10 @@ export class PluginManager {
           continue;
         }
 
+        if (rule.when.documentModes && !rule.when.documentModes.includes(context.documentMode)) {
+          continue;
+        }
+
         if (rule.when.currentTypes && !rule.when.currentTypes.includes(context.currentType)) {
           continue;
         }
@@ -765,6 +769,7 @@ export class PluginManager {
     await this.ensureActivated(panel.pluginId, `onUIPanel:${getLocalId(panel.id)}`);
     const response = (await this.invokeWorker(panel.pluginId, 'ui-panel-action', getLocalId(panel.id), {
       document: context.document,
+      documentMode: context.documentMode,
       currentElementType: context.currentElementType,
       selectionFrom: context.selectionFrom,
       selectionTo: context.selectionTo,

@@ -197,6 +197,51 @@
   margin-bottom: 0;
 }
 
+/* Comic page header */
+.comic-page {
+  @apply uppercase font-bold;
+  margin-top: 0;
+  margin-bottom: 0;
+  text-align: left;
+}
+
+.comic-page:not(:first-child) {
+  margin-top: 2em;
+}
+
+/* Comic panel header */
+.comic-panel {
+  @apply uppercase font-bold;
+  margin-top: 1.5em;
+  margin-bottom: 0;
+}
+
+/* Comic lettering */
+.caption,
+.sound-effect {
+  margin-top: 0.35em;
+  margin-bottom: 0;
+  margin-left: 0.5in;
+  max-width: 5.5in;
+}
+
+.sound-effect {
+  @apply uppercase;
+}
+
+[data-document-mode="comic"] .character {
+  @apply text-left;
+  margin-left: 0.5in;
+  margin-right: 0;
+}
+
+[data-document-mode="comic"] .dialogue,
+[data-document-mode="comic"] .parenthetical {
+  margin-left: 1in;
+  margin-right: 0;
+  max-width: 4.75in;
+}
+
 /* Placeholder styling */
 .screenplay-editor p.is-editor-empty:first-child::before {
   @apply text-base-content/40;
@@ -239,6 +284,34 @@
 
 .transition.is-empty::before {
   content: 'CUT TO:';
+  @apply text-base-content/40;
+  pointer-events: none;
+}
+
+.comic-page.is-empty::before {
+  content: 'PAGE 1';
+  @apply text-base-content/40;
+  pointer-events: none;
+}
+
+.comic-panel.is-empty::before {
+  content: 'PANEL 1';
+  @apply text-base-content/40;
+  pointer-events: none;
+}
+
+[data-document-mode="comic"] .action.is-empty::before {
+  content: 'Panel description...';
+}
+
+.caption.is-empty::before {
+  content: 'CAPTION:';
+  @apply text-base-content/40;
+  pointer-events: none;
+}
+
+.sound-effect.is-empty::before {
+  content: 'SFX:';
   @apply text-base-content/40;
   pointer-events: none;
 }
@@ -516,6 +589,10 @@
   min-height: 5.375rem;
   border-color: color-mix(in oklch, var(--color-base-content) 16%, transparent);
   background: color-mix(in oklch, var(--color-base-200) 72%, var(--color-base-100));
+}
+
+.start-screen-new + .start-screen-new {
+  @apply mt-3;
 }
 
 .start-screen-new:hover,

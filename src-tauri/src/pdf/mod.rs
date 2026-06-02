@@ -200,7 +200,7 @@ impl PdfGenerator {
 
     pub fn render_title_page(&mut self, title_page: &TitlePageData) {
         self.has_title_page = true;
-        
+
         // Title page is vertically centered
         let mut lines_to_render: Vec<(String, bool)> = Vec::new(); // (text, is_title)
 
@@ -269,21 +269,52 @@ impl PdfGenerator {
         self.new_page();
     }
 
-    pub fn render_content(&mut self, content: &ScreenplayContent) {
+    pub fn render_content(&mut self, content: &ScreenplayContent, document_mode: &str) {
         if let Some(nodes) = &content.content {
             for node in nodes {
-                self.render_node(node);
+                self.render_node(node, document_mode);
             }
         }
     }
 
-    fn render_node(&mut self, node: &DocumentNode) {
+    fn render_node(&mut self, node: &DocumentNode, document_mode: &str) {
         let text = Self::get_node_text(node);
         if text.trim().is_empty() && node.node_type != "pageBreak" {
             return;
         }
 
         match node.node_type.as_str() {
+            "comicPage" => {
+                if document_mode == "comic" && self.y_position < PAGE_HEIGHT - MARGIN_TOP {
+                    self.new_page();
+                }
+                self.check_page_break(2);
+                self.write_line(&text.to_uppercase(), 0.0);
+                self.write_blank_line();
+            }
+            "comicPanel" => {
+                self.write_blank_line();
+                self.check_page_break(2);
+                self.write_line(&text.to_uppercase(), 0.0);
+                self.write_blank_line();
+            }
+            "caption" => {
+                let wrapped = self.wrap_text(&text, PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT);
+                self.check_page_break(wrapped.len() as i32);
+                for line in wrapped {
+                    self.write_line(&line, 36.0);
+                }
+            }
+            "soundEffect" => {
+                let wrapped = self.wrap_text(
+                    &text.to_uppercase(),
+                    PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT,
+                );
+                self.check_page_break(wrapped.len() as i32);
+                for line in wrapped {
+                    self.write_line(&line, 36.0);
+                }
+            }
             "sceneHeading" => {
                 self.write_blank_line();
                 self.check_page_break(2);
@@ -370,6 +401,7 @@ pub fn generate_pdf(
     title_page_json: Option<&str>,
     output_path: &str,
     document_title: &str,
+    document_mode: &str,
 ) -> Result<(), String> {
     let content: ScreenplayContent = serde_json::from_str(content_json)
         .map_err(|e| format!("Failed to parse content: {}", e))?;
@@ -389,7 +421,7 @@ pub fn generate_pdf(
         generator.render_title_page(&tp);
     }
 
-    generator.render_content(&content);
+    generator.render_content(&content, document_mode);
     generator.save(output_path)?;
 
     Ok(())

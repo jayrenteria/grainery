@@ -5,8 +5,7 @@ extern crate objc;
 use std::fs;
 use std::path::Path;
 use std::sync::Mutex;
-use tauri::menu::{
-    MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{Emitter, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 
 mod pdf;
@@ -49,12 +48,14 @@ fn export_pdf(
     title_page_json: Option<String>,
     output_path: String,
     document_title: String,
+    document_mode: String,
 ) -> Result<(), String> {
     pdf::generate_pdf(
         &content_json,
         title_page_json.as_deref(),
         &output_path,
         &document_title,
+        &document_mode,
     )
 }
 
@@ -89,9 +90,10 @@ pub fn run() {
         .manage(ExitControl::default())
         .setup(|app| {
             // File menu items
-            let new_item = MenuItemBuilder::with_id("new", "New")
+            let new_item = MenuItemBuilder::with_id("new", "New Screenplay")
                 .accelerator("CmdOrCtrl+N")
                 .build(app)?;
+            let new_comic_item = MenuItemBuilder::with_id("new_comic", "New Comic").build(app)?;
             let open_item = MenuItemBuilder::with_id("open", "Open...")
                 .accelerator("CmdOrCtrl+O")
                 .build(app)?;
@@ -108,11 +110,12 @@ pub fn run() {
             let export_pdf_item = MenuItemBuilder::with_id("export_pdf", "Export as PDF...")
                 .accelerator("CmdOrCtrl+Shift+P")
                 .build(app)?;
-            let export_fdx_item = MenuItemBuilder::with_id("export_fdx", "Export to Final Draft...")
-                .build(app)?;
+            let export_fdx_item =
+                MenuItemBuilder::with_id("export_fdx", "Export to Final Draft...").build(app)?;
 
             let file_menu = SubmenuBuilder::new(app, "File")
                 .item(&new_item)
+                .item(&new_comic_item)
                 .item(&open_item)
                 .separator()
                 .item(&save_item)
@@ -192,7 +195,13 @@ pub fn run() {
                 .build()?;
 
             let menu = MenuBuilder::new(app)
-                .items(&[&app_menu, &file_menu, &edit_menu, &format_menu, &window_menu])
+                .items(&[
+                    &app_menu,
+                    &file_menu,
+                    &edit_menu,
+                    &format_menu,
+                    &window_menu,
+                ])
                 .build()?;
 
             app.set_menu(menu)?;
@@ -242,16 +251,17 @@ pub fn run() {
                         245.0 / 255.0,
                         241.0 / 255.0,
                         232.0 / 255.0,
-                        1.0
+                        1.0,
                     );
                     ns_window.setBackgroundColor_(bg_color);
-                    
+
                     // Use light appearance to get black title text
-                    let appearance_name = cocoa::foundation::NSString::alloc(nil)
-                        .init_str("NSAppearanceNameAqua");
-                    let appearance: id = msg_send![class!(NSAppearance), appearanceNamed: appearance_name];
+                    let appearance_name =
+                        cocoa::foundation::NSString::alloc(nil).init_str("NSAppearanceNameAqua");
+                    let appearance: id =
+                        msg_send![class!(NSAppearance), appearanceNamed: appearance_name];
                     let () = msg_send![ns_window, setAppearance: appearance];
-                    
+
                     // Ensure title is visible
                     ns_window.setTitleVisibility_(NSWindowTitleVisibility::NSWindowTitleVisible);
                 }

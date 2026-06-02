@@ -36,7 +36,14 @@ const DEFAULT_FIND_REPLACE_STATE: FindReplaceState = {
 };
 
 export const findReplacePluginKey = new PluginKey<FindReplaceState>('findReplace');
-const VISUALLY_UPPERCASE_NODE_TYPES = new Set(['sceneHeading', 'character', 'transition']);
+const VISUALLY_UPPERCASE_NODE_TYPES = new Set([
+  'sceneHeading',
+  'character',
+  'transition',
+  'comicPage',
+  'comicPanel',
+  'soundEffect',
+]);
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {

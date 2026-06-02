@@ -6,6 +6,7 @@ import {
   PARENTHETICAL_WIDTH_PT,
   CHAR_WIDTH_PT,
 } from './paginationConstants';
+import type { DocumentMode } from './types';
 
 export interface PageBreakInfo {
   pos: number; // ProseMirror position where we show a visual break (before node)
@@ -51,7 +52,7 @@ function wrapText(text: string, maxWidthPt: number): string[] {
  * Computes pagination for a ProseMirror document, mirroring the Rust PDF logic exactly.
  * This ensures WYSIWYG: what you see in the editor matches the PDF output.
  */
-export function computePagination(doc: ProseMirrorNode): PaginationResult {
+export function computePagination(doc: ProseMirrorNode, documentMode: DocumentMode = 'screenplay'): PaginationResult {
   let page = 1;
   let lineCursor = 0;
   const breaks: PageBreakInfo[] = [];
@@ -87,6 +88,34 @@ export function computePagination(doc: ProseMirrorNode): PaginationResult {
     nodePageMap.set(nodePos, page);
 
     switch (type) {
+      case 'comicPage': {
+        if (documentMode === 'comic' && lineCursor > 0) {
+          page += 1;
+          lineCursor = 0;
+          breaks.push({ pos: nodePos, page, isManual: false });
+        }
+        checkPageBreak(2, nodePos);
+        consumeLines(1);
+        consumeLines(1);
+        break;
+      }
+
+      case 'comicPanel': {
+        consumeLines(1);
+        checkPageBreak(2, nodePos);
+        consumeLines(1);
+        consumeLines(1);
+        break;
+      }
+
+      case 'caption':
+      case 'soundEffect': {
+        const wrapped = wrapText(text, CONTENT_WIDTH_PT);
+        checkPageBreak(wrapped.length, nodePos);
+        consumeLines(wrapped.length);
+        break;
+      }
+
       case 'sceneHeading': {
         // Rust: write_blank_line(); check_page_break(2); write_line(); write_blank_line();
         consumeLines(1); // blank before

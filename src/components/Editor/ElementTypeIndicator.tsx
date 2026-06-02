@@ -1,13 +1,5 @@
 import type { ScreenplayElementType, CharacterExtension } from '../../lib/types';
-
-const ELEMENT_LABELS: Record<ScreenplayElementType, string> = {
-  sceneHeading: 'Scene Heading',
-  action: 'Action',
-  character: 'Character',
-  dialogue: 'Dialogue',
-  parenthetical: 'Parenthetical',
-  transition: 'Transition',
-};
+import { ELEMENT_LABELS } from '../../lib/elementConfig';
 
 interface ElementTypeIndicatorProps {
   currentType: ScreenplayElementType | null;

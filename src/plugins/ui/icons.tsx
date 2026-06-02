@@ -65,6 +65,36 @@ export function PluginIcon({ icon, className }: { icon: BuiltinIconId; className
           <path d="M9 5l3 3-3 3" />
         </IconBase>
       );
+    case 'comic-page':
+      return (
+        <IconBase className={className}>
+          <path d="M3 2.5h10v11H3z" />
+          <path d="M5 5h6" />
+          <path d="M5 8h4" />
+        </IconBase>
+      );
+    case 'comic-panel':
+      return (
+        <IconBase className={className}>
+          <rect x="2" y="3" width="12" height="10" rx="1" />
+          <path d="M8 3v10" />
+          <path d="M2 8h12" />
+        </IconBase>
+      );
+    case 'caption':
+      return (
+        <IconBase className={className}>
+          <rect x="2.5" y="4" width="11" height="8" rx="1" />
+          <path d="M4.5 7h7" />
+          <path d="M4.5 9.5h5" />
+        </IconBase>
+      );
+    case 'sound-effect':
+      return (
+        <IconBase className={className}>
+          <path d="M8 2.5l1.3 3 3.2-1-1.3 3 2.3 2.2-3.2.4-.2 3.4L8 10.8 5.9 13.5l-.2-3.4-3.2-.4 2.3-2.2-1.3-3 3.2 1z" />
+        </IconBase>
+      );
     case 'chevron-left':
       return (
         <IconBase className={className}>

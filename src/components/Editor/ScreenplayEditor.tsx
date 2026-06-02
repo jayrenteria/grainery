@@ -15,6 +15,10 @@ import {
   Dialogue,
   Parenthetical,
   Transition,
+  ComicPage,
+  ComicPanel,
+  Caption,
+  SoundEffect,
   PageBreak,
   ScreenplayKeymap,
   PaginationExtension,
@@ -22,12 +26,13 @@ import {
   getFindReplaceState,
   PluginAnnotationsExtension,
 } from '../../extensions';
+import { getDefaultContent, getDocumentSchemaContentExpression } from '../../lib/elementConfig';
 import { ElementTypeIndicator } from './ElementTypeIndicator';
 import { EditorStats } from './EditorStats';
 import { FindReplaceBar } from './FindReplaceBar';
 import { KeymapHint } from './KeymapHint';
 import { PaginatedEditor } from './PaginatedEditor';
-import type { ScreenplayElementType, CharacterExtension } from '../../lib/types';
+import type { ScreenplayElementType, CharacterExtension, DocumentMode } from '../../lib/types';
 import type { Editor, JSONContent } from '@tiptap/react';
 import type { ElementLoopContext, RenderedInlineAnnotation } from '../../plugins';
 
@@ -39,6 +44,7 @@ interface ScreenplayEditorProps {
   resolveElementLoop?: (context: ElementLoopContext) => ScreenplayElementType | null;
   onEditorReady?: (editor: Editor | null) => void;
   showKeymapHint?: boolean;
+  documentMode?: DocumentMode;
 }
 
 const VIEWPORT_TARGET_RATIO = 0.45;
@@ -83,20 +89,10 @@ function keepCaretNearViewportCenter(editor: Editor): void {
   });
 }
 
-// Custom document that only allows screenplay elements
+// Custom document that only allows Grainery script elements
 const ScreenplayDocument = Document.extend({
-  content: '(sceneHeading | action | character | dialogue | parenthetical | transition | pageBreak)+',
+  content: getDocumentSchemaContentExpression(),
 });
-
-const DEFAULT_CONTENT: JSONContent = {
-  type: 'doc',
-  content: [
-    {
-      type: 'sceneHeading',
-      content: [],
-    },
-  ],
-};
 
 function getPreviousNodeType(editor: Editor): string | null {
   const { $from } = editor.state.selection;
@@ -117,8 +113,11 @@ export function ScreenplayEditor({
   resolveElementLoop,
   onEditorReady,
   showKeymapHint = true,
+  documentMode = 'screenplay',
 }: ScreenplayEditorProps) {
-  const [currentElement, setCurrentElement] = useState<ScreenplayElementType | null>('sceneHeading');
+  const [currentElement, setCurrentElement] = useState<ScreenplayElementType | null>(
+    documentMode === 'comic' ? 'comicPage' : 'sceneHeading'
+  );
   const [characterExtension, setCharacterExtension] = useState<CharacterExtension>(null);
   const [previousElement, setPreviousElement] = useState<string | null>(null);
   const [isCurrentElementEmpty, setIsCurrentElementEmpty] = useState(true);
@@ -154,18 +153,25 @@ export function ScreenplayEditor({
       Dialogue,
       Parenthetical,
       Transition,
+      ComicPage,
+      ComicPanel,
+      Caption,
+      SoundEffect,
       PageBreak,
       FindReplaceExtension,
       PluginAnnotationsExtension,
       ScreenplayKeymap.configure({
+        documentMode,
         resolveElementLoop,
       }),
-      PaginationExtension,
+      PaginationExtension.configure({
+        documentMode,
+      }),
       Placeholder.configure({
         placeholder: 'Start writing...',
       }),
     ],
-    content: initialContent || DEFAULT_CONTENT,
+    content: initialContent || getDefaultContent(documentMode),
     onUpdate: ({ editor }) => {
       onChange?.(editor.getJSON());
       keepCaretNearViewportCenter(editor);
@@ -178,6 +184,7 @@ export function ScreenplayEditor({
     editorProps: {
       attributes: {
         class: 'screenplay-editor',
+        'data-document-mode': documentMode,
       },
     },
   });
@@ -234,6 +241,7 @@ export function ScreenplayEditor({
       />
       {showKeymapHint && (
         <KeymapHint
+          documentMode={documentMode}
           currentType={currentElement}
           previousType={previousElement}
           isCurrentEmpty={isCurrentElementEmpty}

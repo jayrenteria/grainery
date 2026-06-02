@@ -12,7 +12,7 @@ import type {
   UIPanelBlock,
   UIPanelContent,
 } from '../../plugins';
-import type { ScreenplayElementType } from '../../lib/types';
+import type { DocumentMode, ScreenplayElementType } from '../../lib/types';
 import { createWhenContext, evaluateWhenClause } from '../../plugins/when';
 
 interface EditorAdapter {
@@ -31,6 +31,7 @@ interface PluginUIHostProps {
   pluginStateVersion: number;
   editorVersion: number;
   document: JSONContent;
+  documentMode: DocumentMode;
   editorAdapter: EditorAdapter;
 }
 
@@ -130,6 +131,7 @@ export function PluginUIHost({
   pluginStateVersion,
   editorVersion,
   document,
+  documentMode,
   editorAdapter,
 }: PluginUIHostProps) {
   const allTopControls = useMemo(() => pluginManager.getUIControls('top-bar'), [pluginManager, pluginStateVersion]);
@@ -155,6 +157,7 @@ export function PluginUIHost({
       const selection = editorAdapter.getSelectionRange();
       return {
         document,
+        documentMode,
         currentElementType: editorAdapter.getCurrentElementType(),
         previousElementType: editorAdapter.getPreviousElementType(),
         isCurrentEmpty: editorAdapter.isCurrentElementEmpty(),
@@ -162,7 +165,7 @@ export function PluginUIHost({
         selectionTo: selection.to,
       };
     },
-    [document, editorAdapter, editorVersion]
+    [document, documentMode, editorAdapter, editorVersion]
   );
 
   const pluginEnabledMap = useMemo(() => {
