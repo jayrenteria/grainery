@@ -273,6 +273,8 @@ pub fn run() {
             plugins::plugin_uninstall,
             plugins::plugin_enable_disable,
             plugins::plugin_update_permissions,
+            plugins::plugin_record_diagnostic,
+            plugins::plugin_clear_diagnostics,
             plugins::plugin_fetch_registry_index,
             plugins::plugin_host_call
         ])

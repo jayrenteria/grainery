@@ -107,6 +107,8 @@
       "additionalProperties": false,
       "required": [
         "commands",
+        "menus",
+        "keybindings",
         "exporters",
         "importers",
         "statusBadges",
@@ -125,7 +127,103 @@
             "properties": {
               "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
               "title": { "type": "string", "minLength": 1 },
+              "category": { "type": "string", "minLength": 1 },
               "shortcut": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "menus": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "command", "location"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "command": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "location": {
+                "type": "string",
+                "enum": ["command-palette", "main-menu", "editor-context", "toolbar-overflow"]
+              },
+              "title": { "type": "string", "minLength": 1 },
+              "group": { "type": "string", "minLength": 1 },
+              "icon": {
+                "type": "string",
+                "enum": [
+                  "scene-heading",
+                  "action",
+                  "character",
+                  "dialogue",
+                  "parenthetical",
+                  "transition",
+                  "chevron-left",
+                  "chevron-right",
+                  "panel",
+                  "close",
+                  "settings",
+                  "spark",
+                  "command",
+                  "keyboard",
+                  "template",
+                  "title-page",
+                  "export",
+                  "diagnostics",
+                  "warning",
+                  "check",
+                  "info"
+                ]
+              },
+              "priority": { "type": "number" },
+              "when": { "type": "string" }
+            }
+          }
+        },
+        "keybindings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "command", "key"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "command": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "key": { "type": "string", "minLength": 1 },
+              "mac": { "type": "string", "minLength": 1 },
+              "windows": { "type": "string", "minLength": 1 },
+              "linux": { "type": "string", "minLength": 1 },
+              "when": { "type": "string" }
+            }
+          }
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["properties"],
+          "properties": {
+            "title": { "type": "string", "minLength": 1 },
+            "properties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "title", "type"],
+                "properties": {
+                  "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+                  "title": { "type": "string", "minLength": 1 },
+                  "type": { "type": "string", "enum": ["string", "number", "boolean", "enum"] },
+                  "description": { "type": "string" },
+                  "default": {
+                    "type": ["string", "number", "boolean"]
+                  },
+                  "enum": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "string", "minLength": 1 }
+                  },
+                  "minimum": { "type": "number" },
+                  "maximum": { "type": "number" }
+                }
+              }
             }
           }
         },
@@ -194,7 +292,7 @@
             "required": ["id", "mount", "kind", "label", "icon"],
             "properties": {
               "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
-              "mount": { "type": "string", "enum": ["top-bar", "bottom-bar"] },
+              "mount": { "type": "string", "enum": ["top-bar", "bottom-bar", "editor-floating"] },
               "kind": { "type": "string", "enum": ["button", "toggle", "segmented"] },
               "label": { "type": "string", "minLength": 1 },
               "icon": {
@@ -211,7 +309,16 @@
                   "panel",
                   "close",
                   "settings",
-                  "spark"
+                  "spark",
+                  "command",
+                  "keyboard",
+                  "template",
+                  "title-page",
+                  "export",
+                  "diagnostics",
+                  "warning",
+                  "check",
+                  "info"
                 ]
               },
               "priority": { "type": "number" },
@@ -265,7 +372,16 @@
                   "panel",
                   "close",
                   "settings",
-                  "spark"
+                  "spark",
+                  "command",
+                  "keyboard",
+                  "template",
+                  "title-page",
+                  "export",
+                  "diagnostics",
+                  "warning",
+                  "check",
+                  "info"
                 ]
               },
               "defaultWidth": { "type": "number" },
@@ -301,6 +417,26 @@
       "items": {
         "type": "string",
         "minLength": 1
+      }
+    },
+    "permissionRationales": {
+      "type": "object",
+      "additionalProperties": false,
+      "propertyNames": {
+        "enum": [
+          "fs:pick-read",
+          "fs:pick-write",
+          "network:https",
+          "ui:mount",
+          "editor:annotations"
+        ]
+      },
+      "properties": {
+        "fs:pick-read": { "type": "string", "minLength": 1 },
+        "fs:pick-write": { "type": "string", "minLength": 1 },
+        "network:https": { "type": "string", "minLength": 1 },
+        "ui:mount": { "type": "string", "minLength": 1 },
+        "editor:annotations": { "type": "string", "minLength": 1 }
       }
     },
     "signature": {

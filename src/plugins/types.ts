@@ -1,5 +1,9 @@
 import type { JSONContent } from '@tiptap/react';
 import type { ScreenplayElementType } from '../lib/types';
+import type {
+  ScreenplayDocument,
+  ScreenplayDocumentContext,
+} from './document-helpers';
 
 export type CorePermission =
   | 'document:read'
@@ -41,7 +45,53 @@ export type PluginActivationEvent =
 export interface ContributedCommand {
   id: string;
   title: string;
+  category?: string;
   shortcut?: string;
+}
+
+export type CommandMenuLocation =
+  | 'command-palette'
+  | 'main-menu'
+  | 'editor-context'
+  | 'toolbar-overflow';
+
+export interface ContributedCommandMenu {
+  id: string;
+  command: string;
+  location: CommandMenuLocation;
+  title?: string;
+  group?: string;
+  icon?: BuiltinIconId;
+  priority?: number;
+  when?: string;
+}
+
+export interface ContributedKeybinding {
+  id: string;
+  command: string;
+  key: string;
+  mac?: string;
+  windows?: string;
+  linux?: string;
+  when?: string;
+}
+
+export type ConfigurationPropertyType = 'string' | 'number' | 'boolean' | 'enum';
+
+export interface ContributedConfigurationProperty {
+  id: string;
+  title: string;
+  type: ConfigurationPropertyType;
+  description?: string;
+  default?: string | number | boolean;
+  enum?: string[];
+  minimum?: number;
+  maximum?: number;
+}
+
+export interface ContributedConfiguration {
+  title?: string;
+  properties: ContributedConfigurationProperty[];
 }
 
 export interface ContributedExporter {
@@ -103,6 +153,9 @@ export interface ContributedTransform {
 
 export interface PluginContributions {
   commands: ContributedCommand[];
+  menus: ContributedCommandMenu[];
+  keybindings: ContributedKeybinding[];
+  configuration?: ContributedConfiguration;
   exporters: ContributedExporter[];
   importers: ContributedImporter[];
   statusBadges: ContributedStatusBadge[];
@@ -126,6 +179,7 @@ export interface PluginManifest {
   activationEvents: PluginActivationEvent[];
   contributes: PluginContributions;
   enabledApiProposals?: string[];
+  permissionRationales?: Partial<Record<OptionalPermission, string>>;
   signature?: PluginSignature;
 }
 
@@ -136,6 +190,21 @@ export interface PluginPermissionGrant {
   permission: OptionalPermission;
   granted: boolean;
   grantedAt: string | null;
+}
+
+export type PluginDiagnosticKind =
+  | 'activation-error'
+  | 'runtime-crash'
+  | 'permission-denial'
+  | 'invocation-timeout';
+
+export interface PluginDiagnostic {
+  id: string;
+  kind: PluginDiagnosticKind;
+  message: string;
+  occurredAt: string;
+  operation?: string | null;
+  count: number;
 }
 
 export interface InstalledPlugin {
@@ -151,6 +220,7 @@ export interface InstalledPlugin {
   entryPath: string;
   entrySource?: string | null;
   crashCount: number;
+  diagnostics: PluginDiagnostic[];
   networkAllowlist: string[];
   manifest: PluginManifest;
   grantedPermissions: PluginPermissionGrant[];
@@ -173,6 +243,10 @@ export interface PluginLockRecord {
   version: string;
   sha256: string;
   signatureVerified: boolean;
+  signatureKeyId?: string | null;
+  installSource?: PluginInstallSource | null;
+  registryUrl?: string | null;
+  downloadUrl?: string | null;
   trust: PluginTrustState;
   enabled: boolean;
   grantedPermissions: PluginPermissionGrant[];
@@ -184,6 +258,8 @@ export type HostOperation =
   | 'document:replace'
   | 'document:get-plugin-data'
   | 'document:set-plugin-data'
+  | 'plugin:get-global-data'
+  | 'plugin:set-global-data'
   | 'network:get_json'
   | 'network:get_text'
   | 'audit:log';
@@ -217,12 +293,14 @@ export interface ElementLoopProvider {
 
 export interface PluginCommandContext {
   document: JSONContent;
+  screenplay?: ScreenplayDocument;
   metadata?: Record<string, unknown>;
 }
 
 export interface PluginCommand {
   id: string;
   title: string;
+  category?: string;
   shortcut?: string;
   handler: (context: PluginCommandContext) => void | Promise<void>;
 }
@@ -231,7 +309,37 @@ export interface RegisteredPluginCommand {
   id: string;
   pluginId: string;
   title: string;
+  category?: string;
   shortcut?: string;
+}
+
+export interface RegisteredCommandMenu {
+  id: string;
+  pluginId: string;
+  command: string;
+  location: CommandMenuLocation;
+  title: string;
+  group?: string;
+  icon?: BuiltinIconId;
+  priority?: number;
+  when?: string;
+}
+
+export interface RegisteredKeybinding {
+  id: string;
+  pluginId: string;
+  command: string;
+  key: string;
+  mac?: string;
+  windows?: string;
+  linux?: string;
+  when?: string;
+}
+
+export interface RegisteredPluginConfiguration {
+  pluginId: string;
+  title: string;
+  properties: ContributedConfigurationProperty[];
 }
 
 export type DocumentTransformHook = 'post-open' | 'pre-save' | 'pre-export';
@@ -239,6 +347,7 @@ export type DocumentTransformHook = 'post-open' | 'pre-save' | 'pre-export';
 export interface DocumentTransformContext {
   hook: DocumentTransformHook;
   document: JSONContent;
+  screenplay?: ScreenplayDocument;
   format?: string;
   metadata?: Record<string, unknown>;
 }
@@ -252,6 +361,7 @@ export interface DocumentTransform {
 
 export interface ExporterContext {
   document: JSONContent;
+  screenplay?: ScreenplayDocument;
   title: string | null;
   metadata?: Record<string, unknown>;
 }
@@ -290,6 +400,7 @@ export interface RegisteredImporter {
 
 export interface StatusBadgeContext {
   document: JSONContent;
+  screenplay?: ScreenplayDocument;
   metadata?: Record<string, unknown>;
 }
 
@@ -326,6 +437,7 @@ export interface InlineAnnotation {
 
 export interface InlineAnnotationContext {
   document: JSONContent;
+  screenplay?: ScreenplayDocument;
   selectionFrom: number;
   selectionTo: number;
   metadata?: Record<string, unknown>;
@@ -356,7 +468,7 @@ export interface RenderedInlineAnnotation {
   priority: number;
 }
 
-export type UIControlMount = 'top-bar' | 'bottom-bar';
+export type UIControlMount = 'top-bar' | 'bottom-bar' | 'editor-floating';
 export type UIControlKind = 'button' | 'toggle' | 'segmented';
 
 export type BuiltinIconId =
@@ -371,7 +483,16 @@ export type BuiltinIconId =
   | 'panel'
   | 'close'
   | 'settings'
-  | 'spark';
+  | 'spark'
+  | 'command'
+  | 'keyboard'
+  | 'template'
+  | 'title-page'
+  | 'export'
+  | 'diagnostics'
+  | 'warning'
+  | 'check'
+  | 'info';
 
 export type UIControlAction =
   | { type: 'command'; commandId: string }
@@ -383,6 +504,7 @@ export type UIControlAction =
 
 export interface UIControlStateContext {
   document: JSONContent;
+  screenplay?: ScreenplayDocument;
   currentElementType: ScreenplayElementType | null;
   previousElementType: string | null;
   isCurrentEmpty: boolean;
@@ -427,7 +549,12 @@ export interface UIPanelActionItem {
 }
 
 export type UIPanelBlock =
+  | { type: 'heading'; text: string; level?: 2 | 3 | 4 }
   | { type: 'text'; text: string }
+  | { type: 'divider' }
+  | { type: 'callout'; tone?: 'info' | 'success' | 'warning' | 'danger'; title?: string; text: string }
+  | { type: 'badgeList'; items: Array<{ label: string; value?: string; tone?: 'neutral' | 'info' | 'success' | 'warning' | 'danger' }> }
+  | { type: 'progress'; label: string; value: number; max?: number; tone?: 'neutral' | 'primary' | 'success' | 'warning' | 'danger' }
   | { type: 'list'; items: string[] }
   | { type: 'keyValue'; items: Array<{ key: string; value: string }> }
   | {
@@ -455,6 +582,7 @@ export interface UIPanelContent {
 
 export interface UIPanelStateContext {
   document: JSONContent;
+  screenplay?: ScreenplayDocument;
   currentElementType: ScreenplayElementType | null;
   selectionFrom: number;
   selectionTo: number;
@@ -528,20 +656,47 @@ export interface UIEvaluateResponse {
 
 export interface ProposedPluginApi {}
 
+export interface Disposable {
+  dispose(): void | Promise<void>;
+}
+
+export interface PluginStorage<T = unknown> {
+  get(): Promise<T>;
+  set(value: T): Promise<void>;
+  update(updater: (value: T) => T | Promise<T>): Promise<T>;
+  clear(): Promise<void>;
+}
+
+export interface ScreenplayMutationApi {
+  from(document: JSONContent, context?: ScreenplayDocumentContext): ScreenplayDocument;
+  getDocument(context?: ScreenplayDocumentContext): Promise<ScreenplayDocument>;
+  replaceDocument(next: JSONContent | ScreenplayDocument): Promise<void>;
+  mutate(
+    mutator: (
+      document: ScreenplayDocument
+    ) => void | JSONContent | ScreenplayDocument | Promise<void | JSONContent | ScreenplayDocument>
+  ): Promise<JSONContent>;
+  documentStorage<T = unknown>(defaultValue: T): PluginStorage<T>;
+  documentStorage<T = unknown>(key: string, defaultValue: T): PluginStorage<T>;
+  globalStorage<T = unknown>(defaultValue: T): PluginStorage<T>;
+  globalStorage<T = unknown>(key: string, defaultValue: T): PluginStorage<T>;
+}
+
 export interface PluginApi {
-  registerElementLoopProvider(provider: ElementLoopProvider): void;
-  registerCommand(command: PluginCommand): void;
-  registerDocumentTransform(transform: DocumentTransform): void;
-  registerExporter(exporter: Exporter): void;
-  registerImporter(importer: Importer): void;
-  registerStatusBadge(badge: StatusBadge): void;
-  registerInlineAnnotationProvider(provider: InlineAnnotationProvider): void;
-  registerUIControl(control: UIControlDefinition): void;
-  registerUIPanel(panel: UIPanelDefinition): void;
+  registerElementLoopProvider(provider: ElementLoopProvider): Disposable;
+  registerCommand(command: PluginCommand): Disposable;
+  registerDocumentTransform(transform: DocumentTransform): Disposable;
+  registerExporter(exporter: Exporter): Disposable;
+  registerImporter(importer: Importer): Disposable;
+  registerStatusBadge(badge: StatusBadge): Disposable;
+  registerInlineAnnotationProvider(provider: InlineAnnotationProvider): Disposable;
+  registerUIControl(control: UIControlDefinition): Disposable;
+  registerUIPanel(panel: UIPanelDefinition): Disposable;
   getDocument(): Promise<JSONContent>;
   replaceDocument(next: JSONContent): Promise<void>;
   getPluginData<T = unknown>(): Promise<T | null>;
   setPluginData(value: unknown): Promise<void>;
+  screenplay: ScreenplayMutationApi;
   requestPermission(permission: OptionalPermission): Promise<boolean>;
   hostCall<T>(operation: HostOperation, payload: unknown): Promise<T>;
   proposed?: ProposedPluginApi;
@@ -659,6 +814,24 @@ export interface WorkerRegisterUIPanelMessage {
   panel: Omit<UIPanelDefinition, 'onAction' | 'onRender'>;
 }
 
+export type WorkerRegistrationKind =
+  | 'element-loop-provider'
+  | 'command'
+  | 'transform'
+  | 'exporter'
+  | 'importer'
+  | 'status-badge'
+  | 'inline-annotation-provider'
+  | 'ui-control'
+  | 'ui-panel';
+
+export interface WorkerDisposeRegistrationMessage {
+  type: 'worker:dispose-registration';
+  pluginId: string;
+  kind: WorkerRegistrationKind;
+  id: string;
+}
+
 export interface WorkerHostRequestMessage {
   type: 'worker:host-request';
   pluginId: string;
@@ -683,6 +856,13 @@ export interface WorkerResponseMessage {
   error?: string;
 }
 
+export interface WorkerShutdownCompleteMessage {
+  type: 'worker:shutdown-complete';
+  pluginId: string;
+  ok: boolean;
+  error?: string;
+}
+
 export type WorkerToHostMessage =
   | WorkerReadyMessage
   | WorkerErrorMessage
@@ -695,13 +875,18 @@ export type WorkerToHostMessage =
   | WorkerRegisterInlineAnnotationProviderMessage
   | WorkerRegisterUIControlMessage
   | WorkerRegisterUIPanelMessage
+  | WorkerDisposeRegistrationMessage
   | WorkerHostRequestMessage
   | WorkerPermissionRequestMessage
-  | WorkerResponseMessage;
+  | WorkerResponseMessage
+  | WorkerShutdownCompleteMessage;
 
 export interface PluginStateSnapshot {
   installedPlugins: InstalledPlugin[];
   commands: RegisteredPluginCommand[];
+  menus: RegisteredCommandMenu[];
+  keybindings: RegisteredKeybinding[];
+  configurations: RegisteredPluginConfiguration[];
   exporters: RegisteredExporter[];
   importers: RegisteredImporter[];
   statusBadges: RegisteredStatusBadge[];

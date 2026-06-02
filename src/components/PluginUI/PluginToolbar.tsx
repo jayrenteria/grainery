@@ -1,22 +1,75 @@
+import { useEffect, useRef } from 'react';
 import { PluginIcon } from '../../plugins/ui/icons';
-import type { EvaluatedUIControl } from '../../plugins';
+import type { EvaluatedUIControl, UIControlMount } from '../../plugins';
 
 interface PluginToolbarProps {
-  mount: 'top-bar' | 'bottom-bar';
+  mount: UIControlMount;
   controls: EvaluatedUIControl[];
   onTrigger: (controlId: string) => void;
 }
 
 export function PluginToolbar({ mount, controls, onTrigger }: PluginToolbarProps) {
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (mount !== 'bottom-bar') {
+      return;
+    }
+
+    const root = document.documentElement;
+    const clearInsets = () => {
+      root.style.removeProperty('--plugin-bottom-left-inset');
+      root.style.removeProperty('--plugin-bottom-right-inset');
+    };
+
+    const updateInsets = () => {
+      const toolbar = toolbarRef.current;
+      if (!toolbar || controls.length === 0) {
+        clearInsets();
+        return;
+      }
+
+      const rect = toolbar.getBoundingClientRect();
+      const gap = 12;
+      const isRightCorner = rect.left > window.innerWidth / 2;
+
+      if (isRightCorner) {
+        root.style.removeProperty('--plugin-bottom-left-inset');
+        root.style.setProperty(
+          '--plugin-bottom-right-inset',
+          `${Math.ceil(window.innerWidth - rect.left + gap)}px`
+        );
+      } else {
+        root.style.setProperty('--plugin-bottom-left-inset', `${Math.ceil(rect.right + gap)}px`);
+        root.style.removeProperty('--plugin-bottom-right-inset');
+      }
+    };
+
+    updateInsets();
+
+    const resizeObserver = new ResizeObserver(updateInsets);
+    if (toolbarRef.current) {
+      resizeObserver.observe(toolbarRef.current);
+    }
+    window.addEventListener('resize', updateInsets);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateInsets);
+      clearInsets();
+    };
+  }, [mount, controls.length]);
+
   if (controls.length === 0) {
     return null;
   }
 
   return (
     <div
-      className={`plugin-toolbar ${mount === 'top-bar' ? 'plugin-toolbar-top' : 'plugin-toolbar-bottom'}`}
+      ref={toolbarRef}
+      className={`plugin-toolbar plugin-toolbar-${mount}`}
       role="toolbar"
-      aria-label={mount === 'top-bar' ? 'Plugin top toolbar' : 'Plugin bottom toolbar'}
+      aria-label={`Plugin ${mount.replace('-', ' ')} toolbar`}
     >
       {controls.map((control) => (
         <button

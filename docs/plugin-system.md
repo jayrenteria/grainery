@@ -84,6 +84,14 @@ Open screenplay documents can additionally persist plugin-scoped data in-file un
 
 - `pluginData[pluginId]`
 
+The worker SDK exposes that document-scoped data through both the legacy
+`api.getPluginData()` / `api.setPluginData(value)` calls and the typed
+`api.screenplay.documentStorage(defaultValue)` wrapper.
+
+Plugins can also keep lightweight app-scoped preferences with
+`api.screenplay.globalStorage(...)`. Global storage is keyed by plugin id in
+frontend local storage and is not written into screenplay files.
+
 ## Lifecycle: Install to Execution
 
 ### 1. Install
@@ -136,6 +144,9 @@ During `setup`, plugin calls SDK registration methods:
 - `registerUIPanel`
 
 Worker emits registration messages back to host; manager updates in-memory registries.
+Each registration method returns a `Disposable`; disposing it removes the worker handler
+and asks the manager to remove the corresponding in-memory registration. Existing plugins
+that ignore the return value remain compatible.
 
 ### 5. Invocation
 
@@ -146,6 +157,21 @@ Host can invoke plugin handlers via worker RPC:
 - Exporter/importer execution
 
 Pending requests are timeout-protected and isolated per worker.
+Invocation timeouts are persisted as plugin diagnostics and shown in Settings.
+
+Handler contexts are enriched inside the worker with `context.screenplay`, a
+`ScreenplayDocument` helper around the raw TipTap JSON snapshot. The helper supports
+scene/block/dialogue iteration, plain-text extraction, current selection inspection,
+safe range/anchor resolution, and common cloned-document mutations. Mutating helpers
+still commit through `document:replace`, so the existing `document:write` permission
+gate remains authoritative.
+
+### 6. Shutdown
+
+When installed plugin state is reloaded or workers are torn down, the manager sends
+`host:shutdown` and waits briefly for `worker:shutdown-complete` before terminating the
+worker. This gives async `dispose()` implementations time to flush plugin storage or
+release dynamic registrations while still bounding shutdown latency.
 
 ## Extension Points
 
@@ -172,6 +198,13 @@ Plugins can register commands with optional shortcuts.
 
 - Shortcuts are captured globally and dispatched to plugin workers
 - Commands receive current document snapshot
+- Manifest `contributes.menus` can expose commands in host-owned surfaces such as
+  `command-palette`, `main-menu`, `editor-context`, and `toolbar-overflow`
+- Manifest `contributes.keybindings` declares shortcuts separately from command metadata,
+  with optional platform overrides (`mac`, `windows`, `linux`)
+
+The legacy `command.shortcut` field is still supported. New plugins should prefer
+`contributes.keybindings` so Grainery can expose configurable shortcuts independently.
 
 ## 3) Document transforms
 
@@ -230,6 +263,7 @@ Plugins can mount declarative UI in host-rendered regions:
 
 - top bar controls (`mount: 'top-bar'`)
 - bottom bar controls (`mount: 'bottom-bar'`)
+- floating editor controls (`mount: 'editor-floating'`)
 - one side panel at a time
 
 Key properties:
@@ -241,7 +275,15 @@ Key properties:
 
 See `docs/plugin-ui-extension.md` for the complete API and behavior details.
 
-## 7) Inline annotations
+## 7) Plugin configuration schemas
+
+Plugins can declare host-renderable settings metadata in `contributes.configuration`.
+Supported property types are `string`, `number`, `boolean`, and `enum`. Grainery validates
+and indexes these schemas during plugin load and shows a Settings summary. A full settings
+value editor is intentionally staged separately so values can remain host-rendered and stored
+through plugin-scoped global storage.
+
+## 8) Inline annotations
 
 Plugins can provide inline highlight ranges rendered by the host editor layer.
 
@@ -271,6 +313,9 @@ Optional permissions:
 - `network:https`
 - `ui:mount`
 - `editor:annotations`
+
+`ui:mount` only permits host-rendered declarative UI. It does not permit arbitrary DOM injection.
+Any future advanced custom UI must use a separate sandboxed permission gate.
 
 Core permissions are declared in manifest and validated:
 
@@ -308,12 +353,26 @@ Enforcements:
 - Host must match plugin `networkAllowlist`
 - Operation is audit-logged
 
+### Permission UX
+
+Optional permissions are deny-by-default. When a worker requests an optional permission at runtime, the frontend prompt includes:
+
+- plugin name, id, and version;
+- permission id and host-authored description;
+- current allow/deny state;
+- author-provided `permissionRationales[permission]` text when present;
+- install trust state.
+
+Denied runtime permission requests and denied host operations are persisted as diagnostics.
+
 ### Isolation and fault tolerance
 
 - One worker per plugin
 - Worker crash does not crash app
-- Crash counts tracked in manager; repeated crashes trigger disable logic
+- Activation errors, worker crashes, permission denials, and invocation timeouts are persisted as diagnostics
+- Crash counts are persisted in plugin state; repeated crashes trigger disable logic
 - Invocation timeout guard prevents hung plugin calls
+- Settings can clear diagnostics and reset the persisted crash count after the user has reviewed them
 
 ### App hardening
 
@@ -327,12 +386,33 @@ Enforcements:
 1. **Sideload file install**
    - UI: Settings -> Plugins -> Install from file
    - Rust command: `plugin_install_from_file`
+   - Trust state: `unverified`
+   - Lock record stores archive SHA-256, source, enabled state, and granted permissions
+   - Sideload remains available for development/private distribution but is clearly marked unverified in Settings
 
 2. **Curated registry install**
    - UI: fetch registry + install entry
    - Rust commands:
      - `plugin_fetch_registry_index`
      - `plugin_install_from_registry`
+   - Trust state: `verified` only after trusted registry signature verification and archive SHA-256 verification
+   - Lock record stores archive SHA-256, signing key id, registry URL, download URL, source, enabled state, and granted permissions
+   - Registry updates preserve compatible granted permissions and enabled state, and the UI asks for confirmation before replacing an installed package
+
+## Trust and signing model
+
+Registry entries must include:
+
+- plugin id/name/version/description;
+- embedded manifest;
+- download URL;
+- archive SHA-256;
+- trusted registry signing key id;
+- signature over the SHA-256 string.
+
+Install rejects a registry entry when the manifest id/version differs from the registry record, the signing key is unknown, signature verification fails, or the downloaded archive hash does not match. A manifest signature in a sideloaded archive does not make the install verified; only the curated registry path can currently produce `trust: verified`.
+
+Settings shows the user-facing trust label, install source, lock hash, signature verification state, signing key id, registry URL, and download URL where available.
 
 ## ZIP packaging requirement (current)
 
@@ -387,6 +467,9 @@ Available API surface:
 - `registerInlineAnnotationProvider`
 - `registerUIControl`
 - `registerUIPanel`
+- manifest `menus`
+- manifest `keybindings`
+- manifest `configuration`
 - `getDocument`
 - `replaceDocument`
 - `getPluginData`

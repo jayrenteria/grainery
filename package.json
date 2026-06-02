@@ -8,6 +8,10 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "plugin:create": "node scripts/grainery-plugin.mjs create",
+    "plugin:validate": "node scripts/grainery-plugin.mjs validate",
+    "plugin:pack": "node scripts/grainery-plugin.mjs pack",
+    "plugin:check-archive": "node scripts/grainery-plugin.mjs check-archive",
     "validate:plugin-manifest": "node scripts/validate-plugin-manifest.mjs"
   },
   "dependencies": {

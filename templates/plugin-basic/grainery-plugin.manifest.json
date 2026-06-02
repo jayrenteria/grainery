@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "id": "__PLUGIN_ID__",
+  "name": "__PLUGIN_NAME__",
+  "version": "1.0.0",
+  "description": "A Grainery plugin.",
+  "engine": {
+    "grainery": ">=0.1.0",
+    "pluginApi": "^1.2.0"
+  },
+  "entry": "dist/main.js",
+  "permissions": [
+    "document:read",
+    "editor:commands"
+  ],
+  "optionalPermissions": [],
+  "networkAllowlist": [],
+  "activationEvents": [
+    "onCommand:hello-world"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "id": "hello-world",
+        "title": "Hello World",
+        "category": "Tools"
+      }
+    ],
+    "menus": [
+      {
+        "id": "hello-world-palette",
+        "command": "hello-world",
+        "location": "command-palette",
+        "group": "Tools",
+        "icon": "command",
+        "when": "plugin.enabled"
+      }
+    ],
+    "keybindings": [
+      {
+        "id": "hello-world-default",
+        "command": "hello-world",
+        "key": "Mod+Alt+H",
+        "when": "plugin.enabled"
+      }
+    ],
+    "exporters": [],
+    "importers": [],
+    "statusBadges": [],
+    "inlineAnnotationProviders": [],
+    "uiControls": [],
+    "uiPanels": [],
+    "transforms": []
+  },
+  "signature": {
+    "keyId": "local-dev",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "sig": "PLACEHOLDER"
+  }
+}

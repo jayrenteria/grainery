@@ -17,4 +17,11 @@ Runtime behavior:
 
 This example requires optional permission `ui:mount`.
 
-Package this directory as a `.grainery-plugin.zip` with `grainery-plugin.manifest.json` at the root to install via Settings -> Plugins -> Install from file.
+From the repo root:
+
+```bash
+npm run plugin:validate -- examples/plugins/element-toolbar --check-entry
+npm run plugin:pack -- examples/plugins/element-toolbar
+```
+
+Install the generated `.grainery-plugin.zip` via Settings -> Plugins -> Install from file.

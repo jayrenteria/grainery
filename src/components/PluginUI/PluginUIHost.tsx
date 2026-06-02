@@ -137,6 +137,10 @@ export function PluginUIHost({
     () => pluginManager.getUIControls('bottom-bar'),
     [pluginManager, pluginStateVersion]
   );
+  const allFloatingControls = useMemo(
+    () => pluginManager.getUIControls('editor-floating'),
+    [pluginManager, pluginStateVersion]
+  );
   const allPanels = useMemo(() => pluginManager.getUIPanels(), [pluginManager, pluginStateVersion]);
   const installedPlugins = useMemo(() => pluginManager.getInstalledPlugins(), [pluginManager, pluginStateVersion]);
 
@@ -185,6 +189,14 @@ export function PluginUIHost({
       }),
     [allBottomControls, context, pluginEnabledMap]
   );
+  const floatingControls = useMemo(
+    () =>
+      allFloatingControls.filter((control) => {
+        const whenContext = createWhenContext(context, Boolean(pluginEnabledMap[control.pluginId]));
+        return evaluateWhenClause(control.when, whenContext);
+      }),
+    [allFloatingControls, context, pluginEnabledMap]
+  );
   const panels = useMemo(
     () =>
       allPanels.filter((panel) => {
@@ -195,8 +207,8 @@ export function PluginUIHost({
   );
 
   const allControlIds = useMemo(
-    () => [...topControls, ...bottomControls].map((control) => control.id),
-    [topControls, bottomControls]
+    () => [...topControls, ...bottomControls, ...floatingControls].map((control) => control.id),
+    [topControls, bottomControls, floatingControls]
   );
   const allPanelIds = useMemo(() => panels.map((panel) => panel.id), [panels]);
 
@@ -393,6 +405,17 @@ export function PluginUIHost({
     }))
     .filter((control) => control.state.visible);
 
+  const evaluatedFloatingControls: EvaluatedUIControl[] = floatingControls
+    .map((control) => ({
+      ...control,
+      state: controlStateMap[control.id] ?? {
+        visible: true,
+        disabled: false,
+        active: false,
+      },
+    }))
+    .filter((control) => control.state.visible);
+
   const activePanel =
     panels.find((panel) => panel.id === activePanelId) ?? null;
 
@@ -412,6 +435,11 @@ export function PluginUIHost({
       <PluginToolbar
         mount="bottom-bar"
         controls={evaluatedBottomControls}
+        onTrigger={handleTriggerControl}
+      />
+      <PluginToolbar
+        mount="editor-floating"
+        controls={evaluatedFloatingControls}
         onTrigger={handleTriggerControl}
       />
       <PluginSidePanel

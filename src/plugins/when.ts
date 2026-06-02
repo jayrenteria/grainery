@@ -1,9 +1,10 @@
 import type { UIControlStateContext } from './types';
 
-export type WhenContextMap = Record<string, boolean>;
+export type WhenContextValue = boolean | string | number | null | undefined;
+export type WhenContextMap = Record<string, WhenContextValue>;
 
 interface Token {
-  type: 'ident' | 'and' | 'or' | 'not' | 'lparen' | 'rparen' | 'eof';
+  type: 'ident' | 'string' | 'and' | 'or' | 'not' | 'eq' | 'neq' | 'lparen' | 'rparen' | 'eof';
   value?: string;
 }
 
@@ -23,10 +24,6 @@ class Lexer {
 
     const ch = this.input[this.index];
 
-    if (ch === '!') {
-      this.index += 1;
-      return { type: 'not' };
-    }
     if (ch === '(') {
       this.index += 1;
       return { type: 'lparen' };
@@ -39,9 +36,38 @@ class Lexer {
       this.index += 2;
       return { type: 'and' };
     }
+    if (ch === '=' && this.input[this.index + 1] === '=') {
+      this.index += 2;
+      return { type: 'eq' };
+    }
+    if (ch === '!' && this.input[this.index + 1] === '=') {
+      this.index += 2;
+      return { type: 'neq' };
+    }
+    if (ch === '!') {
+      this.index += 1;
+      return { type: 'not' };
+    }
     if (ch === '|' && this.input[this.index + 1] === '|') {
       this.index += 2;
       return { type: 'or' };
+    }
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      this.index += 1;
+      const start = this.index;
+      while (this.index < this.input.length && this.input[this.index] !== quote) {
+        this.index += 1;
+      }
+      if (this.input[this.index] !== quote) {
+        throw new Error('Unterminated string literal');
+      }
+      const value = this.input.slice(start, this.index);
+      this.index += 1;
+      return {
+        type: 'string',
+        value,
+      };
     }
 
     if (/[a-zA-Z0-9_.-]/.test(ch)) {
@@ -80,30 +106,43 @@ class Parser {
     if (this.lookahead.type !== 'eof') {
       throw new Error('Unexpected trailing tokens');
     }
-    return result;
+    return Boolean(result);
   }
 
-  private parseOr(context: WhenContextMap): boolean {
+  private parseOr(context: WhenContextMap): WhenContextValue {
     let left = this.parseAnd(context);
     while (this.lookahead.type === 'or') {
       this.consume('or');
       const right = this.parseAnd(context);
-      left = left || right;
+      left = Boolean(left) || Boolean(right);
     }
     return left;
   }
 
-  private parseAnd(context: WhenContextMap): boolean {
-    let left = this.parseUnary(context);
+  private parseAnd(context: WhenContextMap): WhenContextValue {
+    let left = this.parseEquality(context);
     while (this.lookahead.type === 'and') {
       this.consume('and');
-      const right = this.parseUnary(context);
-      left = left && right;
+      const right = this.parseEquality(context);
+      left = Boolean(left) && Boolean(right);
     }
     return left;
   }
 
-  private parseUnary(context: WhenContextMap): boolean {
+  private parseEquality(context: WhenContextMap): WhenContextValue {
+    let left = this.parseUnary(context);
+    while (this.lookahead.type === 'eq' || this.lookahead.type === 'neq') {
+      const op = this.lookahead.type;
+      this.consume(op);
+      const right = this.parseUnary(context);
+      left = op === 'eq'
+        ? String(left ?? '') === String(right ?? '')
+        : String(left ?? '') !== String(right ?? '');
+    }
+    return left;
+  }
+
+  private parseUnary(context: WhenContextMap): WhenContextValue {
     if (this.lookahead.type === 'not') {
       this.consume('not');
       return !this.parseUnary(context);
@@ -111,11 +150,17 @@ class Parser {
     return this.parsePrimary(context);
   }
 
-  private parsePrimary(context: WhenContextMap): boolean {
+  private parsePrimary(context: WhenContextMap): WhenContextValue {
     if (this.lookahead.type === 'lparen') {
       this.consume('lparen');
       const value = this.parseOr(context);
       this.consume('rparen');
+      return value;
+    }
+
+    if (this.lookahead.type === 'string') {
+      const value = this.lookahead.value ?? '';
+      this.consume('string');
       return value;
     }
 
@@ -128,7 +173,7 @@ class Parser {
       if (key === 'false') {
         return false;
       }
-      return Boolean(context[key]);
+      return Object.prototype.hasOwnProperty.call(context, key) ? context[key] : false;
     }
 
     throw new Error('Expected identifier or parenthesized expression');
@@ -166,7 +211,11 @@ export function createWhenContext(
 
   return {
     'editor.hasSelection': hasSelection,
+    'editor.selection.empty': !hasSelection,
     'editor.isCurrentEmpty': Boolean(context.isCurrentEmpty),
+    'editor.currentElement': current ?? '',
+    'editor.previousElement': context.previousElementType ?? '',
+    'editor.hasPreviousElement': Boolean(context.previousElementType),
     'editor.element.sceneHeading': current === 'sceneHeading',
     'editor.element.action': current === 'action',
     'editor.element.character': current === 'character',

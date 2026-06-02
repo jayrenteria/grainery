@@ -41,9 +41,11 @@ export function parseWorkerMessage(value: unknown): WorkerToHostMessage | null {
     case 'worker:register-inline-annotation-provider':
     case 'worker:register-ui-control':
     case 'worker:register-ui-panel':
+    case 'worker:dispose-registration':
     case 'worker:host-request':
     case 'worker:permission-request':
     case 'worker:response':
+    case 'worker:shutdown-complete':
       return value as unknown as WorkerToHostMessage;
     default:
       return null;

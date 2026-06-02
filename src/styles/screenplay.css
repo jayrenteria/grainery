@@ -250,7 +250,8 @@
 
 /* Element type indicator */
 .element-type-indicator {
-  @apply fixed bottom-4 left-6 z-[100];
+  @apply fixed bottom-4 z-[100];
+  left: var(--plugin-bottom-left-inset, 1.5rem);
   @apply inline-flex items-center gap-2;
   @apply font-sans text-[11px] tracking-wide;
   @apply pointer-events-none select-none;
@@ -292,7 +293,8 @@
 
 /* Editor stats (word + page count) */
 .editor-stats {
-  @apply fixed bottom-4 right-6 z-[100];
+  @apply fixed bottom-4 z-[100];
+  right: var(--plugin-bottom-right-inset, 1.5rem);
   @apply inline-flex items-center gap-6;
   @apply font-sans text-[11px] uppercase tracking-wider;
   @apply text-base-content/50 pointer-events-none select-none;

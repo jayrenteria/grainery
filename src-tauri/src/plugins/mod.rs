@@ -41,6 +41,12 @@ pub struct PluginContributions {
     #[serde(default)]
     pub commands: Vec<ContributedCommand>,
     #[serde(default)]
+    pub menus: Vec<ContributedCommandMenu>,
+    #[serde(default)]
+    pub keybindings: Vec<ContributedKeybinding>,
+    #[serde(default)]
+    pub configuration: Option<ContributedConfiguration>,
+    #[serde(default)]
     pub exporters: Vec<ContributedExporter>,
     #[serde(default)]
     pub importers: Vec<ContributedImporter>,
@@ -62,7 +68,70 @@ pub struct ContributedCommand {
     pub id: String,
     pub title: String,
     #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
     pub shortcut: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContributedCommandMenu {
+    pub id: String,
+    pub command: String,
+    pub location: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub group: Option<String>,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub priority: Option<i64>,
+    #[serde(default)]
+    pub when: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContributedKeybinding {
+    pub id: String,
+    pub command: String,
+    pub key: String,
+    #[serde(default)]
+    pub mac: Option<String>,
+    #[serde(default)]
+    pub windows: Option<String>,
+    #[serde(default)]
+    pub linux: Option<String>,
+    #[serde(default)]
+    pub when: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContributedConfiguration {
+    #[serde(default)]
+    pub title: Option<String>,
+    pub properties: Vec<ContributedConfigurationProperty>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContributedConfigurationProperty {
+    pub id: String,
+    pub title: String,
+    #[serde(rename = "type")]
+    pub property_type: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub default: Option<Value>,
+    #[serde(default, rename = "enum")]
+    pub enum_values: Option<Vec<String>>,
+    #[serde(default)]
+    pub minimum: Option<f64>,
+    #[serde(default)]
+    pub maximum: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,6 +245,8 @@ pub struct PluginManifest {
     #[serde(default)]
     pub enabled_api_proposals: Vec<String>,
     #[serde(default)]
+    pub permission_rationales: HashMap<String, String>,
+    #[serde(default)]
     pub signature: Option<PluginSignature>,
 }
 
@@ -185,6 +256,28 @@ pub struct PluginPermissionGrant {
     pub permission: String,
     pub granted: bool,
     pub granted_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginDiagnostic {
+    pub id: String,
+    pub kind: String,
+    pub message: String,
+    pub occurred_at: String,
+    #[serde(default)]
+    pub operation: Option<String>,
+    #[serde(default)]
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginDiagnosticInput {
+    pub kind: String,
+    pub message: String,
+    #[serde(default)]
+    pub operation: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,6 +296,8 @@ pub struct InstalledPlugin {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entry_source: Option<String>,
     pub crash_count: u32,
+    #[serde(default)]
+    pub diagnostics: Vec<PluginDiagnostic>,
     #[serde(default)]
     pub network_allowlist: Vec<String>,
     pub manifest: PluginManifest,
@@ -231,6 +326,14 @@ pub struct PluginLockRecord {
     pub version: String,
     pub sha256: String,
     pub signature_verified: bool,
+    #[serde(default)]
+    pub signature_key_id: Option<String>,
+    #[serde(default)]
+    pub install_source: Option<String>,
+    #[serde(default)]
+    pub registry_url: Option<String>,
+    #[serde(default)]
+    pub download_url: Option<String>,
     pub trust: String,
     pub enabled: bool,
     #[serde(default)]
@@ -274,11 +377,7 @@ fn validate_plugin_id(plugin_id: &str) -> bool {
 fn is_optional_permission(permission: &str) -> bool {
     matches!(
         permission,
-        "fs:pick-read"
-            | "fs:pick-write"
-            | "network:https"
-            | "ui:mount"
-            | "editor:annotations"
+        "fs:pick-read" | "fs:pick-write" | "network:https" | "ui:mount" | "editor:annotations"
     )
 }
 
@@ -299,6 +398,52 @@ fn validate_local_contribution_id(id: &str) -> bool {
 
 fn is_supported_transform_hook(hook: &str) -> bool {
     matches!(hook, "post-open" | "pre-save" | "pre-export")
+}
+
+fn is_supported_menu_location(location: &str) -> bool {
+    matches!(
+        location,
+        "command-palette" | "main-menu" | "editor-context" | "toolbar-overflow"
+    )
+}
+
+fn is_supported_ui_mount(mount: &str) -> bool {
+    matches!(mount, "top-bar" | "bottom-bar" | "editor-floating")
+}
+
+fn is_supported_ui_kind(kind: &str) -> bool {
+    matches!(kind, "button" | "toggle" | "segmented")
+}
+
+fn is_supported_builtin_icon(icon: &str) -> bool {
+    matches!(
+        icon,
+        "scene-heading"
+            | "action"
+            | "character"
+            | "dialogue"
+            | "parenthetical"
+            | "transition"
+            | "chevron-left"
+            | "chevron-right"
+            | "panel"
+            | "close"
+            | "settings"
+            | "spark"
+            | "command"
+            | "keyboard"
+            | "template"
+            | "title-page"
+            | "export"
+            | "diagnostics"
+            | "warning"
+            | "check"
+            | "info"
+    )
+}
+
+fn is_supported_configuration_type(property_type: &str) -> bool {
+    matches!(property_type, "string" | "number" | "boolean" | "enum")
 }
 
 fn is_valid_activation_event(event: &str) -> bool {
@@ -372,7 +517,8 @@ fn save_store(app: &AppHandle, store: &PluginStore) -> Result<(), String> {
     let payload = serde_json::to_string_pretty(store)
         .map_err(|error| format!("Failed to serialize plugin store JSON: {}", error))?;
 
-    fs::write(store_path, payload).map_err(|error| format!("Failed to save plugin store file: {}", error))
+    fs::write(store_path, payload)
+        .map_err(|error| format!("Failed to save plugin store file: {}", error))
 }
 
 fn compute_sha256_hex(bytes: &[u8]) -> String {
@@ -381,7 +527,9 @@ fn compute_sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-fn read_manifest_from_zip(archive: &mut ZipArchive<Cursor<Vec<u8>>>) -> Result<PluginManifest, String> {
+fn read_manifest_from_zip(
+    archive: &mut ZipArchive<Cursor<Vec<u8>>>,
+) -> Result<PluginManifest, String> {
     let mut manifest_file = archive
         .by_name(MANIFEST_FILE_NAME)
         .map_err(|_| format!("Plugin archive missing {}", MANIFEST_FILE_NAME))?;
@@ -427,8 +575,7 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
     if !grainery_req.matches(&current_version) {
         return Err(format!(
             "Plugin engine mismatch. Requires Grainery {}, current version is {}",
-            manifest.engine.grainery,
-            current_version
+            manifest.engine.grainery, current_version
         ));
     }
 
@@ -442,8 +589,7 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
     if !plugin_api_req.matches(&plugin_api_version) {
         return Err(format!(
             "Plugin API mismatch. Requires {}, current API version is {}",
-            manifest.engine.plugin_api,
-            plugin_api_version
+            manifest.engine.plugin_api, plugin_api_version
         ));
     }
 
@@ -473,6 +619,19 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         }
     }
 
+    for permission in manifest.permission_rationales.keys() {
+        if !manifest
+            .optional_permissions
+            .iter()
+            .any(|item| item == permission)
+        {
+            return Err(format!(
+                "permissionRationales contains '{}' but the permission is not declared optional",
+                permission
+            ));
+        }
+    }
+
     if manifest.activation_events.is_empty() {
         return Err("activationEvents must include at least one event".to_string());
     }
@@ -487,23 +646,139 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         if !validate_local_contribution_id(&command.id) {
             return Err(format!("Invalid command contribution id '{}'", command.id));
         }
+        if command.title.trim().is_empty() {
+            return Err(format!(
+                "Command contribution '{}' title is required",
+                command.id
+            ));
+        }
+    }
+
+    for menu in &manifest.contributes.menus {
+        if !validate_local_contribution_id(&menu.id) {
+            return Err(format!(
+                "Invalid command menu contribution id '{}'",
+                menu.id
+            ));
+        }
+        if !validate_local_contribution_id(&menu.command) {
+            return Err(format!(
+                "Invalid command reference '{}' for menu '{}'",
+                menu.command, menu.id
+            ));
+        }
+        if !manifest
+            .contributes
+            .commands
+            .iter()
+            .any(|item| item.id == menu.command)
+        {
+            return Err(format!(
+                "Command menu '{}' references missing command '{}'",
+                menu.id, menu.command
+            ));
+        }
+        if !is_supported_menu_location(&menu.location) {
+            return Err(format!(
+                "Invalid command menu location '{}' for menu '{}'",
+                menu.location, menu.id
+            ));
+        }
+        if let Some(icon) = &menu.icon {
+            if !is_supported_builtin_icon(icon) {
+                return Err(format!("Invalid icon '{}' for menu '{}'", icon, menu.id));
+            }
+        }
+    }
+
+    for keybinding in &manifest.contributes.keybindings {
+        if !validate_local_contribution_id(&keybinding.id) {
+            return Err(format!(
+                "Invalid keybinding contribution id '{}'",
+                keybinding.id
+            ));
+        }
+        if keybinding.key.trim().is_empty() {
+            return Err(format!("Keybinding '{}' key is required", keybinding.id));
+        }
+        if !validate_local_contribution_id(&keybinding.command) {
+            return Err(format!(
+                "Invalid command reference '{}' for keybinding '{}'",
+                keybinding.command, keybinding.id
+            ));
+        }
+        if !manifest
+            .contributes
+            .commands
+            .iter()
+            .any(|item| item.id == keybinding.command)
+        {
+            return Err(format!(
+                "Keybinding '{}' references missing command '{}'",
+                keybinding.id, keybinding.command
+            ));
+        }
+    }
+
+    if let Some(configuration) = &manifest.contributes.configuration {
+        for property in &configuration.properties {
+            if !validate_local_contribution_id(&property.id) {
+                return Err(format!(
+                    "Invalid configuration property id '{}'",
+                    property.id
+                ));
+            }
+            if property.title.trim().is_empty() {
+                return Err(format!(
+                    "Configuration property '{}' title is required",
+                    property.id
+                ));
+            }
+            if !is_supported_configuration_type(&property.property_type) {
+                return Err(format!(
+                    "Invalid configuration property type '{}' for '{}'",
+                    property.property_type, property.id
+                ));
+            }
+            if property.property_type == "enum"
+                && property
+                    .enum_values
+                    .as_ref()
+                    .map(|items| items.is_empty())
+                    .unwrap_or(true)
+            {
+                return Err(format!(
+                    "Enum configuration property '{}' must include enum values",
+                    property.id
+                ));
+            }
+        }
     }
 
     for exporter in &manifest.contributes.exporters {
         if !validate_local_contribution_id(&exporter.id) {
-            return Err(format!("Invalid exporter contribution id '{}'", exporter.id));
+            return Err(format!(
+                "Invalid exporter contribution id '{}'",
+                exporter.id
+            ));
         }
     }
 
     for importer in &manifest.contributes.importers {
         if !validate_local_contribution_id(&importer.id) {
-            return Err(format!("Invalid importer contribution id '{}'", importer.id));
+            return Err(format!(
+                "Invalid importer contribution id '{}'",
+                importer.id
+            ));
         }
     }
 
     for badge in &manifest.contributes.status_badges {
         if !validate_local_contribution_id(&badge.id) {
-            return Err(format!("Invalid status badge contribution id '{}'", badge.id));
+            return Err(format!(
+                "Invalid status badge contribution id '{}'",
+                badge.id
+            ));
         }
     }
 
@@ -518,7 +793,28 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
 
     for control in &manifest.contributes.ui_controls {
         if !validate_local_contribution_id(&control.id) {
-            return Err(format!("Invalid UI control contribution id '{}'", control.id));
+            return Err(format!(
+                "Invalid UI control contribution id '{}'",
+                control.id
+            ));
+        }
+        if !is_supported_ui_mount(&control.mount) {
+            return Err(format!(
+                "Invalid UI control mount '{}' for '{}'",
+                control.mount, control.id
+            ));
+        }
+        if !is_supported_ui_kind(&control.kind) {
+            return Err(format!(
+                "Invalid UI control kind '{}' for '{}'",
+                control.kind, control.id
+            ));
+        }
+        if !is_supported_builtin_icon(&control.icon) {
+            return Err(format!(
+                "Invalid UI control icon '{}' for '{}'",
+                control.icon, control.id
+            ));
         }
     }
 
@@ -526,11 +822,22 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         if !validate_local_contribution_id(&panel.id) {
             return Err(format!("Invalid UI panel contribution id '{}'", panel.id));
         }
+        if let Some(icon) = &panel.icon {
+            if !is_supported_builtin_icon(icon) {
+                return Err(format!(
+                    "Invalid UI panel icon '{}' for '{}'",
+                    icon, panel.id
+                ));
+            }
+        }
     }
 
     for transform in &manifest.contributes.transforms {
         if !validate_local_contribution_id(&transform.id) {
-            return Err(format!("Invalid transform contribution id '{}'", transform.id));
+            return Err(format!(
+                "Invalid transform contribution id '{}'",
+                transform.id
+            ));
         }
 
         if !is_supported_transform_hook(&transform.hook) {
@@ -547,7 +854,12 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         }
 
         if let Some(local_id) = event.strip_prefix("onCommand:") {
-            if !manifest.contributes.commands.iter().any(|item| item.id == local_id) {
+            if !manifest
+                .contributes
+                .commands
+                .iter()
+                .any(|item| item.id == local_id)
+            {
                 return Err(format!(
                     "Activation event '{}' references missing command contribution",
                     event
@@ -557,7 +869,12 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         }
 
         if let Some(local_id) = event.strip_prefix("onExporter:") {
-            if !manifest.contributes.exporters.iter().any(|item| item.id == local_id) {
+            if !manifest
+                .contributes
+                .exporters
+                .iter()
+                .any(|item| item.id == local_id)
+            {
                 return Err(format!(
                     "Activation event '{}' references missing exporter contribution",
                     event
@@ -567,7 +884,12 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         }
 
         if let Some(local_id) = event.strip_prefix("onImporter:") {
-            if !manifest.contributes.importers.iter().any(|item| item.id == local_id) {
+            if !manifest
+                .contributes
+                .importers
+                .iter()
+                .any(|item| item.id == local_id)
+            {
                 return Err(format!(
                     "Activation event '{}' references missing importer contribution",
                     event
@@ -577,7 +899,12 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         }
 
         if let Some(local_id) = event.strip_prefix("onUIControl:") {
-            if !manifest.contributes.ui_controls.iter().any(|item| item.id == local_id) {
+            if !manifest
+                .contributes
+                .ui_controls
+                .iter()
+                .any(|item| item.id == local_id)
+            {
                 return Err(format!(
                     "Activation event '{}' references missing UI control contribution",
                     event
@@ -587,7 +914,12 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         }
 
         if let Some(local_id) = event.strip_prefix("onUIPanel:") {
-            if !manifest.contributes.ui_panels.iter().any(|item| item.id == local_id) {
+            if !manifest
+                .contributes
+                .ui_panels
+                .iter()
+                .any(|item| item.id == local_id)
+            {
                 return Err(format!(
                     "Activation event '{}' references missing UI panel contribution",
                     event
@@ -627,7 +959,12 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         }
 
         if let Some(hook) = event.strip_prefix("onTransform:") {
-            if !manifest.contributes.transforms.iter().any(|item| item.hook == hook) {
+            if !manifest
+                .contributes
+                .transforms
+                .iter()
+                .any(|item| item.hook == hook)
+            {
                 return Err(format!(
                     "Activation event '{}' references missing transform hook contribution",
                     event
@@ -667,8 +1004,9 @@ fn extract_zip_to_directory(
                 .map_err(|error| format!("Failed to create plugin parent directory: {}", error))?;
         }
 
-        let mut output_file = fs::File::create(&output_path)
-            .map_err(|error| format!("Failed to create plugin file {:?}: {}", output_path, error))?;
+        let mut output_file = fs::File::create(&output_path).map_err(|error| {
+            format!("Failed to create plugin file {:?}: {}", output_path, error)
+        })?;
         std::io::copy(&mut file, &mut output_file)
             .map_err(|error| format!("Failed to write plugin file {:?}: {}", output_path, error))?;
 
@@ -681,10 +1019,7 @@ fn extract_zip_to_directory(
 }
 
 fn trusted_registry_keys() -> HashMap<&'static str, &'static str> {
-    HashMap::from([(
-        "main-2026",
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-    )])
+    HashMap::from([("main-2026", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")])
 }
 
 fn verify_registry_signature(
@@ -725,7 +1060,10 @@ fn verify_registry_signature(
         .map_err(|error| format!("Signature verification failed: {}", error))
 }
 
-fn normalize_grants(manifest: &PluginManifest, grants: Vec<PluginPermissionGrant>) -> Vec<PluginPermissionGrant> {
+fn normalize_grants(
+    manifest: &PluginManifest,
+    grants: Vec<PluginPermissionGrant>,
+) -> Vec<PluginPermissionGrant> {
     let mut output = Vec::new();
 
     for optional in &manifest.optional_permissions {
@@ -793,6 +1131,9 @@ fn install_plugin_from_zip_bytes(
     install_source: &str,
     trust: &str,
     signature_verified: bool,
+    signature_key_id: Option<String>,
+    registry_url: Option<String>,
+    download_url: Option<String>,
 ) -> Result<InstalledPlugin, String> {
     let cursor = Cursor::new(zip_bytes.clone());
     let mut archive = ZipArchive::new(cursor)
@@ -800,6 +1141,13 @@ fn install_plugin_from_zip_bytes(
 
     let manifest = read_manifest_from_zip(&mut archive)?;
     validate_manifest(&manifest)?;
+
+    let mut store = load_store(app)?;
+    let previous = store
+        .installed_plugins
+        .iter()
+        .find(|plugin| plugin.id == manifest.id)
+        .cloned();
 
     let install_base = plugin_install_base_dir(app)?;
     let plugin_dir = install_base.join(sanitize_plugin_id(&manifest.id));
@@ -825,8 +1173,6 @@ fn install_plugin_from_zip_bytes(
     let entry_source = fs::read_to_string(&final_entry_path)
         .map_err(|error| format!("Failed to read extracted plugin entry file: {}", error))?;
 
-    let mut store = load_store(app)?;
-
     let now = now_iso();
 
     let installed_plugin = InstalledPlugin {
@@ -834,20 +1180,41 @@ fn install_plugin_from_zip_bytes(
         name: manifest.name.clone(),
         version: manifest.version.clone(),
         description: manifest.description.clone(),
-        enabled: true,
+        enabled: previous
+            .as_ref()
+            .map(|plugin| plugin.enabled)
+            .unwrap_or(true),
         trust: trust.to_string(),
         install_source: install_source.to_string(),
-        installed_at: now.clone(),
+        installed_at: previous
+            .as_ref()
+            .map(|plugin| plugin.installed_at.clone())
+            .unwrap_or_else(|| now.clone()),
         updated_at: now.clone(),
         entry_path: final_entry_path.to_string_lossy().to_string(),
         entry_source: Some(entry_source),
-        crash_count: 0,
+        crash_count: previous
+            .as_ref()
+            .map(|plugin| plugin.crash_count)
+            .unwrap_or(0),
+        diagnostics: previous
+            .as_ref()
+            .map(|plugin| plugin.diagnostics.clone())
+            .unwrap_or_default(),
         network_allowlist: manifest.network_allowlist.clone(),
-        granted_permissions: normalize_grants(&manifest, Vec::new()),
+        granted_permissions: normalize_grants(
+            &manifest,
+            previous
+                .as_ref()
+                .map(|plugin| plugin.granted_permissions.clone())
+                .unwrap_or_default(),
+        ),
         manifest: manifest.clone(),
     };
 
-    store.installed_plugins.retain(|plugin| plugin.id != manifest.id);
+    store
+        .installed_plugins
+        .retain(|plugin| plugin.id != manifest.id);
     store
         .lock_records
         .retain(|record| record.plugin_id != manifest.id);
@@ -859,8 +1226,12 @@ fn install_plugin_from_zip_bytes(
         version: manifest.version,
         sha256: compute_sha256_hex(&zip_bytes),
         signature_verified,
+        signature_key_id,
+        install_source: Some(install_source.to_string()),
+        registry_url,
+        download_url,
         trust: trust.to_string(),
-        enabled: true,
+        enabled: installed_plugin.enabled,
         granted_permissions: installed_plugin.granted_permissions.clone(),
         updated_at: now,
     };
@@ -920,7 +1291,10 @@ fn select_registry_entry(
         .collect::<Vec<_>>();
 
     if matches.is_empty() {
-        return Err(format!("Plugin '{}' not found in registry index", plugin_id));
+        return Err(format!(
+            "Plugin '{}' not found in registry index",
+            plugin_id
+        ));
     }
 
     if let Some(version) = version {
@@ -953,8 +1327,8 @@ fn select_registry_entry(
 }
 
 fn enforce_network_allowlist(plugin: &InstalledPlugin, url: &str) -> Result<(), String> {
-    let parsed = reqwest::Url::parse(url)
-        .map_err(|error| format!("Invalid URL '{}': {}", url, error))?;
+    let parsed =
+        reqwest::Url::parse(url).map_err(|error| format!("Invalid URL '{}': {}", url, error))?;
 
     if parsed.scheme() != "https" {
         return Err("Only https:// URLs are allowed for plugin network calls".to_string());
@@ -983,7 +1357,12 @@ fn enforce_network_allowlist(plugin: &InstalledPlugin, url: &str) -> Result<(), 
     Ok(())
 }
 
-fn append_audit_log(app: &AppHandle, plugin_id: &str, operation: &str, payload: &Value) -> Result<(), String> {
+fn append_audit_log(
+    app: &AppHandle,
+    plugin_id: &str,
+    operation: &str,
+    payload: &Value,
+) -> Result<(), String> {
     let log_path = plugin_root(app)?.join(PLUGIN_AUDIT_LOG_FILE);
     let mut file = fs::OpenOptions::new()
         .append(true)
@@ -1000,6 +1379,33 @@ fn append_audit_log(app: &AppHandle, plugin_id: &str, operation: &str, payload: 
 
     writeln!(file, "{}", line)
         .map_err(|error| format!("Failed to write plugin audit log entry: {}", error))
+}
+
+fn is_supported_diagnostic_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "activation-error" | "runtime-crash" | "permission-denial" | "invocation-timeout"
+    )
+}
+
+fn diagnostic_id(plugin_id: &str, kind: &str, operation: Option<&str>) -> String {
+    format!(
+        "{}:{}:{}:{}",
+        plugin_id,
+        kind,
+        operation.unwrap_or("general"),
+        Utc::now().timestamp_millis()
+    )
+}
+
+fn trim_diagnostics(diagnostics: &mut Vec<PluginDiagnostic>) {
+    const MAX_DIAGNOSTICS_PER_PLUGIN: usize = 25;
+    if diagnostics.len() <= MAX_DIAGNOSTICS_PER_PLUGIN {
+        return;
+    }
+
+    let extra = diagnostics.len() - MAX_DIAGNOSTICS_PER_PLUGIN;
+    diagnostics.drain(0..extra);
 }
 
 #[tauri::command]
@@ -1024,7 +1430,16 @@ pub fn plugin_install_from_file(app: AppHandle, path: String) -> Result<Installe
     let zip_bytes = fs::read(&path)
         .map_err(|error| format!("Failed to read plugin archive '{}': {}", path, error))?;
 
-    install_plugin_from_zip_bytes(&app, zip_bytes, "sideload", "unverified", false)
+    install_plugin_from_zip_bytes(
+        &app,
+        zip_bytes,
+        "sideload",
+        "unverified",
+        false,
+        None,
+        None,
+        None,
+    )
 }
 
 #[tauri::command]
@@ -1089,7 +1504,16 @@ pub async fn plugin_install_from_registry(
         ));
     }
 
-    install_plugin_from_zip_bytes(&app, zip_bytes, "registry", "verified", true)
+    install_plugin_from_zip_bytes(
+        &app,
+        zip_bytes,
+        "registry",
+        "verified",
+        true,
+        Some(selected.signature_key_id),
+        Some(registry_url),
+        Some(selected.download_url),
+    )
 }
 
 #[tauri::command]
@@ -1101,7 +1525,9 @@ pub fn plugin_uninstall(app: AppHandle, plugin_id: String) -> Result<(), String>
     let mut store = load_store(&app)?;
 
     let before_count = store.installed_plugins.len();
-    store.installed_plugins.retain(|plugin| plugin.id != plugin_id);
+    store
+        .installed_plugins
+        .retain(|plugin| plugin.id != plugin_id);
     store
         .lock_records
         .retain(|record| record.plugin_id != plugin_id);
@@ -1179,7 +1605,10 @@ pub fn plugin_update_permissions(
         }
 
         if !is_optional_permission(&permission.permission) {
-            return Err(format!("Unsupported permission '{}'", permission.permission));
+            return Err(format!(
+                "Unsupported permission '{}'",
+                permission.permission
+            ));
         }
     }
 
@@ -1192,6 +1621,111 @@ pub fn plugin_update_permissions(
         .find(|record| record.plugin_id == plugin_id)
     {
         lock.granted_permissions = plugin.granted_permissions.clone();
+        lock.updated_at = plugin.updated_at.clone();
+    }
+
+    let mut output = plugin.clone();
+    hydrate_entry_source(&mut output);
+
+    save_store(&app, &store)?;
+
+    Ok(output)
+}
+
+#[tauri::command]
+pub fn plugin_record_diagnostic(
+    app: AppHandle,
+    plugin_id: String,
+    diagnostic: PluginDiagnosticInput,
+) -> Result<InstalledPlugin, String> {
+    if !validate_plugin_id(&plugin_id) {
+        return Err("Invalid plugin id".to_string());
+    }
+
+    if !is_supported_diagnostic_kind(&diagnostic.kind) {
+        return Err(format!(
+            "Unsupported plugin diagnostic kind '{}'",
+            diagnostic.kind
+        ));
+    }
+
+    let mut store = load_store(&app)?;
+    let plugin = store
+        .installed_plugins
+        .iter_mut()
+        .find(|plugin| plugin.id == plugin_id)
+        .ok_or_else(|| format!("Plugin '{}' is not installed", plugin_id))?;
+
+    let now = now_iso();
+    let next_count = if diagnostic.kind == "runtime-crash" {
+        plugin.crash_count = plugin.crash_count.saturating_add(1);
+        plugin.crash_count
+    } else {
+        plugin
+            .diagnostics
+            .iter()
+            .rev()
+            .find(|item| item.kind == diagnostic.kind && item.operation == diagnostic.operation)
+            .map(|item| item.count.saturating_add(1))
+            .unwrap_or(1)
+    };
+
+    plugin.diagnostics.push(PluginDiagnostic {
+        id: diagnostic_id(
+            &plugin_id,
+            &diagnostic.kind,
+            diagnostic.operation.as_deref(),
+        ),
+        kind: diagnostic.kind,
+        message: diagnostic.message,
+        occurred_at: now.clone(),
+        operation: diagnostic.operation,
+        count: next_count,
+    });
+    trim_diagnostics(&mut plugin.diagnostics);
+    plugin.updated_at = now.clone();
+
+    if let Some(lock) = store
+        .lock_records
+        .iter_mut()
+        .find(|record| record.plugin_id == plugin_id)
+    {
+        lock.updated_at = now;
+    }
+
+    let mut output = plugin.clone();
+    hydrate_entry_source(&mut output);
+
+    save_store(&app, &store)?;
+
+    Ok(output)
+}
+
+#[tauri::command]
+pub fn plugin_clear_diagnostics(
+    app: AppHandle,
+    plugin_id: String,
+) -> Result<InstalledPlugin, String> {
+    if !validate_plugin_id(&plugin_id) {
+        return Err("Invalid plugin id".to_string());
+    }
+
+    let mut store = load_store(&app)?;
+    let plugin = store
+        .installed_plugins
+        .iter_mut()
+        .find(|plugin| plugin.id == plugin_id)
+        .ok_or_else(|| format!("Plugin '{}' is not installed", plugin_id))?;
+
+    plugin.diagnostics.clear();
+    plugin.crash_count = 0;
+    plugin.updated_at = now_iso();
+
+    if let Some(lock) = store
+        .lock_records
+        .iter_mut()
+        .find(|record| record.plugin_id == plugin_id)
+    {
         lock.updated_at = plugin.updated_at.clone();
     }
 
@@ -1243,7 +1777,10 @@ pub async fn plugin_host_call(
                 .map_err(|error| format!("Network request failed: {}", error))?;
 
             if !response.status().is_success() {
-                return Err(format!("HTTP request failed with status {}", response.status()));
+                return Err(format!(
+                    "HTTP request failed with status {}",
+                    response.status()
+                ));
             }
 
             response
@@ -1271,7 +1808,10 @@ pub async fn plugin_host_call(
                 .map_err(|error| format!("Network request failed: {}", error))?;
 
             if !response.status().is_success() {
-                return Err(format!("HTTP request failed with status {}", response.status()));
+                return Err(format!(
+                    "HTTP request failed with status {}",
+                    response.status()
+                ));
             }
 
             let body = response
