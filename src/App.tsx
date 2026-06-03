@@ -620,6 +620,19 @@ function App() {
     });
   }, [saveCurrentDocument]);
 
+  const performAppExit = useCallback(async () => {
+    if (isClosingRef.current) {
+      return;
+    }
+
+    isClosingRef.current = true;
+    try {
+      await invoke('exit_app');
+    } finally {
+      isClosingRef.current = false;
+    }
+  }, []);
+
   const requestAppExit = useCallback(async () => {
     if (isClosingRef.current) {
       return;
@@ -630,13 +643,8 @@ function App() {
       return;
     }
 
-    isClosingRef.current = true;
-    try {
-      await invoke('exit_app');
-    } finally {
-      isClosingRef.current = false;
-    }
-  }, [confirmQuitWithUnsavedChanges]);
+    await performAppExit();
+  }, [confirmQuitWithUnsavedChanges, performAppExit]);
 
   const confirmInstallUpdateWithUnsavedChanges = useCallback(async (): Promise<boolean> => {
     if (!(viewRef.current === 'editor' && isDirtyRef.current)) {
@@ -850,6 +858,46 @@ function App() {
     editor.commands.openFind();
     setEditorVersion((prev) => prev + 1);
   }, []);
+
+  useEffect(() => {
+    const claimFindShortcut = (event: KeyboardEvent) => {
+      const isCommandShortcut = event.ctrlKey || event.metaKey;
+      if (!isCommandShortcut || event.altKey) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      if (key === 'f' && !event.shiftKey) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        handleFind();
+        return;
+      }
+
+      if (key === 'h' && !event.shiftKey) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        handleReplace();
+        return;
+      }
+
+      if (key === 'g') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.shiftKey) {
+          handleFindPrevious();
+        } else {
+          handleFindNext();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', claimFindShortcut, true);
+
+    return () => {
+      window.removeEventListener('keydown', claimFindShortcut, true);
+    };
+  }, [handleFind, handleFindNext, handleFindPrevious, handleReplace]);
 
   const handleSaveTitlePage = useCallback((titlePage: TitlePageData | null) => {
     setDocument((prev) => ({
@@ -1081,18 +1129,13 @@ function App() {
         return;
       }
 
-      isClosingRef.current = true;
-      try {
-        await appWindow.close();
-      } finally {
-        isClosingRef.current = false;
-      }
+      await performAppExit();
     });
 
     return () => {
       void unlisten.then((fn) => fn());
     };
-  }, [confirmQuitWithUnsavedChanges]);
+  }, [confirmQuitWithUnsavedChanges, performAppExit]);
 
   useEffect(() => {
     pluginDataRef.current = document.pluginData ?? {};
