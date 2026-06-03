@@ -3,8 +3,10 @@ import type { Editor } from '@tiptap/core';
 import type { ResolvedPos } from '@tiptap/pm/model';
 import {
   getEnterElementType,
+  getElementSeedText,
   getNextElementType,
   getPreviousElementType,
+  hasOnlyElementSeedText,
   isScreenplayElementType,
 } from '../lib/elementConfig';
 import type { DocumentMode, ScreenplayElementType } from '../lib/types';
@@ -43,9 +45,46 @@ function resolveFromPlugins(
 
 function insertNewNodeOfType(editor: Editor, nextType: ScreenplayElementType): boolean {
   const { $from } = editor.state.selection;
-  const endPos = $from.end();
+  const insertPos = $from.end() + 1;
+  const seedText = getElementSeedText(nextType);
+  const node = seedText
+    ? { type: nextType, content: [{ type: 'text', text: seedText }] }
+    : { type: nextType };
 
-  return editor.chain().insertContentAt(endPos + 1, { type: nextType }).focus().run();
+  const chain = editor.chain().insertContentAt(insertPos, node);
+  if (seedText) {
+    chain.setTextSelection(insertPos + 1 + seedText.length);
+  }
+  return chain.focus().run();
+}
+
+function isNodeEffectivelyEmpty(type: ScreenplayElementType, text: string): boolean {
+  return text.trim().length === 0 || hasOnlyElementSeedText(type, text);
+}
+
+function setCurrentNodeType(
+  editor: Editor,
+  currentType: ScreenplayElementType,
+  nextType: ScreenplayElementType,
+  currentText: string
+): boolean {
+  const shouldClearCurrentSeed = hasOnlyElementSeedText(currentType, currentText);
+  const shouldSeedNext = isNodeEffectivelyEmpty(currentType, currentText);
+  const seedText = shouldSeedNext ? getElementSeedText(nextType) : null;
+  const { $from } = editor.state.selection;
+  let chain = editor.chain();
+
+  if (shouldClearCurrentSeed) {
+    chain = chain.deleteRange({ from: $from.start(), to: $from.end() });
+  }
+
+  chain = chain.setNode(nextType);
+
+  if (seedText) {
+    chain = chain.insertContent(seedText);
+  }
+
+  return chain.focus().run();
 }
 
 export const ScreenplayKeymap = Extension.create<ScreenplayKeymapOptions>({
@@ -71,21 +110,22 @@ export const ScreenplayKeymap = Extension.create<ScreenplayKeymapOptions>({
           return false;
         }
 
+        const currentText = currentNode.textContent;
         const prevNodeType = getPreviousNodeType($from);
         const pluginType = resolveFromPlugins(this.options.resolveElementLoop, {
           event: 'tab',
           currentType,
           documentMode: this.options.documentMode,
           previousType: prevNodeType,
-          isCurrentEmpty: currentNode.textContent.trim().length === 0,
+          isCurrentEmpty: isNodeEffectivelyEmpty(currentType, currentText),
         });
 
         if (pluginType) {
-          return editor.commands.setNode(pluginType);
+          return setCurrentNodeType(editor, currentType, pluginType, currentText);
         }
 
         const nextType = getNextElementType(this.options.documentMode, currentType, prevNodeType);
-        return editor.commands.setNode(nextType);
+        return setCurrentNodeType(editor, currentType, nextType, currentText);
       },
       'Shift-Tab': ({ editor }) => {
         const { $from } = editor.state.selection;
@@ -96,21 +136,22 @@ export const ScreenplayKeymap = Extension.create<ScreenplayKeymapOptions>({
           return false;
         }
 
+        const currentText = currentNode.textContent;
         const prevNodeType = getPreviousNodeType($from);
         const pluginType = resolveFromPlugins(this.options.resolveElementLoop, {
           event: 'shift-tab',
           currentType,
           documentMode: this.options.documentMode,
           previousType: prevNodeType,
-          isCurrentEmpty: currentNode.textContent.trim().length === 0,
+          isCurrentEmpty: isNodeEffectivelyEmpty(currentType, currentText),
         });
 
         if (pluginType) {
-          return editor.commands.setNode(pluginType);
+          return setCurrentNodeType(editor, currentType, pluginType, currentText);
         }
 
         const prevType = getPreviousElementType(this.options.documentMode, currentType, prevNodeType);
-        return editor.commands.setNode(prevType);
+        return setCurrentNodeType(editor, currentType, prevType, currentText);
       },
       // Escape returns to Action element
       Escape: ({ editor }) => {
@@ -123,20 +164,21 @@ export const ScreenplayKeymap = Extension.create<ScreenplayKeymapOptions>({
           return false;
         }
 
+        const currentText = currentNode.textContent;
         const pluginType = resolveFromPlugins(this.options.resolveElementLoop, {
           event: 'escape',
           currentType,
           documentMode: this.options.documentMode,
           previousType: prevNodeType,
-          isCurrentEmpty: currentNode.textContent.trim().length === 0,
+          isCurrentEmpty: isNodeEffectivelyEmpty(currentType, currentText),
         });
 
         if (pluginType) {
-          return editor.commands.setNode(pluginType);
+          return setCurrentNodeType(editor, currentType, pluginType, currentText);
         }
 
         if (currentType !== 'action') {
-          return editor.commands.setNode('action');
+          return setCurrentNodeType(editor, currentType, 'action', currentText);
         }
 
         return false;
@@ -157,7 +199,7 @@ export const ScreenplayKeymap = Extension.create<ScreenplayKeymapOptions>({
           currentType,
           documentMode: this.options.documentMode,
           previousType: prevNodeType,
-          isCurrentEmpty: currentNode.textContent.trim().length === 0,
+          isCurrentEmpty: isNodeEffectivelyEmpty(currentType, currentNode.textContent),
         });
 
         if (pluginType) {

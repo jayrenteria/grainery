@@ -67,6 +67,22 @@ export function getDefaultContent(mode: DocumentMode): JSONContent {
   };
 }
 
+export function getElementSeedText(type: ScreenplayElementType): string | null {
+  switch (type) {
+    case 'caption':
+      return 'CAP: ';
+    case 'soundEffect':
+      return 'SFX: ';
+    default:
+      return null;
+  }
+}
+
+export function hasOnlyElementSeedText(type: ScreenplayElementType, text: string): boolean {
+  const seedText = getElementSeedText(type);
+  return Boolean(seedText && text.trim() === seedText.trim());
+}
+
 export function getDocumentSchemaContentExpression(mode: DocumentMode): string {
   if (mode === 'comic') {
     return '(comicPage | comicPanel | action | character | dialogue | parenthetical | caption | soundEffect | sceneHeading | transition | pageBreak)+';

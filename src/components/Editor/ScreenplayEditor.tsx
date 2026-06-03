@@ -26,7 +26,12 @@ import {
   getFindReplaceState,
   PluginAnnotationsExtension,
 } from '../../extensions';
-import { getDefaultContent, getDocumentSchemaContentExpression } from '../../lib/elementConfig';
+import {
+  getDefaultContent,
+  getDocumentSchemaContentExpression,
+  hasOnlyElementSeedText,
+  isScreenplayElementType,
+} from '../../lib/elementConfig';
 import { ElementTypeIndicator } from './ElementTypeIndicator';
 import { EditorStats } from './EditorStats';
 import { FindReplaceBar } from './FindReplaceBar';
@@ -129,10 +134,14 @@ export function ScreenplayEditor({
     const { $from } = editor.state.selection;
     const node = $from.parent;
     const nodeName = node.type.name;
+    const currentType = isScreenplayElementType(nodeName) ? nodeName : null;
 
-    setCurrentElement(nodeName as ScreenplayElementType);
+    setCurrentElement(currentType);
     setPreviousElement(getPreviousNodeType(editor));
-    setIsCurrentElementEmpty(node.textContent.trim().length === 0);
+    setIsCurrentElementEmpty(
+      node.textContent.trim().length === 0 ||
+        Boolean(currentType && hasOnlyElementSeedText(currentType, node.textContent))
+    );
 
     if (nodeName === 'character') {
       setCharacterExtension(node.attrs.extension as CharacterExtension);

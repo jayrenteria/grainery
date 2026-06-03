@@ -47,8 +47,9 @@ export const SoundEffect = Node.create<SoundEffectOptions>({
     return {
       setSoundEffect:
         () =>
-        ({ commands }) => {
-          return commands.setNode(this.name);
+        ({ commands, state }) => {
+          const shouldSeed = state.selection.$from.parent.textContent.trim().length === 0;
+          return commands.setNode(this.name) && (!shouldSeed || commands.insertContent('SFX: '));
         },
     };
   },

@@ -12,7 +12,7 @@ declare module '@tiptap/core' {
   }
 }
 
-const CAPTION_REGEX = /^(CAPTION:)\s?$/i;
+const CAPTION_REGEX = /^(CAP(?:TION)?:)\s?$/i;
 
 export const Caption = Node.create<CaptionOptions>({
   name: 'caption',
@@ -47,8 +47,9 @@ export const Caption = Node.create<CaptionOptions>({
     return {
       setCaption:
         () =>
-        ({ commands }) => {
-          return commands.setNode(this.name);
+        ({ commands, state }) => {
+          const shouldSeed = state.selection.$from.parent.textContent.trim().length === 0;
+          return commands.setNode(this.name) && (!shouldSeed || commands.insertContent('CAP: '));
         },
     };
   },
@@ -60,7 +61,7 @@ export const Caption = Node.create<CaptionOptions>({
         handler: ({ state, range }) => {
           const { tr } = state;
           tr.setBlockType(range.from, range.to, this.type);
-          tr.insertText('CAPTION: ', range.from, range.to);
+          tr.insertText('CAP: ', range.from, range.to);
         },
       }),
     ];

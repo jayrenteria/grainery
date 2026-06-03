@@ -32,8 +32,10 @@ import {
   type TitlePageData,
 } from './lib/types';
 import {
+  getElementSeedText,
   getNextElementType,
   getPreviousElementType,
+  hasOnlyElementSeedText,
   isScreenplayElementType,
 } from './lib/elementConfig';
 import { PluginManager } from './plugins';
@@ -57,6 +59,36 @@ function getPreviousNodeType(editor: Editor): string | null {
 function getCurrentNodeType(editor: Editor): ScreenplayElementType | null {
   const nodeName = editor.state.selection.$from.parent.type.name;
   return isScreenplayElementType(nodeName) ? nodeName : null;
+}
+
+function isEditorCurrentNodeEffectivelyEmpty(editor: Editor): boolean {
+  const currentType = getCurrentNodeType(editor);
+  const currentText = editor.state.selection.$from.parent.textContent;
+  return currentText.trim().length === 0 || Boolean(currentType && hasOnlyElementSeedText(currentType, currentText));
+}
+
+function setEditorNodeType(editor: Editor, type: ScreenplayElementType): void {
+  const currentType = getCurrentNodeType(editor);
+  const { $from } = editor.state.selection;
+  const currentText = $from.parent.textContent;
+  const shouldClearCurrentSeed = currentType
+    ? hasOnlyElementSeedText(currentType, currentText)
+    : false;
+  const isCurrentEffectivelyEmpty =
+    currentText.trim().length === 0 || shouldClearCurrentSeed;
+  const seedText = isCurrentEffectivelyEmpty ? getElementSeedText(type) : null;
+  let chain = editor.chain();
+
+  if (shouldClearCurrentSeed) {
+    chain = chain.deleteRange({ from: $from.start(), to: $from.end() });
+  }
+
+  if (seedText) {
+    chain.setNode(type).insertContent(seedText).focus().run();
+    return;
+  }
+
+  chain.setNode(type).focus().run();
 }
 
 function getStoredKeymapHintsEnabled(): boolean {
@@ -195,7 +227,7 @@ function App() {
         if (!editor) {
           return true;
         }
-        return editor.state.selection.$from.parent.textContent.trim().length === 0;
+        return isEditorCurrentNodeEffectivelyEmpty(editor);
       },
       getSelectionRange: () => {
         const editor = editorRef.current;
@@ -210,7 +242,7 @@ function App() {
         if (!editor) {
           return;
         }
-        editor.commands.setNode(type);
+        setEditorNodeType(editor, type);
         setEditorVersion((prev) => prev + 1);
       },
       jumpToPosition: (position: number, offsetTop = 100) => {
@@ -267,7 +299,7 @@ function App() {
           currentType,
           documentMode: document.documentMode,
           previousType,
-          isCurrentEmpty: editor.state.selection.$from.parent.textContent.trim().length === 0,
+          isCurrentEmpty: isEditorCurrentNodeEffectivelyEmpty(editor),
         });
 
         const target =
@@ -275,7 +307,7 @@ function App() {
             ? getNextElementType(document.documentMode, currentType, previousType)
             : getPreviousElementType(document.documentMode, currentType, previousType));
 
-        editor.commands.setNode(target);
+        setEditorNodeType(editor, target);
         setEditorVersion((prev) => prev + 1);
       },
       escapeToAction: () => {
@@ -433,6 +465,21 @@ function App() {
       }
     }
   }, [isDirty, refreshRecentFiles, runTransformHook, view]);
+
+  const handleShowStartScreen = useCallback(async () => {
+    if (view === 'editor' && isDirty) {
+      const discard = await confirmUnsavedChanges();
+      if (!discard) return;
+    }
+
+    setView('start');
+    setIsDirty(false);
+    setStartScreenError(null);
+    setShowTitlePageEditor(false);
+    editorRef.current = null;
+    refreshRecentFiles();
+    await updateWindowTitle(null);
+  }, [isDirty, refreshRecentFiles, view]);
 
   const handleImportFdx = useCallback(async () => {
     if (view === 'editor' && isDirty) {
@@ -953,6 +1000,9 @@ function App() {
         case 'import_fdx':
           void handleImportFdx();
           break;
+        case 'start_screen':
+          void handleShowStartScreen();
+          break;
         case 'save':
           void handleSave();
           break;
@@ -1003,6 +1053,7 @@ function App() {
     handleFind,
     handleFindNext,
     handleFindPrevious,
+    handleShowStartScreen,
     handleImportFdx,
     handleNew,
     handleOpen,
@@ -1123,20 +1174,6 @@ function App() {
               />
             )}
 
-            {showSettings && (
-              <SettingsModal
-                onClose={() => setShowSettings(false)}
-                onOpenTitlePage={handleEditTitlePage}
-                titlePage={document.titlePage}
-                pluginManager={pluginManager}
-                pluginStateVersion={pluginStateVersion}
-                onRunPluginExporter={handleRunPluginExporter}
-                onRunPluginImporter={handleRunPluginImporter}
-                keymapHintsEnabled={keymapHintsEnabled}
-                onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
-              />
-            )}
-
             {statusBadges.length > 0 && (
               <div className="plugin-status-badges">
                 {statusBadges.map((badge) => (
@@ -1147,6 +1184,20 @@ function App() {
               </div>
             )}
           </>
+        )}
+
+        {showSettings && (
+          <SettingsModal
+            onClose={() => setShowSettings(false)}
+            onOpenTitlePage={handleEditTitlePage}
+            titlePage={document.titlePage}
+            pluginManager={pluginManager}
+            pluginStateVersion={pluginStateVersion}
+            onRunPluginExporter={handleRunPluginExporter}
+            onRunPluginImporter={handleRunPluginImporter}
+            keymapHintsEnabled={keymapHintsEnabled}
+            onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
+          />
         )}
       </div>
     </ThemeProvider>
