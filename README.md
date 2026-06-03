@@ -64,7 +64,7 @@ Other useful shortcuts:
 | `Cmd+O` | Open |
 | `Cmd+N` | New screenplay |
 
-Grainery also shows a subtle element indicator at the top of the editor so you always know what kind of screenplay block you are writing.
+Grainery also shows a subtle element indicator at the bottom left of the editor so you always know what kind of screenplay block you are writing.
 
 ## Plugin System
 
