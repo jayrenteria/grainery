@@ -48,12 +48,14 @@ fn export_pdf(
     title_page_json: Option<String>,
     output_path: String,
     document_title: String,
+    document_mode: String,
 ) -> Result<(), String> {
     pdf::generate_pdf(
         &content_json,
         title_page_json.as_deref(),
         &output_path,
         &document_title,
+        &document_mode,
     )
 }
 
@@ -88,14 +90,17 @@ pub fn run() {
         .manage(ExitControl::default())
         .setup(|app| {
             // File menu items
-            let new_item = MenuItemBuilder::with_id("new", "New")
+            let new_item = MenuItemBuilder::with_id("new", "New Screenplay")
                 .accelerator("CmdOrCtrl+N")
                 .build(app)?;
+            let new_comic_item = MenuItemBuilder::with_id("new_comic", "New Comic").build(app)?;
             let open_item = MenuItemBuilder::with_id("open", "Open...")
                 .accelerator("CmdOrCtrl+O")
                 .build(app)?;
             let import_fdx_item =
                 MenuItemBuilder::with_id("import_fdx", "Import Final Draft...").build(app)?;
+            let start_screen_item =
+                MenuItemBuilder::with_id("start_screen", "Start Screen").build(app)?;
             let save_item = MenuItemBuilder::with_id("save", "Save")
                 .accelerator("CmdOrCtrl+S")
                 .build(app)?;
@@ -114,8 +119,10 @@ pub fn run() {
 
             let file_menu = SubmenuBuilder::new(app, "File")
                 .item(&new_item)
+                .item(&new_comic_item)
                 .item(&open_item)
                 .item(&import_fdx_item)
+                .item(&start_screen_item)
                 .separator()
                 .item(&save_item)
                 .item(&save_as_item)

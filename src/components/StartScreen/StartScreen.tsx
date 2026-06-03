@@ -5,6 +5,7 @@ interface StartScreenProps {
   errorMessage: string | null;
   onDismissError: () => void;
   onNewScreenplay: () => void;
+  onNewComic: () => void;
   onOpenFile: () => void;
   onImportFdx: () => void;
   onOpenRecent: (path: string) => void;
@@ -61,6 +62,7 @@ export function StartScreen({
   errorMessage,
   onDismissError,
   onNewScreenplay,
+  onNewComic,
   onOpenFile,
   onImportFdx,
   onOpenRecent,
@@ -94,6 +96,16 @@ export function StartScreen({
           <span className="start-screen-shortcut" aria-hidden="true">
             <kbd>⌘</kbd>
             <kbd>N</kbd>
+          </span>
+        </button>
+
+        <button type="button" className="start-screen-new" onClick={onNewComic}>
+          <span className="start-screen-new-icon" aria-hidden="true">
+            +
+          </span>
+          <span className="start-screen-new-copy">
+            <span>Start a new comic</span>
+            <span>Page and panel script formatting</span>
           </span>
         </button>
 

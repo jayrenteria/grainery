@@ -1,11 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open, save, ask } from '@tauri-apps/plugin-dialog';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-import type { ScreenplayDocument, TitlePageData } from './types';
+import type { DocumentMode, ScreenplayDocument, TitlePageData } from './types';
 import type { JSONContent } from '@tiptap/react';
 import { exportToFountain } from './fountain';
 import { exportToFdx, importFromFdx } from './fdx';
 import { recordRecentFile } from './recentFiles';
+import { getDefaultContent } from './elementConfig';
 
 export async function updateWindowTitle(filename: string | null, isDirty: boolean = false): Promise<void> {
   const title = (filename || 'Untitled') + (isDirty ? ' - Edited' : '');
@@ -17,9 +18,10 @@ const FDX_EXTENSION = 'fdx';
 const APP_NAME = 'Grainery';
 const APP_VERSION = '0.1.0';
 
-export function createNewDocument(): ScreenplayDocument {
+export function createNewDocument(documentMode: ScreenplayDocument['documentMode'] = 'screenplay'): ScreenplayDocument {
   return {
     formatVersion: '1.0',
+    documentMode,
     application: {
       name: APP_NAME,
       version: APP_VERSION,
@@ -33,21 +35,20 @@ export function createNewDocument(): ScreenplayDocument {
       version: APP_VERSION,
     },
     titlePage: null,
-    document: {
-      type: 'doc',
-      content: [
-        {
-          type: 'sceneHeading',
-          content: [],
-        },
-      ],
-    },
+    document: getDefaultContent(documentMode),
     settings: {
       pageNumberStart: 1,
       showSceneNumbers: false,
       revision: null,
     },
     pluginData: {},
+  };
+}
+
+function normalizeDocument(doc: ScreenplayDocument): ScreenplayDocument {
+  return {
+    ...doc,
+    documentMode: doc.documentMode ?? 'screenplay',
   };
 }
 
@@ -109,7 +110,7 @@ export async function openFileAtPath(path: string): Promise<ScreenplayDocument> 
   }
 
   const doc = JSON.parse(content) as ScreenplayDocument;
-  const normalized = populateDocumentMetaFromPath(doc, path);
+  const normalized = populateDocumentMetaFromPath(normalizeDocument(doc), path);
   recordRecentFile(path);
   return normalized;
 }
@@ -195,7 +196,7 @@ export async function saveFileAs(
   const filePath = await save({
     filters: [
       {
-        name: 'Screenplay',
+        name: 'Grainery Document',
         extensions: [FILE_EXTENSION],
       },
     ],
@@ -268,7 +269,8 @@ export async function exportAsFountain(
 export async function exportAsPdf(
   editorContent: JSONContent,
   titlePage: TitlePageData | null,
-  currentFilename: string | null
+  currentFilename: string | null,
+  documentMode: DocumentMode
 ): Promise<boolean> {
   const baseName = currentFilename
     ? currentFilename.replace(/\.[^.]+$/, '')
@@ -291,6 +293,7 @@ export async function exportAsPdf(
     titlePageJson: titlePage ? JSON.stringify(titlePage) : null,
     outputPath: filePath,
     documentTitle: baseName,
+    documentMode,
   });
 
   return true;

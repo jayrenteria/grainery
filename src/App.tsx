@@ -25,12 +25,19 @@ import {
 } from './lib/fileOps';
 import { getRecentFiles, removeRecentFile } from './lib/recentFiles';
 import {
-  ELEMENT_CYCLE,
+  type DocumentMode,
   type RecentFileEntry,
   type ScreenplayDocument,
   type ScreenplayElementType,
   type TitlePageData,
 } from './lib/types';
+import {
+  getElementSeedText,
+  getNextElementType,
+  getPreviousElementType,
+  hasOnlyElementSeedText,
+  isScreenplayElementType,
+} from './lib/elementConfig';
 import { PluginManager } from './plugins';
 import type { RenderedInlineAnnotation, RenderedStatusBadge } from './plugins';
 import { PluginUIHost } from './components/PluginUI';
@@ -39,12 +46,6 @@ import './styles/screenplay.css';
 const AUTO_SAVE_DELAY_MS = 30_000;
 const INLINE_ANNOTATION_REFRESH_DEBOUNCE_MS = 120;
 const KEYMAP_HINTS_STORAGE_KEY = 'grainery-keymap-hints-enabled';
-const NON_DIALOGUE_CYCLE: ScreenplayElementType[] = ['sceneHeading', 'action', 'character', 'transition'];
-const DIALOGUE_BLOCK_CYCLE: ScreenplayElementType[] = ['dialogue', 'parenthetical'];
-
-function isScreenplayElementType(value: string): value is ScreenplayElementType {
-  return ELEMENT_CYCLE.includes(value as ScreenplayElementType);
-}
 
 function getPreviousNodeType(editor: Editor): string | null {
   const { $from } = editor.state.selection;
@@ -60,31 +61,34 @@ function getCurrentNodeType(editor: Editor): ScreenplayElementType | null {
   return isScreenplayElementType(nodeName) ? nodeName : null;
 }
 
-function getNextElementType(currentType: ScreenplayElementType, previousType: string | null): ScreenplayElementType {
-  if (previousType === 'character') {
-    if (currentType === 'dialogue' || currentType === 'parenthetical') {
-      const index = DIALOGUE_BLOCK_CYCLE.indexOf(currentType);
-      return DIALOGUE_BLOCK_CYCLE[(index + 1) % DIALOGUE_BLOCK_CYCLE.length];
-    }
-    return 'dialogue';
-  }
-
-  const index = NON_DIALOGUE_CYCLE.indexOf(currentType);
-  return index === -1 ? 'action' : NON_DIALOGUE_CYCLE[(index + 1) % NON_DIALOGUE_CYCLE.length];
+function isEditorCurrentNodeEffectivelyEmpty(editor: Editor): boolean {
+  const currentType = getCurrentNodeType(editor);
+  const currentText = editor.state.selection.$from.parent.textContent;
+  return currentText.trim().length === 0 || Boolean(currentType && hasOnlyElementSeedText(currentType, currentText));
 }
 
-function getPreviousElementType(currentType: ScreenplayElementType, previousType: string | null): ScreenplayElementType {
-  if (previousType === 'character' && (currentType === 'dialogue' || currentType === 'parenthetical')) {
-    const index = DIALOGUE_BLOCK_CYCLE.indexOf(currentType);
-    return DIALOGUE_BLOCK_CYCLE[(index - 1 + DIALOGUE_BLOCK_CYCLE.length) % DIALOGUE_BLOCK_CYCLE.length];
+function setEditorNodeType(editor: Editor, type: ScreenplayElementType): void {
+  const currentType = getCurrentNodeType(editor);
+  const { $from } = editor.state.selection;
+  const currentText = $from.parent.textContent;
+  const shouldClearCurrentSeed = currentType
+    ? hasOnlyElementSeedText(currentType, currentText)
+    : false;
+  const isCurrentEffectivelyEmpty =
+    currentText.trim().length === 0 || shouldClearCurrentSeed;
+  const seedText = isCurrentEffectivelyEmpty ? getElementSeedText(type) : null;
+  let chain = editor.chain();
+
+  if (shouldClearCurrentSeed) {
+    chain = chain.deleteRange({ from: $from.start(), to: $from.end() });
   }
 
-  if (currentType === 'dialogue' || currentType === 'parenthetical') {
-    return 'character';
+  if (seedText) {
+    chain.setNode(type).insertContent(seedText).focus().run();
+    return;
   }
 
-  const index = NON_DIALOGUE_CYCLE.indexOf(currentType);
-  return index === -1 ? 'action' : NON_DIALOGUE_CYCLE[(index - 1 + NON_DIALOGUE_CYCLE.length) % NON_DIALOGUE_CYCLE.length];
+  chain.setNode(type).focus().run();
 }
 
 function getStoredKeymapHintsEnabled(): boolean {
@@ -223,7 +227,7 @@ function App() {
         if (!editor) {
           return true;
         }
-        return editor.state.selection.$from.parent.textContent.trim().length === 0;
+        return isEditorCurrentNodeEffectivelyEmpty(editor);
       },
       getSelectionRange: () => {
         const editor = editorRef.current;
@@ -238,7 +242,7 @@ function App() {
         if (!editor) {
           return;
         }
-        editor.commands.setNode(type);
+        setEditorNodeType(editor, type);
         setEditorVersion((prev) => prev + 1);
       },
       jumpToPosition: (position: number, offsetTop = 100) => {
@@ -293,16 +297,17 @@ function App() {
         const pluginResolved = pluginManager.resolveElementLoop({
           event: direction === 'next' ? 'tab' : 'shift-tab',
           currentType,
+          documentMode: document.documentMode,
           previousType,
-          isCurrentEmpty: editor.state.selection.$from.parent.textContent.trim().length === 0,
+          isCurrentEmpty: isEditorCurrentNodeEffectivelyEmpty(editor),
         });
 
         const target =
           pluginResolved ?? (direction === 'next'
-            ? getNextElementType(currentType, previousType)
-            : getPreviousElementType(currentType, previousType));
+            ? getNextElementType(document.documentMode, currentType, previousType)
+            : getPreviousElementType(document.documentMode, currentType, previousType));
 
-        editor.commands.setNode(target);
+        setEditorNodeType(editor, target);
         setEditorVersion((prev) => prev + 1);
       },
       escapeToAction: () => {
@@ -314,7 +319,7 @@ function App() {
         setEditorVersion((prev) => prev + 1);
       },
     }),
-    [pluginManager]
+    [document.documentMode, pluginManager]
   );
 
   const runTransformHook = useCallback(
@@ -415,13 +420,13 @@ function App() {
     [document.meta.filename, isDirty, queueAutoSave]
   );
 
-  const handleNew = useCallback(async () => {
+  const handleNew = useCallback(async (documentMode: DocumentMode = 'screenplay') => {
     if (view === 'editor' && isDirty) {
       const discard = await confirmUnsavedChanges();
       if (!discard) return;
     }
 
-    const nextDoc = createNewDocument();
+    const nextDoc = createNewDocument(documentMode);
     setDocument(nextDoc);
     editorContentRef.current = nextDoc.document;
     setIsDirty(false);
@@ -460,6 +465,21 @@ function App() {
       }
     }
   }, [isDirty, refreshRecentFiles, runTransformHook, view]);
+
+  const handleShowStartScreen = useCallback(async () => {
+    if (view === 'editor' && isDirty) {
+      const discard = await confirmUnsavedChanges();
+      if (!discard) return;
+    }
+
+    setView('start');
+    setIsDirty(false);
+    setStartScreenError(null);
+    setShowTitlePageEditor(false);
+    editorRef.current = null;
+    refreshRecentFiles();
+    await updateWindowTitle(null);
+  }, [isDirty, refreshRecentFiles, view]);
 
   const handleImportFdx = useCallback(async () => {
     if (view === 'editor' && isDirty) {
@@ -617,31 +637,49 @@ function App() {
   }, [document, refreshRecentFiles, runTransformHook]);
 
   const handleExportFountain = useCallback(async () => {
+    if (document.documentMode !== 'screenplay') {
+      await askDialog('Fountain export is only available for screenplay documents.', {
+        title: 'Export Unavailable',
+        kind: 'info',
+        okLabel: 'OK',
+      });
+      return;
+    }
+
     try {
       const transformed = await runTransformHook('pre-export', editorContentRef.current);
       await exportAsFountain(transformed, document.titlePage, document.meta.filename);
     } catch (error) {
       console.error('Failed to export as Fountain:', error);
     }
-  }, [document.meta.filename, document.titlePage, runTransformHook]);
+  }, [document.documentMode, document.meta.filename, document.titlePage, runTransformHook]);
 
   const handleExportPdf = useCallback(async () => {
     try {
       const transformed = await runTransformHook('pre-export', editorContentRef.current);
-      await exportAsPdf(transformed, document.titlePage, document.meta.filename);
+      await exportAsPdf(transformed, document.titlePage, document.meta.filename, document.documentMode);
     } catch (error) {
       console.error('Failed to export as PDF:', error);
     }
-  }, [document.meta.filename, document.titlePage, runTransformHook]);
+  }, [document.documentMode, document.meta.filename, document.titlePage, runTransformHook]);
 
   const handleExportFdx = useCallback(async () => {
+    if (document.documentMode !== 'screenplay') {
+      await askDialog('Final Draft export is only available for screenplay documents.', {
+        title: 'Export Unavailable',
+        kind: 'info',
+        okLabel: 'OK',
+      });
+      return;
+    }
+
     try {
       const transformed = await runTransformHook('pre-export', editorContentRef.current);
       await exportAsFdx(transformed, document.titlePage, document.meta.filename);
     } catch (error) {
       console.error('Failed to export as Final Draft:', error);
     }
-  }, [document.meta.filename, document.titlePage, runTransformHook]);
+  }, [document.documentMode, document.meta.filename, document.titlePage, runTransformHook]);
 
   const handleEditTitlePage = useCallback(() => {
     setShowTitlePageEditor(true);
@@ -951,13 +989,19 @@ function App() {
 
       switch (event.payload) {
         case 'new':
-          void handleNew();
+          void handleNew('screenplay');
+          break;
+        case 'new_comic':
+          void handleNew('comic');
           break;
         case 'open':
           void handleOpen();
           break;
         case 'import_fdx':
           void handleImportFdx();
+          break;
+        case 'start_screen':
+          void handleShowStartScreen();
           break;
         case 'save':
           void handleSave();
@@ -1009,6 +1053,7 @@ function App() {
     handleFind,
     handleFindNext,
     handleFindPrevious,
+    handleShowStartScreen,
     handleImportFdx,
     handleNew,
     handleOpen,
@@ -1078,7 +1123,10 @@ function App() {
             errorMessage={startScreenError}
             onDismissError={() => setStartScreenError(null)}
             onNewScreenplay={() => {
-              void handleNew();
+              void handleNew('screenplay');
+            }}
+            onNewComic={() => {
+              void handleNew('comic');
             }}
             onOpenFile={() => {
               void handleOpen();
@@ -1095,6 +1143,7 @@ function App() {
           <>
             <ScreenplayEditor
               key={document.meta.id}
+              documentMode={document.documentMode}
               initialContent={document.document}
               inlineAnnotations={inlineAnnotations}
               onChange={handleEditorChange}
@@ -1113,6 +1162,7 @@ function App() {
               pluginStateVersion={pluginStateVersion}
               editorVersion={editorVersion}
               document={editorContentRef.current}
+              documentMode={document.documentMode}
               editorAdapter={editorAdapter}
             />
 
@@ -1121,20 +1171,6 @@ function App() {
                 titlePage={document.titlePage}
                 onSave={handleSaveTitlePage}
                 onClose={() => setShowTitlePageEditor(false)}
-              />
-            )}
-
-            {showSettings && (
-              <SettingsModal
-                onClose={() => setShowSettings(false)}
-                onOpenTitlePage={handleEditTitlePage}
-                titlePage={document.titlePage}
-                pluginManager={pluginManager}
-                pluginStateVersion={pluginStateVersion}
-                onRunPluginExporter={handleRunPluginExporter}
-                onRunPluginImporter={handleRunPluginImporter}
-                keymapHintsEnabled={keymapHintsEnabled}
-                onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
               />
             )}
 
@@ -1148,6 +1184,20 @@ function App() {
               </div>
             )}
           </>
+        )}
+
+        {showSettings && (
+          <SettingsModal
+            onClose={() => setShowSettings(false)}
+            onOpenTitlePage={handleEditTitlePage}
+            titlePage={document.titlePage}
+            pluginManager={pluginManager}
+            pluginStateVersion={pluginStateVersion}
+            onRunPluginExporter={handleRunPluginExporter}
+            onRunPluginImporter={handleRunPluginImporter}
+            keymapHintsEnabled={keymapHintsEnabled}
+            onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
+          />
         )}
       </div>
     </ThemeProvider>

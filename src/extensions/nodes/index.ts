@@ -4,4 +4,8 @@ export { Character } from './Character';
 export { Dialogue } from './Dialogue';
 export { Parenthetical } from './Parenthetical';
 export { Transition } from './Transition';
+export { ComicPage } from './ComicPage';
+export { ComicPanel } from './ComicPanel';
+export { Caption } from './Caption';
+export { SoundEffect } from './SoundEffect';
 export { PageBreak } from './PageBreak';

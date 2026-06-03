@@ -211,6 +211,9 @@ export function createWhenContext(
 
   return {
     'editor.hasSelection': hasSelection,
+    'editor.documentMode': context.documentMode,
+    'editor.mode.screenplay': context.documentMode === 'screenplay',
+    'editor.mode.comic': context.documentMode === 'comic',
     'editor.selection.empty': !hasSelection,
     'editor.isCurrentEmpty': Boolean(context.isCurrentEmpty),
     'editor.currentElement': current ?? '',
@@ -222,6 +225,10 @@ export function createWhenContext(
     'editor.element.dialogue': current === 'dialogue',
     'editor.element.parenthetical': current === 'parenthetical',
     'editor.element.transition': current === 'transition',
+    'editor.element.comicPage': current === 'comicPage',
+    'editor.element.comicPanel': current === 'comicPanel',
+    'editor.element.caption': current === 'caption',
+    'editor.element.soundEffect': current === 'soundEffect',
     'plugin.enabled': pluginEnabled,
   };
 }

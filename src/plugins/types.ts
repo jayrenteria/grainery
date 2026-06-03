@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/react';
-import type { ScreenplayElementType } from '../lib/types';
+import type { DocumentMode, ScreenplayElementType } from '../lib/types';
 import type {
   ScreenplayDocument,
   ScreenplayDocumentContext,
@@ -269,6 +269,7 @@ export type ElementLoopEvent = 'tab' | 'shift-tab' | 'enter' | 'escape';
 export interface ElementLoopContext {
   event: ElementLoopEvent;
   currentType: ScreenplayElementType;
+  documentMode: DocumentMode;
   previousType: string | null;
   isCurrentEmpty: boolean;
 }
@@ -276,6 +277,7 @@ export interface ElementLoopContext {
 export interface ElementLoopRule {
   when: {
     event: ElementLoopEvent;
+    documentModes?: DocumentMode[];
     currentTypes?: ScreenplayElementType[];
     previousTypes?: string[];
     isCurrentEmpty?: boolean;
@@ -478,6 +480,10 @@ export type BuiltinIconId =
   | 'dialogue'
   | 'parenthetical'
   | 'transition'
+  | 'comic-page'
+  | 'comic-panel'
+  | 'caption'
+  | 'sound-effect'
   | 'chevron-left'
   | 'chevron-right'
   | 'panel'
@@ -505,6 +511,7 @@ export type UIControlAction =
 export interface UIControlStateContext {
   document: JSONContent;
   screenplay?: ScreenplayDocument;
+  documentMode: DocumentMode;
   currentElementType: ScreenplayElementType | null;
   previousElementType: string | null;
   isCurrentEmpty: boolean;
@@ -583,6 +590,7 @@ export interface UIPanelContent {
 export interface UIPanelStateContext {
   document: JSONContent;
   screenplay?: ScreenplayDocument;
+  documentMode: DocumentMode;
   currentElementType: ScreenplayElementType | null;
   selectionFrom: number;
   selectionTo: number;
