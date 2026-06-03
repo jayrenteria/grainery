@@ -9,6 +9,7 @@ import { ask as askDialog, open as openDialog, save as saveDialog } from '@tauri
 import { ScreenplayEditor, TitlePageEditor } from './components/Editor';
 import { SettingsModal } from './components/Settings';
 import { StartScreen } from './components/StartScreen';
+import { UpdateDialog, type UpdateDialogStatus } from './components/Updates';
 import { ThemeProvider } from './contexts/ThemeContext';
 import {
   createNewDocument,
@@ -23,6 +24,15 @@ import {
   confirmUnsavedChanges,
   updateWindowTitle,
 } from './lib/fileOps';
+import {
+  type AvailableAppUpdate,
+  type UpdateDownloadProgress,
+  checkForAppUpdate,
+  installAppUpdate,
+  recordStartupUpdateCheck,
+  relaunchApp,
+  shouldRunStartupUpdateCheck,
+} from './lib/appUpdates';
 import { getRecentFiles, removeRecentFile } from './lib/recentFiles';
 import {
   type DocumentMode,
@@ -95,6 +105,10 @@ function getStoredKeymapHintsEnabled(): boolean {
   return localStorage.getItem(KEYMAP_HINTS_STORAGE_KEY) !== 'false';
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function App() {
   const [view, setView] = useState<'start' | 'editor'>('start');
   const [document, setDocument] = useState<ScreenplayDocument>(createNewDocument);
@@ -109,6 +123,11 @@ function App() {
   const [inlineAnnotations, setInlineAnnotations] = useState<RenderedInlineAnnotation[]>([]);
   const [isResolvingInitialOpen, setIsResolvingInitialOpen] = useState(true);
   const [keymapHintsEnabled, setKeymapHintsEnabled] = useState(getStoredKeymapHintsEnabled);
+  const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
+  const [updateDialogStatus, setUpdateDialogStatus] = useState<UpdateDialogStatus>('checking');
+  const [availableUpdate, setAvailableUpdate] = useState<AvailableAppUpdate | null>(null);
+  const [updateProgress, setUpdateProgress] = useState<UpdateDownloadProgress | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   const editorRef = useRef<Editor | null>(null);
   const editorContentRef = useRef<JSONContent>(document.document);
@@ -619,6 +638,106 @@ function App() {
     }
   }, [confirmQuitWithUnsavedChanges]);
 
+  const confirmInstallUpdateWithUnsavedChanges = useCallback(async (): Promise<boolean> => {
+    if (!(viewRef.current === 'editor' && isDirtyRef.current)) {
+      return true;
+    }
+
+    const shouldSave = await askDialog('You have unsaved changes. Save before installing the update?', {
+      title: 'Unsaved Changes',
+      kind: 'warning',
+      okLabel: 'Save',
+      cancelLabel: "Don't Save",
+    });
+
+    if (shouldSave) {
+      return saveCurrentDocument();
+    }
+
+    return askDialog('Install the update without saving your changes?', {
+      title: 'Unsaved Changes',
+      kind: 'warning',
+      okLabel: 'Install',
+      cancelLabel: 'Cancel',
+    });
+  }, [saveCurrentDocument]);
+
+  const checkForUpdates = useCallback(async (silent: boolean) => {
+    if (!silent) {
+      setIsUpdateDialogOpen(true);
+      setUpdateDialogStatus('checking');
+      setAvailableUpdate(null);
+      setUpdateProgress(null);
+      setUpdateError(null);
+    }
+
+    try {
+      const nextUpdate = await checkForAppUpdate();
+
+      if (!nextUpdate) {
+        if (!silent) {
+          setUpdateDialogStatus('not-available');
+        }
+        return;
+      }
+
+      setAvailableUpdate(nextUpdate);
+      setUpdateProgress(null);
+      setUpdateError(null);
+      setUpdateDialogStatus('available');
+      setIsUpdateDialogOpen(true);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      if (silent) {
+        console.error('Startup update check failed:', error);
+        return;
+      }
+
+      setUpdateError(message);
+      setUpdateDialogStatus('error');
+      setIsUpdateDialogOpen(true);
+    } finally {
+      if (silent) {
+        recordStartupUpdateCheck();
+      }
+    }
+  }, []);
+
+  const handleCheckForUpdates = useCallback(() => {
+    void checkForUpdates(false);
+  }, [checkForUpdates]);
+
+  const handleInstallUpdate = useCallback(async () => {
+    if (!availableUpdate) {
+      return;
+    }
+
+    const canInstall = await confirmInstallUpdateWithUnsavedChanges();
+    if (!canInstall) {
+      return;
+    }
+
+    setUpdateDialogStatus('installing');
+    setUpdateProgress(null);
+    setUpdateError(null);
+
+    try {
+      await installAppUpdate(availableUpdate, setUpdateProgress);
+      setUpdateDialogStatus('installed');
+      await relaunchApp();
+    } catch (error) {
+      setUpdateError(getErrorMessage(error));
+      setUpdateDialogStatus('error');
+    }
+  }, [availableUpdate, confirmInstallUpdateWithUnsavedChanges]);
+
+  const handleRelaunchAfterUpdate = useCallback(() => {
+    void relaunchApp().catch((error) => {
+      setUpdateError(getErrorMessage(error));
+      setUpdateDialogStatus('error');
+    });
+  }, []);
+
   const handleSaveAs = useCallback(async () => {
     try {
       const transformed = await runTransformHook('pre-save', editorContentRef.current);
@@ -979,6 +1098,14 @@ function App() {
     pluginDataRef.current = document.pluginData ?? {};
   }, [document.pluginData]);
 
+  useEffect(() => {
+    if (!shouldRunStartupUpdateCheck()) {
+      return;
+    }
+
+    void checkForUpdates(true);
+  }, [checkForUpdates]);
+
   // Listen for native menu events
   useEffect(() => {
     const unlisten = listen<string>('menu-event', (event) => {
@@ -1036,6 +1163,9 @@ function App() {
         case 'settings':
           setShowSettings(true);
           break;
+        case 'check_updates':
+          handleCheckForUpdates();
+          break;
         case 'quit':
           void requestAppExit();
           break;
@@ -1060,6 +1190,7 @@ function App() {
     handleReplace,
     handleSave,
     handleSaveAs,
+    handleCheckForUpdates,
     requestAppExit,
     pluginManager,
   ]);
@@ -1197,6 +1328,19 @@ function App() {
             onRunPluginImporter={handleRunPluginImporter}
             keymapHintsEnabled={keymapHintsEnabled}
             onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
+          />
+        )}
+
+        {isUpdateDialogOpen && (
+          <UpdateDialog
+            status={updateDialogStatus}
+            update={availableUpdate}
+            progress={updateProgress}
+            errorMessage={updateError}
+            onCheckAgain={handleCheckForUpdates}
+            onInstall={handleInstallUpdate}
+            onRelaunch={handleRelaunchAfterUpdate}
+            onClose={() => setIsUpdateDialogOpen(false)}
           />
         )}
       </div>

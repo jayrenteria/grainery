@@ -86,6 +86,8 @@ fn exit_app(app: tauri::AppHandle, state: tauri::State<'_, ExitControl>) {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(PendingOpenFiles::default())
         .manage(ExitControl::default())
         .setup(|app| {
@@ -174,6 +176,8 @@ pub fn run() {
             let settings_item = MenuItemBuilder::with_id("settings", "Settings...")
                 .accelerator("CmdOrCtrl+,")
                 .build(app)?;
+            let check_updates_item =
+                MenuItemBuilder::with_id("check_updates", "Check for Updates...").build(app)?;
             let quit_item = MenuItemBuilder::with_id("quit", "Quit Grainery")
                 .accelerator("CmdOrCtrl+Q")
                 .build(app)?;
@@ -182,6 +186,7 @@ pub fn run() {
                 .about(None)
                 .separator()
                 .item(&settings_item)
+                .item(&check_updates_item)
                 .separator()
                 .services()
                 .separator()
