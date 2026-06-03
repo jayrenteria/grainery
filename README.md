@@ -69,3 +69,7 @@ npm run plugin:check-archive -- examples/plugins/wordcount/com.grainery.wordcoun
 ```
 
 Note: plugin manifests must target `engine.pluginApi: "^1.2.0"`. Earlier plugin API ranges are not supported. Optional permissions should include `permissionRationales` so users see why a plugin is asking for access.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
