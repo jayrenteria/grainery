@@ -1037,15 +1037,11 @@ function App() {
     const appWindow = getCurrentWindow();
 
     const unlisten = appWindow.onCloseRequested(async (event) => {
+      event.preventDefault();
+
       if (isClosingRef.current) {
         return;
       }
-
-      if (!(viewRef.current === 'editor' && isDirtyRef.current)) {
-        return;
-      }
-
-      event.preventDefault();
 
       const shouldQuit = await confirmQuitWithUnsavedChanges();
       if (!shouldQuit) {
