@@ -303,6 +303,9 @@ pub fn run() {
         .expect("error while building tauri application");
 
     app.run(|app_handle, event| {
+        // Windows/Linux title-bar close is handled by the frontend close-request hook.
+        // Keep the app-level quit interception for macOS app quits that bypass window close.
+        #[cfg(target_os = "macos")]
         if let tauri::RunEvent::ExitRequested { api, .. } = event {
             let exit_control = app_handle.state::<ExitControl>();
             let mut should_allow_exit = false;
