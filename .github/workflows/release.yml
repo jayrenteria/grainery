@@ -52,6 +52,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Verify release version
+        run: node scripts/validate-release-version.mjs
+
       - name: Build and publish Tauri app
         # tauri-action currently publishes tags as action-vX.Y.Z, not v1.
         uses: tauri-apps/tauri-action@action-v0.6.2
