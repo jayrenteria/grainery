@@ -1,1 +1,1 @@
-export { TitlePagePreview } from './TitlePagePreview';
+export { TitlePagePreview, TitlePagePreviewPage } from './TitlePagePreview';

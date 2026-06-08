@@ -1,4 +1,5 @@
 import { Modal } from '../Modal';
+import packageJson from '../../../package.json';
 import type { AvailableAppUpdate, UpdateDownloadProgress } from '../../lib/appUpdates';
 
 export type UpdateDialogStatus =
@@ -20,6 +21,13 @@ interface UpdateDialogProps {
   onClose: () => void;
 }
 
+interface UpdateDialogCopy {
+  title: string;
+  detail: string;
+}
+
+const errorMessageFallback = 'Something interrupted the update check. Try again when you are back online.';
+
 function formatDate(value: string | undefined): string | null {
   if (!value) {
     return null;
@@ -30,7 +38,11 @@ function formatDate(value: string | undefined): string | null {
     return value;
   }
 
-  return date.toLocaleString();
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 function formatBytes(value: number): string {
@@ -53,6 +65,84 @@ function getProgressPercent(progress: UpdateDownloadProgress | null): number | n
   return Math.min(100, Math.round((progress.downloadedBytes / progress.contentLength) * 100));
 }
 
+function getStatusCopy(
+  status: UpdateDialogStatus,
+  update: AvailableAppUpdate | null,
+  currentVersion: string
+): UpdateDialogCopy {
+  switch (status) {
+    case 'checking':
+      return {
+        title: 'Looking for a newer draft...',
+        detail: `Reaching the workshop to see if anything has changed since version ${currentVersion}.`,
+      };
+    case 'available':
+      return {
+        title: 'A newer draft is ready.',
+        detail: `Version ${update?.version ?? 'the latest release'} is available for Grainery.`,
+      };
+    case 'not-available':
+      return {
+        title: 'This draft is current.',
+        detail: `Nothing has changed since version ${currentVersion}.`,
+      };
+    case 'installing':
+      return {
+        title: 'Binding the newer draft...',
+        detail: 'Downloading the update and preparing Grainery to restart.',
+      };
+    case 'installed':
+      return {
+        title: 'The newer draft is in place.',
+        detail: 'Restart Grainery to open the updated version.',
+      };
+    case 'error':
+      return {
+        title: 'The draft could not be checked.',
+        detail: errorMessageFallback,
+      };
+  }
+}
+
+function UpdateRule({
+  status,
+  progressPercent,
+}: {
+  status: UpdateDialogStatus;
+  progressPercent: number | null;
+}) {
+  if (status === 'installing' && progressPercent !== null) {
+    return (
+      <div className="h-px overflow-hidden bg-base-300" aria-label={`${progressPercent}% downloaded`}>
+        <div className="h-full bg-primary" style={{ width: `${progressPercent}%` }} />
+      </div>
+    );
+  }
+
+  if (status === 'checking' || status === 'installing') {
+    return (
+      <>
+        <style>
+          {`
+            @keyframes grainery-update-rule {
+              0% { transform: translateX(-120%); }
+              100% { transform: translateX(330%); }
+            }
+          `}
+        </style>
+        <div className="relative h-px overflow-hidden bg-base-300" aria-hidden="true">
+          <div
+            className="absolute inset-y-0 left-0 w-1/3 bg-primary"
+            style={{ animation: 'grainery-update-rule 1.35s ease-in-out infinite' }}
+          />
+        </div>
+      </>
+    );
+  }
+
+  return <div className="h-px bg-base-300" aria-hidden="true" />;
+}
+
 export function UpdateDialog({
   status,
   update,
@@ -63,99 +153,81 @@ export function UpdateDialog({
   onRelaunch,
   onClose,
 }: UpdateDialogProps) {
-  const isBusy = status === 'checking' || status === 'installing';
   const progressPercent = getProgressPercent(progress);
+  const currentVersion = update?.currentVersion ?? packageJson.version;
   const releaseDate = formatDate(update?.date);
+  const copy = getStatusCopy(status, update, currentVersion);
+  const canDismiss = status !== 'installing';
+  const detail = status === 'error' ? errorMessage ?? errorMessageFallback : copy.detail;
 
   return (
-    <Modal onClose={isBusy ? () => undefined : onClose} className="w-[min(32rem,calc(100vw-2rem))]">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold text-base-content">Software Update</h2>
-          {update && (
-            <p className="mt-1 text-sm text-base-content/70">
-              Grainery {update.currentVersion} to {update.version}
-            </p>
-          )}
-        </div>
-        {!isBusy && (
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm btn-circle"
-            aria-label="Close update dialog"
-            onClick={onClose}
-          >
-            x
-          </button>
-        )}
+    <Modal
+      onClose={canDismiss ? onClose : () => undefined}
+      overlayClassName="backdrop-blur-[6px]"
+      className="w-[min(25.75rem,calc(100vw-2rem))] !gap-0 rounded-[14px] border border-base-300 !bg-base-100 !px-8 !pb-6 !pt-8 text-base-content shadow-2xl"
+    >
+      <div className="flex items-center gap-2">
+        <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
+        <span className="text-[11px] font-medium uppercase tracking-[0.22em] text-base-content/45">
+          Grainery
+        </span>
       </div>
 
-      {status === 'checking' && (
-        <div className="flex items-center gap-3 text-sm text-base-content/80">
-          <span className="loading loading-spinner loading-sm" aria-hidden="true" />
-          <span>Checking for updates...</span>
+      <h2 className="mt-6 font-mono text-[21px] font-bold leading-[1.25] tracking-normal text-base-content">
+        {copy.title}
+      </h2>
+
+      <p className="mt-3 max-w-[18.5rem] text-[13px] leading-5 text-base-content/60">
+        {detail}
+      </p>
+
+      {status === 'available' && update?.body && (
+        <div className="mt-5 max-h-28 overflow-auto rounded-md border border-base-300 bg-base-200/50 px-3 py-2 font-mono text-[12px] leading-5 text-base-content/70 whitespace-pre-wrap">
+          {update.body}
         </div>
       )}
 
-      {status === 'not-available' && (
-        <div className="alert py-3 text-sm">
-          <span>Grainery is up to date.</span>
-        </div>
+      {status === 'available' && releaseDate && (
+        <p className="mt-3 text-[11px] text-base-content/45">Published {releaseDate}</p>
       )}
 
-      {status === 'available' && update && (
-        <div className="flex flex-col gap-3">
-          <div className="alert alert-info py-3 text-sm">
-            <span>Grainery {update.version} is available.</span>
-          </div>
-          {releaseDate && (
-            <p className="text-xs text-base-content/60">Published {releaseDate}</p>
-          )}
-          {update.body && (
-            <div className="max-h-44 overflow-auto rounded-md border border-base-300 bg-base-200/50 p-3 text-sm whitespace-pre-wrap">
-              {update.body}
-            </div>
-          )}
-        </div>
+      {status === 'installing' && progress && (
+        <p className="mt-4 text-[11px] text-base-content/45">
+          {progress.contentLength
+            ? `${formatBytes(progress.downloadedBytes)} of ${formatBytes(progress.contentLength)}`
+            : `${formatBytes(progress.downloadedBytes)} downloaded`}
+        </p>
       )}
 
-      {status === 'installing' && (
-        <div className="flex flex-col gap-2">
-          <p className="text-sm text-base-content/80">Downloading and installing the update...</p>
-          <progress
-            className="progress progress-primary w-full"
-            value={progressPercent ?? undefined}
-            max={progressPercent === null ? undefined : 100}
-          />
-          {progress && (
-            <p className="text-xs text-base-content/60">
-              {progress.contentLength
-                ? `${formatBytes(progress.downloadedBytes)} of ${formatBytes(progress.contentLength)}`
-                : `${formatBytes(progress.downloadedBytes)} downloaded`}
-            </p>
-          )}
-        </div>
-      )}
+      <div className="mt-7">
+        <UpdateRule status={status} progressPercent={progressPercent} />
+      </div>
 
-      {status === 'installed' && (
-        <div className="alert alert-success py-3 text-sm">
-          <span>The update has been installed. Restart Grainery to finish.</span>
-        </div>
-      )}
+      <div className="mt-8 flex justify-end gap-5">
+        {status === 'checking' && (
+          <button
+            type="button"
+            className="bg-transparent p-0 text-[13px] font-medium text-base-content/45 shadow-none transition-colors hover:text-base-content/70"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+        )}
 
-      {status === 'error' && (
-        <div className="alert alert-error py-3 text-sm">
-          <span>{errorMessage ?? 'Update failed.'}</span>
-        </div>
-      )}
-
-      <div className="flex justify-end gap-2">
         {status === 'not-available' && (
           <>
-            <button type="button" className="btn btn-ghost" onClick={onCheckAgain}>
+            <button
+              type="button"
+              className="bg-transparent p-0 text-[13px] font-medium text-base-content/45 shadow-none transition-colors hover:text-base-content/70"
+              onClick={onCheckAgain}
+            >
               Check Again
             </button>
-            <button type="button" className="btn btn-primary" onClick={onClose}>
+            <button
+              type="button"
+              className="bg-transparent p-0 text-[13px] font-medium text-primary shadow-none transition-colors hover:text-primary/80"
+              onClick={onClose}
+            >
               Done
             </button>
           </>
@@ -163,27 +235,47 @@ export function UpdateDialog({
 
         {status === 'available' && (
           <>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>
+            <button
+              type="button"
+              className="bg-transparent p-0 text-[13px] font-medium text-base-content/45 shadow-none transition-colors hover:text-base-content/70"
+              onClick={onClose}
+            >
               Later
             </button>
-            <button type="button" className="btn btn-primary" onClick={onInstall}>
-              Install and Restart
+            <button
+              type="button"
+              className="bg-transparent p-0 text-[13px] font-medium text-primary shadow-none transition-colors hover:text-primary/80"
+              onClick={onInstall}
+            >
+              Install
             </button>
           </>
         )}
 
         {status === 'installed' && (
-          <button type="button" className="btn btn-primary" onClick={onRelaunch}>
-            Restart Now
+          <button
+            type="button"
+            className="bg-transparent p-0 text-[13px] font-medium text-primary shadow-none transition-colors hover:text-primary/80"
+            onClick={onRelaunch}
+          >
+            Restart
           </button>
         )}
 
         {status === 'error' && (
           <>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>
-              Done
+            <button
+              type="button"
+              className="bg-transparent p-0 text-[13px] font-medium text-base-content/45 shadow-none transition-colors hover:text-base-content/70"
+              onClick={onClose}
+            >
+              Dismiss
             </button>
-            <button type="button" className="btn btn-primary" onClick={onCheckAgain}>
+            <button
+              type="button"
+              className="bg-transparent p-0 text-[13px] font-medium text-primary shadow-none transition-colors hover:text-primary/80"
+              onClick={onCheckAgain}
+            >
               Try Again
             </button>
           </>

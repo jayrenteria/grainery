@@ -341,7 +341,48 @@
 }
 
 .element-type-dot {
-  @apply inline-block w-2 h-2 rounded-full bg-primary;
+  @apply inline-block w-2 h-2 rounded-full;
+  background: var(--element-type-dot-color, var(--color-primary));
+}
+
+.element-type-indicator[data-element-type='sceneHeading'] {
+  --element-type-dot-color: var(--color-primary);
+}
+
+.element-type-indicator[data-element-type='action'] {
+  --element-type-dot-color: var(--color-secondary);
+}
+
+.element-type-indicator[data-element-type='character'] {
+  --element-type-dot-color: color-mix(in oklch, var(--color-accent) 45%, var(--color-info));
+}
+
+.element-type-indicator[data-element-type='dialogue'] {
+  --element-type-dot-color: var(--color-info);
+}
+
+.element-type-indicator[data-element-type='parenthetical'] {
+  --element-type-dot-color: var(--color-success);
+}
+
+.element-type-indicator[data-element-type='transition'] {
+  --element-type-dot-color: var(--color-warning);
+}
+
+.element-type-indicator[data-element-type='comicPage'] {
+  --element-type-dot-color: color-mix(in oklch, var(--color-primary) 70%, var(--color-accent));
+}
+
+.element-type-indicator[data-element-type='comicPanel'] {
+  --element-type-dot-color: color-mix(in oklch, var(--color-primary) 65%, var(--color-info));
+}
+
+.element-type-indicator[data-element-type='caption'] {
+  --element-type-dot-color: color-mix(in oklch, var(--color-secondary) 70%, var(--color-success));
+}
+
+.element-type-indicator[data-element-type='soundEffect'] {
+  --element-type-dot-color: var(--color-error);
 }
 
 .element-type-label {
@@ -456,6 +497,533 @@
 /* App container */
 .app-container {
   @apply flex flex-col h-screen overflow-hidden bg-base-200;
+}
+
+.settings-screen {
+  @apply flex h-full min-h-0 flex-col overflow-y-auto;
+  background: var(--color-base-100);
+  color: var(--color-base-content);
+}
+
+.settings-topbar {
+  @apply sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between px-7;
+  background: color-mix(in oklch, var(--color-base-100) 94%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.settings-topbar-left {
+  @apply flex items-center;
+}
+
+.settings-back-button {
+  @apply flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent p-0 text-xl shadow-none transition-colors;
+  color: color-mix(in oklch, var(--color-base-content) 72%, transparent);
+}
+
+.settings-back-button:hover,
+.settings-back-button:focus-visible {
+  background: color-mix(in oklch, var(--color-base-content) 7%, transparent);
+  color: var(--color-base-content);
+}
+
+.settings-topbar-label {
+  @apply ml-[18px] text-base font-normal leading-none;
+  color: var(--color-base-content);
+  font-family: Courier, monospace;
+}
+
+.settings-topbar-theme {
+  @apply flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent p-0 text-lg shadow-none transition-colors;
+  color: color-mix(in oklch, var(--color-base-content) 72%, transparent);
+}
+
+.settings-topbar-theme:hover,
+.settings-topbar-theme:focus-visible {
+  background: color-mix(in oklch, var(--color-base-content) 7%, transparent);
+  color: var(--color-base-content);
+}
+
+.settings-page-heading {
+  @apply mx-auto w-[90%] max-w-[1080px] pt-[76px];
+}
+
+.settings-page-heading p {
+  @apply m-0 text-sm font-normal leading-none;
+  color: color-mix(in oklch, var(--color-base-content) 52%, transparent);
+}
+
+.settings-page-heading h1 {
+  @apply m-0 mt-3 text-left text-[1.4rem] font-normal leading-none;
+  color: var(--color-base-content);
+  font-family: Courier, monospace;
+  letter-spacing: 0;
+  font-weight: bold;
+}
+
+.settings-body {
+  @apply mx-auto grid w-[90%] max-w-[1080px] gap-14 pb-24 pt-10;
+  grid-template-columns: 196px minmax(0, 1fr);
+}
+
+.settings-sidebar {
+  @apply min-w-0;
+}
+
+.settings-sidebar-inner {
+  @apply sticky top-20;
+}
+
+.settings-tabs {
+  @apply flex flex-col;
+}
+
+.settings-tab {
+  @apply flex h-[35px] w-full items-center gap-3 rounded-md border-0 bg-transparent px-3 py-0 text-left text-sm font-normal shadow-none transition-colors;
+  color: color-mix(in oklch, var(--color-base-content) 62%, transparent);
+  font-family: Courier, monospace;
+}
+
+.settings-tab:hover,
+.settings-tab:focus-visible {
+  background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+  color: var(--color-base-content);
+}
+
+.settings-tab.is-active {
+  background: color-mix(in oklch, var(--color-base-content) 9%, transparent);
+  color: var(--color-base-content);
+}
+
+.settings-tab-icon {
+  @apply inline-flex w-[15px] shrink-0 items-center justify-center text-base leading-none;
+}
+
+.settings-sidebar-note {
+  @apply mt-6 m-0 text-xs leading-6;
+  color: color-mix(in oklch, var(--color-base-content) 43%, transparent);
+}
+
+.settings-content {
+  @apply min-w-0;
+}
+
+.settings-panel {
+  @apply flex max-w-[1000px] flex-col gap-8;
+}
+
+.settings-panel-wide {
+  @apply max-w-none;
+}
+
+.settings-panel-intro {
+  @apply m-0 max-w-[500px] text-sm leading-6;
+  color: color-mix(in oklch, var(--color-base-content) 72%, transparent);
+  font-family: Courier, monospace;
+}
+
+.settings-section-label {
+  @apply m-0 text-xs uppercase leading-none;
+  color: color-mix(in oklch, var(--color-base-content) 48%, transparent);
+  letter-spacing: 0.14em;
+}
+
+.settings-theme-grid {
+  @apply grid gap-3;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings-theme-card {
+  @apply flex h-[145px] min-w-0 flex-col overflow-hidden rounded-md border p-0 text-left shadow-none transition-colors;
+  border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+  background: color-mix(in oklch, var(--color-base-content) 4%, var(--color-base-100));
+}
+
+.settings-theme-card:hover,
+.settings-theme-card:focus-visible {
+  border-color: color-mix(in oklch, var(--color-primary) 42%, transparent);
+  background: color-mix(in oklch, var(--color-primary) 7%, var(--color-base-100));
+}
+
+.settings-theme-card.is-selected {
+  border-color: color-mix(in oklch, var(--color-primary) 56%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-primary) 42%, transparent);
+}
+
+.settings-theme-card-swatch {
+  @apply grid flex-1;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.settings-theme-card-swatch span {
+  @apply block h-full;
+}
+
+.settings-theme-card-label {
+  @apply flex h-9 items-center justify-between px-3 text-sm leading-none;
+  color: var(--color-base-content);
+  font-family: Courier, monospace;
+}
+
+.settings-theme-card.is-selected .settings-theme-card-label::after {
+  content: '✓';
+}
+
+.settings-row,
+.settings-card {
+  @apply rounded-md border;
+  border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+  background: color-mix(in oklch, var(--color-base-content) 3%, var(--color-base-100));
+}
+
+.settings-row {
+  @apply flex min-h-[92px] cursor-pointer items-center justify-between gap-7 px-0 py-4;
+}
+
+.settings-row > span {
+  @apply min-w-0 px-0;
+}
+
+.settings-row > span > span {
+  @apply block text-base leading-6;
+  color: var(--color-base-content);
+  font-family: Courier, monospace;
+}
+
+.settings-row small {
+  @apply mt-1 block text-sm leading-5;
+  color: color-mix(in oklch, var(--color-base-content) 48%, transparent);
+}
+
+.settings-editor-panel {
+  @apply max-w-[468px] gap-9;
+}
+
+.settings-editor-group {
+  @apply flex flex-col gap-5;
+}
+
+.settings-editor-option {
+  @apply grid min-h-[92px] cursor-pointer items-center gap-6 rounded-md px-0 py-4;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.settings-editor-option:hover .settings-editor-option-copy > span,
+.settings-editor-option:focus-within .settings-editor-option-copy > span {
+  color: var(--color-base-content);
+}
+
+.settings-editor-option-copy {
+  @apply min-w-0;
+}
+
+.settings-editor-option-copy > span {
+  @apply block text-base leading-6 transition-colors;
+  color: color-mix(in oklch, var(--color-base-content) 86%, transparent);
+  font-family: Courier, monospace;
+}
+
+.settings-editor-option-copy small {
+  @apply mt-1 block text-sm leading-5;
+  color: color-mix(in oklch, var(--color-base-content) 48%, transparent);
+}
+
+.settings-editor-option-control {
+  @apply flex shrink-0 items-center gap-3;
+}
+
+.settings-editor-option-control > span {
+  @apply text-xs uppercase leading-none;
+  color: color-mix(in oklch, var(--color-base-content) 42%, transparent);
+  letter-spacing: 0.12em;
+}
+
+.settings-plugins-panel {
+  @apply max-w-[760px] gap-9;
+}
+
+.settings-plugin-group {
+  @apply flex flex-col gap-5;
+}
+
+.settings-plugin-option {
+  @apply grid min-h-[92px] items-center gap-6 rounded-md px-0 py-4;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.settings-plugin-option-copy {
+  @apply min-w-0;
+}
+
+.settings-plugin-option-copy > span {
+  @apply block text-base leading-6;
+  color: color-mix(in oklch, var(--color-base-content) 86%, transparent);
+  font-family: Courier, monospace;
+}
+
+.settings-plugin-option-copy small {
+  @apply mt-1 block text-sm leading-5;
+  color: color-mix(in oklch, var(--color-base-content) 48%, transparent);
+}
+
+.settings-plugin-registry {
+  @apply grid items-end gap-3;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.settings-inline-button {
+  @apply rounded-md border bg-transparent px-3 py-2 text-sm shadow-none transition-colors;
+  border-color: color-mix(in oklch, var(--color-base-content) 16%, transparent);
+  color: color-mix(in oklch, var(--color-base-content) 74%, transparent);
+  font-family: Courier, monospace;
+}
+
+.settings-inline-button:hover,
+.settings-inline-button:focus-visible {
+  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+  border-color: color-mix(in oklch, var(--color-primary) 34%, transparent);
+  color: var(--color-base-content);
+}
+
+.settings-inline-button:disabled {
+  @apply cursor-not-allowed;
+  opacity: 0.45;
+}
+
+.settings-plugin-list {
+  @apply flex flex-col gap-3;
+}
+
+.settings-plugin-card {
+  @apply rounded-md border p-4;
+  border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+  background: color-mix(in oklch, var(--color-base-content) 3%, var(--color-base-100));
+}
+
+.settings-plugin-card-top {
+  @apply grid items-start gap-5;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.settings-plugin-card-copy {
+  @apply min-w-0;
+}
+
+.settings-plugin-card-copy > div {
+  @apply text-base leading-6;
+  color: color-mix(in oklch, var(--color-base-content) 88%, transparent);
+  font-family: Courier, monospace;
+}
+
+.settings-plugin-card-copy > div span {
+  color: color-mix(in oklch, var(--color-base-content) 44%, transparent);
+}
+
+.settings-plugin-card-copy small {
+  @apply mt-1 block text-sm leading-5;
+  color: color-mix(in oklch, var(--color-base-content) 48%, transparent);
+}
+
+.settings-plugin-enabled {
+  @apply flex shrink-0 cursor-pointer items-center gap-3;
+}
+
+.settings-plugin-enabled > span {
+  @apply text-xs uppercase leading-none;
+  color: color-mix(in oklch, var(--color-base-content) 42%, transparent);
+  letter-spacing: 0.12em;
+}
+
+.settings-plugin-actions {
+  @apply mt-4 flex flex-wrap gap-2;
+}
+
+.settings-inline-button-danger {
+  border-color: color-mix(in oklch, var(--color-error) 24%, transparent);
+  color: color-mix(in oklch, var(--color-error) 82%, var(--color-base-content));
+}
+
+.settings-inline-button-danger:hover,
+.settings-inline-button-danger:focus-visible {
+  background: color-mix(in oklch, var(--color-error) 9%, transparent);
+  border-color: color-mix(in oklch, var(--color-error) 38%, transparent);
+}
+
+.settings-plugin-permissions {
+  @apply mt-5 flex flex-col gap-3;
+}
+
+.settings-plugin-subhead {
+  @apply text-xs uppercase leading-none;
+  color: color-mix(in oklch, var(--color-base-content) 48%, transparent);
+  letter-spacing: 0.14em;
+}
+
+.settings-plugin-permission-grid {
+  @apply grid gap-2;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-plugin-permission {
+  @apply flex cursor-pointer items-start justify-between gap-3 rounded-md border p-3;
+  border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+  background: color-mix(in oklch, var(--color-base-content) 2%, transparent);
+}
+
+.settings-plugin-permission > span > span {
+  @apply block text-xs font-semibold leading-5;
+  color: var(--color-base-content);
+}
+
+.settings-plugin-permission small {
+  @apply mt-1 block text-xs leading-4;
+  color: color-mix(in oklch, var(--color-base-content) 52%, transparent);
+}
+
+.settings-action-row {
+  @apply flex flex-wrap items-center gap-2;
+}
+
+.settings-action-row .input {
+  min-width: min(100%, 18rem);
+}
+
+.settings-muted-line {
+  @apply text-xs leading-5;
+  color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
+}
+
+.settings-card {
+  @apply p-3;
+}
+
+.settings-empty {
+  @apply rounded-md py-7 text-sm;
+  color: color-mix(in oklch, var(--color-base-content) 42%, transparent);
+  font-family: Courier, monospace;
+}
+
+.settings-title-page-workspace {
+  @apply grid items-start gap-8;
+  grid-template-columns: minmax(300px, 1fr) 425px;
+}
+
+.settings-title-page-form {
+  @apply flex min-w-0 flex-col gap-4;
+}
+
+.settings-field {
+  @apply flex min-w-0 flex-col gap-2;
+}
+
+.settings-field > span {
+  @apply text-xs uppercase leading-none;
+  color: color-mix(in oklch, var(--color-base-content) 48%, transparent);
+  letter-spacing: 0.14em;
+}
+
+.settings-field input,
+.settings-field textarea {
+  @apply w-full rounded-md border px-3 py-2.5 text-sm shadow-none outline-none transition-colors;
+  border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+  background: color-mix(in oklch, var(--color-base-content) 3%, var(--color-base-100));
+  color: var(--color-base-content);
+  font-family: Courier, monospace;
+}
+
+.settings-field textarea {
+  @apply resize-y;
+}
+
+.settings-field input:focus,
+.settings-field textarea:focus {
+  border-color: color-mix(in oklch, var(--color-primary) 50%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 16%, transparent);
+}
+
+.settings-field-grid {
+  @apply grid gap-4;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-clear-button {
+  @apply mt-2 w-fit rounded-md border bg-transparent px-3 py-2 text-sm shadow-none transition-colors;
+  border-color: color-mix(in oklch, var(--color-error) 28%, transparent);
+  color: color-mix(in oklch, var(--color-error) 86%, var(--color-base-content));
+}
+
+.settings-clear-button:hover,
+.settings-clear-button:focus-visible {
+  background: color-mix(in oklch, var(--color-error) 10%, transparent);
+}
+
+.settings-title-page-preview {
+  @apply sticky top-20 min-w-0 rounded-md border p-4;
+  border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+  background: color-mix(in oklch, var(--color-base-content) 3%, var(--color-base-100));
+}
+
+.settings-title-page-preview .title-page-preview-sheet {
+  @apply mx-auto;
+  max-width: 100%;
+}
+
+@media (max-width: 1040px) {
+  .settings-title-page-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-title-page-preview {
+    @apply static w-fit max-w-full;
+  }
+}
+
+@media (max-width: 760px) {
+  .settings-topbar {
+    @apply px-4;
+  }
+
+  .settings-page-heading {
+    @apply pt-10;
+  }
+
+  .settings-page-heading h1 {
+    @apply text-[2.35rem];
+  }
+
+  .settings-body {
+    @apply grid-cols-1 gap-8 pt-8;
+  }
+
+  .settings-sidebar-inner {
+    @apply static;
+  }
+
+  .settings-tabs {
+    @apply grid gap-1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-sidebar-note {
+    @apply hidden;
+  }
+}
+
+@media (max-width: 520px) {
+  .settings-theme-grid,
+  .settings-field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-plugin-option,
+  .settings-plugin-registry,
+  .settings-plugin-card-top,
+  .settings-plugin-permission-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-inline-button {
+    @apply w-fit;
+  }
 }
 
 .editor-container {
