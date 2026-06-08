@@ -16,7 +16,7 @@ export function ElementTypeIndicator({ currentType, characterExtension }: Elemen
     : ELEMENT_LABELS[currentType];
 
   return (
-    <div className="element-type-indicator">
+    <div className="element-type-indicator" data-element-type={currentType}>
       <span className="element-type-dot" aria-hidden="true" />
       <span className="element-type-label">{label}</span>
     </div>

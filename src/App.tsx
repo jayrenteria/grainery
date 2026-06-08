@@ -4,7 +4,7 @@ import { TextSelection } from '@tiptap/pm/state';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ask as askDialog, open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { ask as askDialog } from '@tauri-apps/plugin-dialog';
 
 import { ScreenplayEditor, TitlePageEditor } from './components/Editor';
 import { SettingsModal } from './components/Settings';
@@ -907,83 +907,6 @@ function App() {
     setIsDirty(true);
   }, []);
 
-  const handleRunPluginExporter = useCallback(
-    async (exporterId: string) => {
-      const exporter = pluginManager.getExporters().find((item) => item.id === exporterId);
-      if (!exporter) {
-        throw new Error(`Exporter not found: ${exporterId}`);
-      }
-
-      const transformed = await runTransformHook('pre-export', editorContentRef.current);
-      const output = await pluginManager.runExporter(exporterId, {
-        document: transformed,
-        title: document.meta.filename,
-      });
-
-      const baseName = document.meta.filename
-        ? document.meta.filename.replace(/\.[^.]+$/, '')
-        : 'untitled';
-
-      const filePath = await saveDialog({
-        filters: [
-          {
-            name: exporter.title,
-            extensions: [exporter.extension],
-          },
-        ],
-        defaultPath: `${baseName}.${exporter.extension}`,
-      });
-
-      if (!filePath) {
-        return;
-      }
-
-      const content =
-        typeof output === 'string' ? output : new TextDecoder().decode(output);
-
-      await invoke('save_screenplay', {
-        path: filePath,
-        content,
-      });
-    },
-    [document.meta.filename, pluginManager, runTransformHook]
-  );
-
-  const handleRunPluginImporter = useCallback(
-    async (importerId: string) => {
-      const importer = pluginManager.getImporters().find((item) => item.id === importerId);
-      if (!importer) {
-        throw new Error(`Importer not found: ${importerId}`);
-      }
-
-      const filePath = await openDialog({
-        multiple: false,
-        filters: [
-          {
-            name: importer.title,
-            extensions: importer.extensions,
-          },
-          {
-            name: 'All files',
-            extensions: ['*'],
-          },
-        ],
-      });
-
-      if (!filePath || Array.isArray(filePath)) {
-        return;
-      }
-
-      const input = await invoke<string>('load_screenplay', {
-        path: filePath,
-      });
-
-      const imported = await pluginManager.runImporter(importerId, input);
-      applyDocumentFromPlugin(imported);
-    },
-    [applyDocumentFromPlugin, pluginManager]
-  );
-
   useEffect(() => {
     pluginManager.updateDocumentAccess({
       getDocument: () => editorContentRef.current,
@@ -1290,7 +1213,17 @@ function App() {
   return (
     <ThemeProvider>
       <div className="app-container">
-        {view === 'start' ? (
+        {showSettings ? (
+          <SettingsModal
+            onClose={() => setShowSettings(false)}
+            titlePage={document.titlePage}
+            onTitlePageChange={handleSaveTitlePage}
+            pluginManager={pluginManager}
+            pluginStateVersion={pluginStateVersion}
+            keymapHintsEnabled={keymapHintsEnabled}
+            onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
+          />
+        ) : view === 'start' ? (
           isResolvingInitialOpen ? null : (
           <StartScreen
             recentFiles={recentFiles}
@@ -1358,20 +1291,6 @@ function App() {
               </div>
             )}
           </>
-        )}
-
-        {showSettings && (
-          <SettingsModal
-            onClose={() => setShowSettings(false)}
-            onOpenTitlePage={handleEditTitlePage}
-            titlePage={document.titlePage}
-            pluginManager={pluginManager}
-            pluginStateVersion={pluginStateVersion}
-            onRunPluginExporter={handleRunPluginExporter}
-            onRunPluginImporter={handleRunPluginImporter}
-            keymapHintsEnabled={keymapHintsEnabled}
-            onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
-          />
         )}
 
         {isUpdateDialogOpen && (
