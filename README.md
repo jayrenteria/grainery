@@ -4,7 +4,7 @@
   <p><strong>A quiet, minimal screenwriting app that keeps formatting out of your way.</strong></p>
 
   <p>
-    <img alt="Version" src="https://img.shields.io/badge/version-1.4.5-4f7a5f?style=flat-square" />
+    <img alt="Version" src="https://img.shields.io/badge/version-1.4.6-4f7a5f?style=flat-square" />
     <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2-24c8db?style=flat-square" />
     <img alt="React" src="https://img.shields.io/badge/React-19-61dafb?style=flat-square" />
     <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178c6?style=flat-square" />
