@@ -6,6 +6,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Bold from '@tiptap/extension-bold';
 import Italic from '@tiptap/extension-italic';
 import Underline from '@tiptap/extension-underline';
+import Strike from '@tiptap/extension-strike';
 import { useEffect, useMemo, useState } from 'react';
 
 import {
@@ -20,6 +21,11 @@ import {
   Caption,
   SoundEffect,
   PageBreak,
+  Title,
+  Heading,
+  Body,
+  BulletItem,
+  NumberedItem,
   ScreenplayKeymap,
   PaginationExtension,
   FindReplaceExtension,
@@ -27,6 +33,7 @@ import {
   PluginAnnotationsExtension,
 } from '../../extensions';
 import {
+  DEFAULT_ELEMENT_BY_MODE,
   getDefaultContent,
   getDocumentSchemaContentExpression,
   hasOnlyElementSeedText,
@@ -35,6 +42,7 @@ import {
 import { ElementTypeIndicator } from './ElementTypeIndicator';
 import { EditorStats } from './EditorStats';
 import { FindReplaceBar } from './FindReplaceBar';
+import { FormatToolbar } from './FormatToolbar';
 import { KeymapHint } from './KeymapHint';
 import { PaginatedEditor } from './PaginatedEditor';
 import type { ScreenplayElementType, CharacterExtension, DocumentMode } from '../../lib/types';
@@ -116,7 +124,7 @@ export function ScreenplayEditor({
   documentMode = 'screenplay',
 }: ScreenplayEditorProps) {
   const [currentElement, setCurrentElement] = useState<ScreenplayElementType | null>(
-    documentMode === 'comic' ? 'comicPage' : 'sceneHeading'
+    DEFAULT_ELEMENT_BY_MODE[documentMode]
   );
   const [characterExtension, setCharacterExtension] = useState<CharacterExtension>(null);
   const [previousElement, setPreviousElement] = useState<string | null>(null);
@@ -158,6 +166,7 @@ export function ScreenplayEditor({
       Bold,
       Italic,
       Underline,
+      Strike,
       SceneHeading,
       Action,
       Character,
@@ -169,15 +178,25 @@ export function ScreenplayEditor({
       Caption,
       SoundEffect,
       PageBreak,
+      Title,
+      Heading,
+      Body,
+      BulletItem,
+      NumberedItem,
       FindReplaceExtension,
       PluginAnnotationsExtension,
       ScreenplayKeymap.configure({
         documentMode,
         resolveElementLoop,
       }),
-      PaginationExtension.configure({
-        documentMode,
-      }),
+      // Free write is a continuous canvas; only paginated modes compute page breaks.
+      ...(documentMode === 'freewrite'
+        ? []
+        : [
+            PaginationExtension.configure({
+              documentMode,
+            }),
+          ]),
       Placeholder.configure({
         placeholder: 'Start writing...',
       }),
@@ -236,9 +255,10 @@ export function ScreenplayEditor({
 
   return (
     <>
-      <PaginatedEditor editor={editor}>
+      <PaginatedEditor editor={editor} paginated={documentMode !== 'freewrite'}>
         <EditorContent editor={editor} />
       </PaginatedEditor>
+      {documentMode === 'freewrite' && <FormatToolbar editor={editor} />}
       <FindReplaceBar
         editor={editor}
         isOpen={isFindOpen}
@@ -259,7 +279,7 @@ export function ScreenplayEditor({
           resolveElementLoop={resolveElementLoop}
         />
       )}
-      <EditorStats editor={editor} />
+      <EditorStats editor={editor} showPageCount={documentMode !== 'freewrite'} />
     </>
   );
 }

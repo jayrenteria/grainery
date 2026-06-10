@@ -43,6 +43,7 @@ import {
 } from './lib/types';
 import {
   getElementSeedText,
+  getEscapeElementType,
   getNextElementType,
   getPreviousElementType,
   hasOnlyElementSeedText,
@@ -137,6 +138,7 @@ function App() {
   const pluginManagerRef = useRef<PluginManager | null>(null);
   const viewRef = useRef(view);
   const isDirtyRef = useRef(isDirty);
+  const showSettingsRef = useRef(showSettings);
   const isClosingRef = useRef(false);
 
   const queueAutoSave = useCallback(() => {
@@ -334,7 +336,7 @@ function App() {
         if (!editor) {
           return;
         }
-        editor.commands.setNode('action');
+        editor.commands.setNode(getEscapeElementType(document.documentMode));
         setEditorVersion((prev) => prev + 1);
       },
     }),
@@ -822,6 +824,13 @@ function App() {
     setEditorVersion((prev) => prev + 1);
   }, []);
 
+  const handleCloseSettings = useCallback(() => {
+    setShowSettings(false);
+    if (viewRef.current === 'editor') {
+      editorRef.current?.commands.focus();
+    }
+  }, []);
+
   const handleKeymapHintsEnabledChange = useCallback((enabled: boolean) => {
     setKeymapHintsEnabled(enabled);
     localStorage.setItem(KEYMAP_HINTS_STORAGE_KEY, String(enabled));
@@ -861,6 +870,10 @@ function App() {
 
   useEffect(() => {
     const claimFindShortcut = (event: KeyboardEvent) => {
+      if (showSettingsRef.current) {
+        return;
+      }
+
       const isCommandShortcut = event.ctrlKey || event.metaKey;
       if (!isCommandShortcut || event.altKey) {
         return;
@@ -1034,6 +1047,10 @@ function App() {
   }, [isDirty]);
 
   useEffect(() => {
+    showSettingsRef.current = showSettings;
+  }, [showSettings]);
+
+  useEffect(() => {
     const appWindow = getCurrentWindow();
 
     const unlisten = appWindow.onCloseRequested(async (event) => {
@@ -1082,6 +1099,9 @@ function App() {
           break;
         case 'new_comic':
           void handleNew('comic');
+          break;
+        case 'new_freewrite':
+          void handleNew('freewrite');
           break;
         case 'open':
           void handleOpen();
@@ -1209,17 +1229,7 @@ function App() {
   return (
     <ThemeProvider>
       <div className="app-container">
-        {showSettings ? (
-          <SettingsModal
-            onClose={() => setShowSettings(false)}
-            titlePage={document.titlePage}
-            onTitlePageChange={handleSaveTitlePage}
-            pluginManager={pluginManager}
-            pluginStateVersion={pluginStateVersion}
-            keymapHintsEnabled={keymapHintsEnabled}
-            onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
-          />
-        ) : view === 'start' ? (
+        {view === 'start' ? (
           isResolvingInitialOpen ? null : (
           <StartScreen
             recentFiles={recentFiles}
@@ -1230,6 +1240,9 @@ function App() {
             }}
             onNewComic={() => {
               void handleNew('comic');
+            }}
+            onNewFreewrite={() => {
+              void handleNew('freewrite');
             }}
             onOpenFile={() => {
               void handleOpen();
@@ -1247,7 +1260,7 @@ function App() {
             <ScreenplayEditor
               key={document.meta.id}
               documentMode={document.documentMode}
-              initialContent={document.document}
+              initialContent={editorContentRef.current}
               inlineAnnotations={inlineAnnotations}
               onChange={handleEditorChange}
               resolveElementLoop={(context) => pluginManager.resolveElementLoop(context)}
@@ -1287,6 +1300,18 @@ function App() {
               </div>
             )}
           </>
+        )}
+
+        {showSettings && (
+          <SettingsModal
+            onClose={handleCloseSettings}
+            titlePage={document.titlePage}
+            onTitlePageChange={handleSaveTitlePage}
+            pluginManager={pluginManager}
+            pluginStateVersion={pluginStateVersion}
+            keymapHintsEnabled={keymapHintsEnabled}
+            onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
+          />
         )}
 
         {isUpdateDialogOpen && (

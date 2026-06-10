@@ -96,6 +96,8 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+N")
                 .build(app)?;
             let new_comic_item = MenuItemBuilder::with_id("new_comic", "New Comic").build(app)?;
+            let new_freewrite_item =
+                MenuItemBuilder::with_id("new_freewrite", "New Free Write").build(app)?;
             let open_item = MenuItemBuilder::with_id("open", "Open...")
                 .accelerator("CmdOrCtrl+O")
                 .build(app)?;
@@ -122,6 +124,7 @@ pub fn run() {
             let file_menu = SubmenuBuilder::new(app, "File")
                 .item(&new_item)
                 .item(&new_comic_item)
+                .item(&new_freewrite_item)
                 .item(&open_item)
                 .item(&import_fdx_item)
                 .item(&start_screen_item)

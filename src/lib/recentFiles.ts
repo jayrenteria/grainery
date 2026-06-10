@@ -1,4 +1,6 @@
-import type { RecentFileEntry } from './types';
+import type { DocumentMode, RecentFileEntry } from './types';
+
+const DOCUMENT_MODES: DocumentMode[] = ['screenplay', 'comic', 'freewrite'];
 
 const RECENT_FILES_STORAGE_KEY = 'grainery.recentFiles.v1';
 const MAX_RECENT_FILES = 8;
@@ -21,7 +23,8 @@ function isRecentFileEntry(value: unknown): value is RecentFileEntry {
   return (
     typeof candidate.path === 'string' &&
     typeof candidate.filename === 'string' &&
-    typeof candidate.lastOpenedAt === 'string'
+    typeof candidate.lastOpenedAt === 'string' &&
+    (candidate.documentMode === undefined || DOCUMENT_MODES.includes(candidate.documentMode))
   );
 }
 
@@ -66,18 +69,21 @@ export function getRecentFiles(): RecentFileEntry[] {
   return readRecentFiles();
 }
 
-export function recordRecentFile(path: string): RecentFileEntry[] {
+export function recordRecentFile(path: string, documentMode?: DocumentMode): RecentFileEntry[] {
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) {
     return getRecentFiles();
   }
 
-  const existing = readRecentFiles().filter((entry) => entry.path !== normalizedPath);
+  const currentEntries = readRecentFiles();
+  const previousEntry = currentEntries.find((entry) => entry.path === normalizedPath);
+  const existing = currentEntries.filter((entry) => entry.path !== normalizedPath);
   const nextEntries: RecentFileEntry[] = [
     {
       path: normalizedPath,
       filename: getFilename(normalizedPath),
       lastOpenedAt: new Date().toISOString(),
+      documentMode: documentMode ?? previousEntry?.documentMode,
     },
     ...existing,
   ].slice(0, MAX_RECENT_FILES);

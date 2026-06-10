@@ -4,9 +4,11 @@ import type { ResolvedPos } from '@tiptap/pm/model';
 import {
   getEnterElementType,
   getElementSeedText,
+  getEscapeElementType,
   getNextElementType,
   getPreviousElementType,
   hasOnlyElementSeedText,
+  isListElementType,
   isScreenplayElementType,
 } from '../lib/elementConfig';
 import type { DocumentMode, ScreenplayElementType } from '../lib/types';
@@ -177,8 +179,9 @@ export const ScreenplayKeymap = Extension.create<ScreenplayKeymapOptions>({
           return setCurrentNodeType(editor, currentType, pluginType, currentText);
         }
 
-        if (currentType !== 'action') {
-          return setCurrentNodeType(editor, currentType, 'action', currentText);
+        const escapeType = getEscapeElementType(this.options.documentMode);
+        if (currentType !== escapeType) {
+          return setCurrentNodeType(editor, currentType, escapeType, currentText);
         }
 
         return false;
@@ -194,19 +197,25 @@ export const ScreenplayKeymap = Extension.create<ScreenplayKeymapOptions>({
         }
 
         const prevNodeType = getPreviousNodeType($from);
+        const isCurrentEmpty = isNodeEffectivelyEmpty(currentType, currentNode.textContent);
         const pluginType = resolveFromPlugins(this.options.resolveElementLoop, {
           event: 'enter',
           currentType,
           documentMode: this.options.documentMode,
           previousType: prevNodeType,
-          isCurrentEmpty: isNodeEffectivelyEmpty(currentType, currentNode.textContent),
+          isCurrentEmpty,
         });
 
         if (pluginType) {
           return insertNewNodeOfType(editor, pluginType);
         }
 
-        const nextType = getEnterElementType(this.options.documentMode, currentType);
+        const nextType = getEnterElementType(this.options.documentMode, currentType, isCurrentEmpty);
+
+        // Enter on an empty list item converts it in place instead of adding a new block.
+        if (isCurrentEmpty && isListElementType(currentType) && nextType !== currentType) {
+          return setCurrentNodeType(editor, currentType, nextType, currentNode.textContent);
+        }
 
         return insertNewNodeOfType(editor, nextType);
       },

@@ -4,6 +4,7 @@ import type { PaginationStorage } from '../../extensions';
 
 interface EditorStatsProps {
   editor: Editor | null;
+  showPageCount?: boolean;
 }
 
 function countWords(text: string): number {
@@ -12,7 +13,7 @@ function countWords(text: string): number {
   return trimmed.split(/\s+/).length;
 }
 
-export function EditorStats({ editor }: EditorStatsProps) {
+export function EditorStats({ editor, showPageCount = true }: EditorStatsProps) {
   const [wordCount, setWordCount] = useState(0);
   const [pageCount, setPageCount] = useState(1);
 
@@ -37,7 +38,7 @@ export function EditorStats({ editor }: EditorStatsProps) {
   return (
     <div className="editor-stats">
       <span>{wordCount} W</span>
-      <span>{pageCount} PG</span>
+      {showPageCount && <span>{pageCount} PG</span>}
     </div>
   );
 }

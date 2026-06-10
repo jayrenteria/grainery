@@ -105,13 +105,13 @@ export async function openFileAtPath(path: string): Promise<ScreenplayDocument> 
 
   if (getPathExtension(path) === FDX_EXTENSION) {
     const doc = createImportedDocument(importFromFdx(content), path);
-    recordRecentFile(path);
+    recordRecentFile(path, doc.documentMode);
     return doc;
   }
 
   const doc = JSON.parse(content) as ScreenplayDocument;
   const normalized = populateDocumentMetaFromPath(normalizeDocument(doc), path);
-  recordRecentFile(path);
+  recordRecentFile(path, normalized.documentMode);
   return normalized;
 }
 
@@ -185,7 +185,7 @@ export async function saveFile(
     content: JSON.stringify(updatedDoc, null, 2),
   });
 
-  recordRecentFile(doc.meta.filePath);
+  recordRecentFile(doc.meta.filePath, updatedDoc.documentMode);
   return updatedDoc;
 }
 
@@ -221,7 +221,7 @@ export async function saveFileAs(
     content: JSON.stringify(updatedDoc, null, 2),
   });
 
-  recordRecentFile(filePath);
+  recordRecentFile(filePath, updatedDoc.documentMode);
   return updatedDoc;
 }
 

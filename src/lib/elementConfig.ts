@@ -2,6 +2,7 @@ import type { JSONContent } from '@tiptap/react';
 import {
   COMIC_ELEMENT_TYPES,
   ELEMENT_CYCLE,
+  FREEWRITE_ELEMENT_TYPES,
   SCREENPLAY_ELEMENT_TYPES,
   type DocumentMode,
   type ScreenplayElementType,
@@ -18,16 +19,23 @@ export const ELEMENT_LABELS: Record<ScreenplayElementType, string> = {
   comicPanel: 'Panel',
   caption: 'Caption',
   soundEffect: 'SFX',
+  title: 'Title',
+  heading: 'Heading',
+  body: 'Body',
+  bulletItem: 'Bulleted List',
+  numberedItem: 'Numbered List',
 };
 
 export const MODE_ELEMENT_TYPES: Record<DocumentMode, ScreenplayElementType[]> = {
   screenplay: SCREENPLAY_ELEMENT_TYPES,
   comic: COMIC_ELEMENT_TYPES,
+  freewrite: FREEWRITE_ELEMENT_TYPES,
 };
 
 export const DEFAULT_ELEMENT_BY_MODE: Record<DocumentMode, ScreenplayElementType> = {
   screenplay: 'sceneHeading',
   comic: 'comicPage',
+  freewrite: 'title',
 };
 
 const SCREENPLAY_DIALOGUE_BLOCK_CYCLE: ScreenplayElementType[] = ['dialogue', 'parenthetical'];
@@ -45,6 +53,13 @@ const COMIC_TAB_CYCLE: ScreenplayElementType[] = [
   'dialogue',
   'caption',
   'soundEffect',
+];
+const FREEWRITE_TAB_CYCLE: ScreenplayElementType[] = [
+  'title',
+  'heading',
+  'body',
+  'bulletItem',
+  'numberedItem',
 ];
 
 export function isScreenplayElementType(value: string): value is ScreenplayElementType {
@@ -88,7 +103,19 @@ export function getDocumentSchemaContentExpression(mode: DocumentMode): string {
     return '(comicPage | comicPanel | action | character | dialogue | parenthetical | caption | soundEffect | sceneHeading | transition | pageBreak)+';
   }
 
+  if (mode === 'freewrite') {
+    return '(title | heading | body | bulletItem | numberedItem)+';
+  }
+
   return '(sceneHeading | action | character | dialogue | parenthetical | transition | comicPage | comicPanel | caption | soundEffect | pageBreak)+';
+}
+
+export function isListElementType(type: ScreenplayElementType): boolean {
+  return type === 'bulletItem' || type === 'numberedItem';
+}
+
+export function getEscapeElementType(mode: DocumentMode): ScreenplayElementType {
+  return mode === 'freewrite' ? 'body' : 'action';
 }
 
 function isDialogueBlock(type: ScreenplayElementType): boolean {
@@ -155,6 +182,18 @@ function getEnterScreenplayElementType(currentType: ScreenplayElementType): Scre
   }
 }
 
+function getEnterFreewriteElementType(
+  currentType: ScreenplayElementType,
+  isCurrentEmpty: boolean
+): ScreenplayElementType {
+  // An empty list item exits the list back to body, like typical notes apps.
+  if (isListElementType(currentType)) {
+    return isCurrentEmpty ? 'body' : currentType;
+  }
+
+  return 'body';
+}
+
 function getEnterComicElementType(currentType: ScreenplayElementType): ScreenplayElementType {
   switch (currentType) {
     case 'comicPage':
@@ -185,6 +224,10 @@ export function getNextElementType(
     return cycle(COMIC_TAB_CYCLE, currentType, 1, 'action');
   }
 
+  if (mode === 'freewrite') {
+    return cycle(FREEWRITE_TAB_CYCLE, currentType, 1, 'body');
+  }
+
   return getNextScreenplayElementType(currentType, previousType);
 }
 
@@ -197,14 +240,25 @@ export function getPreviousElementType(
     return cycle(COMIC_TAB_CYCLE, currentType, -1, 'action');
   }
 
+  if (mode === 'freewrite') {
+    return cycle(FREEWRITE_TAB_CYCLE, currentType, -1, 'body');
+  }
+
   return getPreviousScreenplayElementType(currentType, previousType);
 }
 
 export function getEnterElementType(
   mode: DocumentMode,
-  currentType: ScreenplayElementType
+  currentType: ScreenplayElementType,
+  isCurrentEmpty = false
 ): ScreenplayElementType {
-  return mode === 'comic'
-    ? getEnterComicElementType(currentType)
-    : getEnterScreenplayElementType(currentType);
+  if (mode === 'comic') {
+    return getEnterComicElementType(currentType);
+  }
+
+  if (mode === 'freewrite') {
+    return getEnterFreewriteElementType(currentType, isCurrentEmpty);
+  }
+
+  return getEnterScreenplayElementType(currentType);
 }

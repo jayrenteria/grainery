@@ -6,9 +6,10 @@ import type { PaginationStorage } from '../../extensions';
 interface PaginatedEditorProps {
   editor: Editor | null;
   children: React.ReactNode;
+  paginated?: boolean;
 }
 
-export function PaginatedEditor({ editor, children }: PaginatedEditorProps) {
+export function PaginatedEditor({ editor, children, paginated = true }: PaginatedEditorProps) {
   const [totalPages, setTotalPages] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -34,6 +35,16 @@ export function PaginatedEditor({ editor, children }: PaginatedEditorProps) {
   }, [editor]);
 
   const totalHeight = totalPages * PAGE_HEIGHT_PX + (totalPages - 1) * PAGE_GAP_PX;
+
+  if (!paginated) {
+    return (
+      <div className="paginated-editor-container" ref={containerRef}>
+        <div className="paginated-editor-wrapper paginated-editor-wrapper-continuous">
+          <div className="paginated-editor-content">{children}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="paginated-editor-container" ref={containerRef}>

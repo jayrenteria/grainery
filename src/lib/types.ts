@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/react';
 
-export type DocumentMode = 'screenplay' | 'comic';
+export type DocumentMode = 'screenplay' | 'comic' | 'freewrite';
 
 export type ScreenplayElementType =
   | 'sceneHeading'
@@ -12,7 +12,12 @@ export type ScreenplayElementType =
   | 'comicPage'
   | 'comicPanel'
   | 'caption'
-  | 'soundEffect';
+  | 'soundEffect'
+  | 'title'
+  | 'heading'
+  | 'body'
+  | 'bulletItem'
+  | 'numberedItem';
 
 export type CharacterExtension = 'V.O.' | 'O.S.' | "CONT'D" | 'O.C.' | null;
 
@@ -60,6 +65,7 @@ export interface RecentFileEntry {
   path: string;
   filename: string;
   lastOpenedAt: string;
+  documentMode?: DocumentMode;
 }
 
 export const SCREENPLAY_ELEMENT_TYPES: ScreenplayElementType[] = [
@@ -82,10 +88,19 @@ export const COMIC_ELEMENT_TYPES: ScreenplayElementType[] = [
   'soundEffect',
 ];
 
+export const FREEWRITE_ELEMENT_TYPES: ScreenplayElementType[] = [
+  'title',
+  'heading',
+  'body',
+  'bulletItem',
+  'numberedItem',
+];
+
 export const ELEMENT_CYCLE: ScreenplayElementType[] = [
   ...SCREENPLAY_ELEMENT_TYPES,
   'comicPage',
   'comicPanel',
   'caption',
   'soundEffect',
+  ...FREEWRITE_ELEMENT_TYPES,
 ];
