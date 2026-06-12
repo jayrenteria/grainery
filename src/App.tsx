@@ -6,7 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask as askDialog } from '@tauri-apps/plugin-dialog';
 
-import { ScreenplayEditor, TitlePageEditor } from './components/Editor';
+import { ScreenplayEditor } from './components/Editor';
 import { SettingsModal } from './components/Settings';
 import { StartScreen } from './components/StartScreen';
 import { UpdateDialog, type UpdateDialogStatus } from './components/Updates';
@@ -116,7 +116,6 @@ function App() {
   const [isDirty, setIsDirty] = useState(false);
   const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>(() => getRecentFiles());
   const [startScreenError, setStartScreenError] = useState<string | null>(null);
-  const [showTitlePageEditor, setShowTitlePageEditor] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [pluginStateVersion, setPluginStateVersion] = useState(0);
   const [editorVersion, setEditorVersion] = useState(0);
@@ -405,7 +404,7 @@ function App() {
   );
 
   const performAutoSave = useCallback(async () => {
-    if (!isDirty || showTitlePageEditor) return;
+    if (!isDirty) return;
 
     try {
       const transformed = await runTransformHook('pre-save', editorContentRef.current);
@@ -420,7 +419,7 @@ function App() {
     } catch (error) {
       console.error('Auto-save failed:', error);
     }
-  }, [document, isDirty, runTransformHook, showTitlePageEditor]);
+  }, [document, isDirty, runTransformHook]);
 
   useEffect(() => {
     performAutoSaveRef.current = performAutoSave;
@@ -496,7 +495,6 @@ function App() {
     setView('start');
     setIsDirty(false);
     setStartScreenError(null);
-    setShowTitlePageEditor(false);
     editorRef.current = null;
     refreshRecentFiles();
     await updateWindowTitle(null);
@@ -809,10 +807,6 @@ function App() {
       console.error('Failed to export as Final Draft:', error);
     }
   }, [document.documentMode, document.meta.filename, document.titlePage, runTransformHook]);
-
-  const handleEditTitlePage = useCallback(() => {
-    setShowTitlePageEditor(true);
-  }, []);
 
   const handleFind = useCallback(() => {
     const editor = editorRef.current;
@@ -1139,9 +1133,6 @@ function App() {
         case 'replace':
           handleReplace();
           break;
-        case 'title_page':
-          handleEditTitlePage();
-          break;
         case 'settings':
           setShowSettings(true);
           break;
@@ -1158,7 +1149,6 @@ function App() {
       void unlisten.then((fn) => fn());
     };
   }, [
-    handleEditTitlePage,
     handleExportFdx,
     handleExportFountain,
     handleExportPdf,
@@ -1282,14 +1272,6 @@ function App() {
               editorAdapter={editorAdapter}
             />
 
-            {showTitlePageEditor && (
-              <TitlePageEditor
-                titlePage={document.titlePage}
-                onSave={handleSaveTitlePage}
-                onClose={() => setShowTitlePageEditor(false)}
-              />
-            )}
-
             {statusBadges.length > 0 && (
               <div className="plugin-status-badges">
                 {statusBadges.map((badge) => (
@@ -1305,6 +1287,7 @@ function App() {
         {showSettings && (
           <SettingsModal
             onClose={handleCloseSettings}
+            documentMode={document.documentMode}
             titlePage={document.titlePage}
             onTitlePageChange={handleSaveTitlePage}
             pluginManager={pluginManager}

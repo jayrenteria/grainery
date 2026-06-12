@@ -166,15 +166,6 @@ pub fn run() {
                 .select_all()
                 .build()?;
 
-            // Format menu items
-            let title_page_item = MenuItemBuilder::with_id("title_page", "Title Page...")
-                .accelerator("CmdOrCtrl+Shift+T")
-                .build(app)?;
-
-            let format_menu = SubmenuBuilder::new(app, "Format")
-                .item(&title_page_item)
-                .build()?;
-
             // Grainery (app) menu with Settings
             let settings_item = MenuItemBuilder::with_id("settings", "Settings...")
                 .accelerator("CmdOrCtrl+,")
@@ -213,7 +204,6 @@ pub fn run() {
                     &app_menu,
                     &file_menu,
                     &edit_menu,
-                    &format_menu,
                     &window_menu,
                 ])
                 .build()?;
