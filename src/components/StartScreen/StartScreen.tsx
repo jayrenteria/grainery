@@ -61,7 +61,7 @@ function getDirectoryPath(path: string): string {
 }
 
 function getApplicationVersion(): string {
-  return '1.4';
+  return '1.5';
 }
 
 export function StartScreen({
