@@ -500,7 +500,7 @@
 }
 
 .settings-screen {
-  @apply flex h-full min-h-0 flex-col overflow-y-auto;
+  @apply fixed inset-0 z-[500] flex min-h-0 flex-col overflow-y-auto;
   background: var(--color-base-100);
   color: var(--color-base-content);
 }
@@ -1269,7 +1269,7 @@
 
 .start-screen-list-item {
   @apply grid w-full cursor-pointer items-baseline gap-4 rounded-md py-1 text-left transition-colors;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   color: var(--color-base-content);
 }
 
@@ -1283,6 +1283,12 @@
   font-size: 0.93rem;
   font-weight: 400;
   letter-spacing: 0.02em;
+}
+
+.start-screen-doc-type {
+  @apply whitespace-nowrap text-[0.65rem] font-medium uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in oklch, var(--color-base-content) 40%, transparent);
 }
 
 .start-screen-time {
@@ -1353,4 +1359,173 @@
   .start-screen-time {
     @apply justify-self-start;
   }
+}
+
+/* ============================================================
+   Free Write mode
+   ============================================================ */
+
+/* Continuous (non-paginated) writing surface */
+.paginated-editor-wrapper-continuous {
+  @apply bg-base-100;
+  min-height: var(--page-height);
+  width: 100%;
+  max-width: 960px;
+}
+
+/* Clean, non-monospace type for free writing */
+.screenplay-editor[data-document-mode='freewrite'] {
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  text-shadow: none;
+  line-height: 1.6;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  padding: 1in 1in;
+  counter-reset: freewrite-list;
+}
+
+/* Note title */
+.note-title {
+  font-size: 2em;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-top: 0;
+  margin-bottom: 0.35em;
+}
+
+* + .note-title {
+  margin-top: 0.9em;
+}
+
+/* Note heading */
+.note-heading {
+  font-size: 1.35em;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1.1em;
+  margin-bottom: 0.25em;
+}
+
+.note-heading:first-child {
+  margin-top: 0;
+}
+
+/* Note body */
+.note-body {
+  margin: 0 0 0.4em;
+}
+
+/* List items */
+.bullet-item,
+.numbered-item {
+  position: relative;
+  margin: 0 0 0.25em;
+  padding-left: 1.7em;
+}
+
+.bullet-item::before {
+  content: '\2022';
+  position: absolute;
+  left: 0.55em;
+  @apply text-base-content/70;
+}
+
+.numbered-item {
+  counter-increment: freewrite-list;
+}
+
+.numbered-item::before {
+  content: counter(freewrite-list) '.';
+  position: absolute;
+  left: 0;
+  width: 1.2em;
+  text-align: right;
+  @apply text-base-content/70;
+}
+
+/* Any non-numbered block ends the run, so the next list restarts at 1 */
+.screenplay-editor[data-document-mode='freewrite'] > :not(.numbered-item) {
+  counter-reset: freewrite-list;
+}
+
+/* Empty block placeholders */
+.note-title.is-empty::before {
+  content: 'Title';
+  @apply text-base-content/40;
+  pointer-events: none;
+}
+
+.note-heading.is-empty::before {
+  content: 'Heading';
+  @apply text-base-content/40;
+  pointer-events: none;
+}
+
+/* Element type indicator colors */
+.element-type-indicator[data-element-type='title'] {
+  --element-type-dot-color: var(--color-primary);
+}
+
+.element-type-indicator[data-element-type='heading'] {
+  --element-type-dot-color: var(--color-secondary);
+}
+
+.element-type-indicator[data-element-type='body'] {
+  --element-type-dot-color: var(--color-info);
+}
+
+.element-type-indicator[data-element-type='bulletItem'] {
+  --element-type-dot-color: var(--color-success);
+}
+
+.element-type-indicator[data-element-type='numberedItem'] {
+  --element-type-dot-color: var(--color-warning);
+}
+
+/* Inline formatting toolbar */
+.format-toolbar {
+  @apply fixed top-4 left-1/2 z-[150] -translate-x-1/2;
+  @apply flex items-center gap-0.5;
+  @apply bg-base-100/95 backdrop-blur-sm border border-base-300 rounded-lg shadow-lg;
+  @apply px-1.5 py-1;
+}
+
+.format-toolbar-button {
+  @apply flex h-7 w-7 items-center justify-center rounded border-0 bg-transparent p-0;
+  @apply font-sans text-[13px] leading-none text-base-content/70;
+  cursor: pointer;
+}
+
+.format-toolbar-button:hover {
+  @apply bg-base-200 text-base-content;
+}
+
+.format-toolbar-button.is-active {
+  @apply bg-primary/15 text-primary;
+}
+
+.format-toolbar-bold {
+  font-weight: 700;
+}
+
+.format-toolbar-italic {
+  font-style: italic;
+}
+
+.format-toolbar-underline {
+  text-decoration: underline;
+}
+
+.format-toolbar-strike {
+  text-decoration: line-through;
 }

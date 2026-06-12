@@ -1,4 +1,10 @@
-import type { RecentFileEntry } from '../../lib/types';
+import type { DocumentMode, RecentFileEntry } from '../../lib/types';
+
+const DOCUMENT_MODE_LABELS: Record<DocumentMode, string> = {
+  screenplay: 'Screenplay',
+  comic: 'Comic',
+  freewrite: 'Free Write',
+};
 
 interface StartScreenProps {
   recentFiles: RecentFileEntry[];
@@ -6,6 +12,7 @@ interface StartScreenProps {
   onDismissError: () => void;
   onNewScreenplay: () => void;
   onNewComic: () => void;
+  onNewFreewrite: () => void;
   onOpenFile: () => void;
   onImportFdx: () => void;
   onOpenRecent: (path: string) => void;
@@ -63,6 +70,7 @@ export function StartScreen({
   onDismissError,
   onNewScreenplay,
   onNewComic,
+  onNewFreewrite,
   onOpenFile,
   onImportFdx,
   onOpenRecent,
@@ -109,6 +117,16 @@ export function StartScreen({
           </span>
         </button>
 
+        <button type="button" className="start-screen-new" onClick={onNewFreewrite}>
+          <span className="start-screen-new-icon" aria-hidden="true">
+            +
+          </span>
+          <span className="start-screen-new-copy">
+            <span>Start a free write</span>
+            <span>Simple notes - titles, headings, and lists</span>
+          </span>
+        </button>
+
         <section className="start-screen-recent">
           <div className="start-screen-recent-header">
             <h2>Recent</h2>
@@ -135,6 +153,9 @@ export function StartScreen({
                     title={getDirectoryPath(entry.path)}
                   >
                     <span className="start-screen-filename">{entry.filename}</span>
+                    {entry.documentMode && (
+                      <span className="start-screen-doc-type">{DOCUMENT_MODE_LABELS[entry.documentMode]}</span>
+                    )}
                     <span className="start-screen-time">{formatRelativeTime(entry.lastOpenedAt)}</span>
                   </button>
                 </li>

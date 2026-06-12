@@ -214,6 +214,7 @@ export function createWhenContext(
     'editor.documentMode': context.documentMode,
     'editor.mode.screenplay': context.documentMode === 'screenplay',
     'editor.mode.comic': context.documentMode === 'comic',
+    'editor.mode.freewrite': context.documentMode === 'freewrite',
     'editor.selection.empty': !hasSelection,
     'editor.isCurrentEmpty': Boolean(context.isCurrentEmpty),
     'editor.currentElement': current ?? '',
@@ -229,6 +230,11 @@ export function createWhenContext(
     'editor.element.comicPanel': current === 'comicPanel',
     'editor.element.caption': current === 'caption',
     'editor.element.soundEffect': current === 'soundEffect',
+    'editor.element.title': current === 'title',
+    'editor.element.heading': current === 'heading',
+    'editor.element.body': current === 'body',
+    'editor.element.bulletItem': current === 'bulletItem',
+    'editor.element.numberedItem': current === 'numberedItem',
     'plugin.enabled': pluginEnabled,
   };
 }

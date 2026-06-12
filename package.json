@@ -25,6 +25,7 @@
     "@tiptap/extension-history": "^3.14.0",
     "@tiptap/extension-italic": "^3.14.0",
     "@tiptap/extension-placeholder": "^3.14.0",
+    "@tiptap/extension-strike": "^3.14.0",
     "@tiptap/extension-text": "^3.14.0",
     "@tiptap/extension-underline": "^3.14.0",
     "@tiptap/pm": "^3.14.0",

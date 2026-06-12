@@ -6,7 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask as askDialog } from '@tauri-apps/plugin-dialog';
 
-import { ScreenplayEditor, TitlePageEditor } from './components/Editor';
+import { ScreenplayEditor } from './components/Editor';
 import { SettingsModal } from './components/Settings';
 import { StartScreen } from './components/StartScreen';
 import { UpdateDialog, type UpdateDialogStatus } from './components/Updates';
@@ -43,6 +43,7 @@ import {
 } from './lib/types';
 import {
   getElementSeedText,
+  getEscapeElementType,
   getNextElementType,
   getPreviousElementType,
   hasOnlyElementSeedText,
@@ -115,7 +116,6 @@ function App() {
   const [isDirty, setIsDirty] = useState(false);
   const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>(() => getRecentFiles());
   const [startScreenError, setStartScreenError] = useState<string | null>(null);
-  const [showTitlePageEditor, setShowTitlePageEditor] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [pluginStateVersion, setPluginStateVersion] = useState(0);
   const [editorVersion, setEditorVersion] = useState(0);
@@ -137,6 +137,7 @@ function App() {
   const pluginManagerRef = useRef<PluginManager | null>(null);
   const viewRef = useRef(view);
   const isDirtyRef = useRef(isDirty);
+  const showSettingsRef = useRef(showSettings);
   const isClosingRef = useRef(false);
 
   const queueAutoSave = useCallback(() => {
@@ -334,7 +335,7 @@ function App() {
         if (!editor) {
           return;
         }
-        editor.commands.setNode('action');
+        editor.commands.setNode(getEscapeElementType(document.documentMode));
         setEditorVersion((prev) => prev + 1);
       },
     }),
@@ -403,7 +404,7 @@ function App() {
   );
 
   const performAutoSave = useCallback(async () => {
-    if (!isDirty || showTitlePageEditor) return;
+    if (!isDirty) return;
 
     try {
       const transformed = await runTransformHook('pre-save', editorContentRef.current);
@@ -418,7 +419,7 @@ function App() {
     } catch (error) {
       console.error('Auto-save failed:', error);
     }
-  }, [document, isDirty, runTransformHook, showTitlePageEditor]);
+  }, [document, isDirty, runTransformHook]);
 
   useEffect(() => {
     performAutoSaveRef.current = performAutoSave;
@@ -494,7 +495,6 @@ function App() {
     setView('start');
     setIsDirty(false);
     setStartScreenError(null);
-    setShowTitlePageEditor(false);
     editorRef.current = null;
     refreshRecentFiles();
     await updateWindowTitle(null);
@@ -808,10 +808,6 @@ function App() {
     }
   }, [document.documentMode, document.meta.filename, document.titlePage, runTransformHook]);
 
-  const handleEditTitlePage = useCallback(() => {
-    setShowTitlePageEditor(true);
-  }, []);
-
   const handleFind = useCallback(() => {
     const editor = editorRef.current;
     if (!editor) {
@@ -820,6 +816,13 @@ function App() {
 
     editor.commands.openFind();
     setEditorVersion((prev) => prev + 1);
+  }, []);
+
+  const handleCloseSettings = useCallback(() => {
+    setShowSettings(false);
+    if (viewRef.current === 'editor') {
+      editorRef.current?.commands.focus();
+    }
   }, []);
 
   const handleKeymapHintsEnabledChange = useCallback((enabled: boolean) => {
@@ -861,6 +864,10 @@ function App() {
 
   useEffect(() => {
     const claimFindShortcut = (event: KeyboardEvent) => {
+      if (showSettingsRef.current) {
+        return;
+      }
+
       const isCommandShortcut = event.ctrlKey || event.metaKey;
       if (!isCommandShortcut || event.altKey) {
         return;
@@ -1034,6 +1041,10 @@ function App() {
   }, [isDirty]);
 
   useEffect(() => {
+    showSettingsRef.current = showSettings;
+  }, [showSettings]);
+
+  useEffect(() => {
     const appWindow = getCurrentWindow();
 
     const unlisten = appWindow.onCloseRequested(async (event) => {
@@ -1083,6 +1094,9 @@ function App() {
         case 'new_comic':
           void handleNew('comic');
           break;
+        case 'new_freewrite':
+          void handleNew('freewrite');
+          break;
         case 'open':
           void handleOpen();
           break;
@@ -1119,9 +1133,6 @@ function App() {
         case 'replace':
           handleReplace();
           break;
-        case 'title_page':
-          handleEditTitlePage();
-          break;
         case 'settings':
           setShowSettings(true);
           break;
@@ -1138,7 +1149,6 @@ function App() {
       void unlisten.then((fn) => fn());
     };
   }, [
-    handleEditTitlePage,
     handleExportFdx,
     handleExportFountain,
     handleExportPdf,
@@ -1209,17 +1219,7 @@ function App() {
   return (
     <ThemeProvider>
       <div className="app-container">
-        {showSettings ? (
-          <SettingsModal
-            onClose={() => setShowSettings(false)}
-            titlePage={document.titlePage}
-            onTitlePageChange={handleSaveTitlePage}
-            pluginManager={pluginManager}
-            pluginStateVersion={pluginStateVersion}
-            keymapHintsEnabled={keymapHintsEnabled}
-            onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
-          />
-        ) : view === 'start' ? (
+        {view === 'start' ? (
           isResolvingInitialOpen ? null : (
           <StartScreen
             recentFiles={recentFiles}
@@ -1230,6 +1230,9 @@ function App() {
             }}
             onNewComic={() => {
               void handleNew('comic');
+            }}
+            onNewFreewrite={() => {
+              void handleNew('freewrite');
             }}
             onOpenFile={() => {
               void handleOpen();
@@ -1247,7 +1250,7 @@ function App() {
             <ScreenplayEditor
               key={document.meta.id}
               documentMode={document.documentMode}
-              initialContent={document.document}
+              initialContent={editorContentRef.current}
               inlineAnnotations={inlineAnnotations}
               onChange={handleEditorChange}
               resolveElementLoop={(context) => pluginManager.resolveElementLoop(context)}
@@ -1269,14 +1272,6 @@ function App() {
               editorAdapter={editorAdapter}
             />
 
-            {showTitlePageEditor && (
-              <TitlePageEditor
-                titlePage={document.titlePage}
-                onSave={handleSaveTitlePage}
-                onClose={() => setShowTitlePageEditor(false)}
-              />
-            )}
-
             {statusBadges.length > 0 && (
               <div className="plugin-status-badges">
                 {statusBadges.map((badge) => (
@@ -1287,6 +1282,19 @@ function App() {
               </div>
             )}
           </>
+        )}
+
+        {showSettings && (
+          <SettingsModal
+            onClose={handleCloseSettings}
+            documentMode={document.documentMode}
+            titlePage={document.titlePage}
+            onTitlePageChange={handleSaveTitlePage}
+            pluginManager={pluginManager}
+            pluginStateVersion={pluginStateVersion}
+            keymapHintsEnabled={keymapHintsEnabled}
+            onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
+          />
         )}
 
         {isUpdateDialogOpen && (

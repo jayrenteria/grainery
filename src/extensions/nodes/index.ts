@@ -9,3 +9,8 @@ export { ComicPanel } from './ComicPanel';
 export { Caption } from './Caption';
 export { SoundEffect } from './SoundEffect';
 export { PageBreak } from './PageBreak';
+export { Title } from './Title';
+export { Heading } from './Heading';
+export { Body } from './Body';
+export { BulletItem } from './BulletItem';
+export { NumberedItem } from './NumberedItem';

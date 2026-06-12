@@ -3,6 +3,7 @@ import type { DocumentMode, ScreenplayElementType } from '../../lib/types';
 import {
   ELEMENT_LABELS,
   getEnterElementType,
+  getEscapeElementType,
   getNextElementType,
   getPreviousElementType,
 } from '../../lib/elementConfig';
@@ -73,7 +74,7 @@ function getKeyHints({
   const enterTarget = resolveHintTarget(
     resolveElementLoop,
     { ...baseContext, event: 'enter' },
-    getEnterElementType(documentMode, currentType)
+    getEnterElementType(documentMode, currentType, isCurrentEmpty)
   );
 
   const hints: KeyHint[] = [
@@ -82,13 +83,14 @@ function getKeyHints({
     { key: 'Enter', label: ELEMENT_LABELS[enterTarget] },
   ];
 
+  const escapeFallback = getEscapeElementType(documentMode);
   const escapeTarget = resolveHintTarget(
     resolveElementLoop,
     { ...baseContext, event: 'escape' },
-    'action'
+    escapeFallback
   );
 
-  if (currentType !== 'action' || escapeTarget !== 'action') {
+  if (currentType !== escapeFallback || escapeTarget !== escapeFallback) {
     hints.push({ key: 'Esc', label: ELEMENT_LABELS[escapeTarget] });
   }
 

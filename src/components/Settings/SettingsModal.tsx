@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { confirm, open } from '@tauri-apps/plugin-dialog';
 import { useTheme, THEMES, Theme } from '../../contexts/ThemeContext';
 import { TitlePagePreviewPage } from '../TitlePage';
-import type { TitlePageData } from '../../lib/types';
+import type { DocumentMode, TitlePageData } from '../../lib/types';
 import type {
   OptionalPermission,
   PluginPermissionGrant,
@@ -12,6 +12,7 @@ import { PERMISSION_DESCRIPTIONS } from '../../plugins/permissions';
 
 interface SettingsModalProps {
   onClose: () => void;
+  documentMode: DocumentMode;
   titlePage: TitlePageData | null;
   onTitlePageChange: (titlePage: TitlePageData | null) => void;
   pluginManager: PluginManager;
@@ -92,6 +93,7 @@ function updatePermission(
 
 export function SettingsModal({
   onClose,
+  documentMode,
   titlePage,
   onTitlePageChange,
   pluginManager,
@@ -104,6 +106,7 @@ export function SettingsModal({
   const [titlePageForm, setTitlePageForm] = useState<TitlePageData>(titlePage || EMPTY_TITLE_PAGE);
   const [isBusy, setIsBusy] = useState(false);
   const [pluginError, setPluginError] = useState<string | null>(null);
+  const isScreenplayDocument = documentMode === 'screenplay';
 
   const plugins = useMemo(() => pluginManager.getInstalledPlugins(), [pluginManager, pluginStateVersion]);
 
@@ -196,7 +199,9 @@ export function SettingsModal({
   const tabs: Array<{ id: SettingsTab; label: string; icon: string }> = [
     { id: 'theme', label: 'Themes', icon: '◐' },
     { id: 'editor', label: 'Editor', icon: '¶' },
-    { id: 'title-page', label: 'Title Page', icon: '▤' },
+    ...(isScreenplayDocument
+      ? [{ id: 'title-page' as const, label: 'Title Page', icon: '▤' }]
+      : []),
     { id: 'plugins', label: 'Plugins', icon: '⊕' },
   ];
 
@@ -292,7 +297,7 @@ export function SettingsModal({
               </div>
             )}
 
-            {activeTab === 'title-page' && (
+            {isScreenplayDocument && activeTab === 'title-page' && (
               <div className="settings-panel settings-panel-wide">
                 <p className="settings-panel-intro">
                   Manage the title page data attached to the current document.
