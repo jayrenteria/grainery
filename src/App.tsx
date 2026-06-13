@@ -54,9 +54,16 @@ import type { RenderedInlineAnnotation, RenderedStatusBadge } from './plugins';
 import { PluginUIHost } from './components/PluginUI';
 import './styles/screenplay.css';
 
-const AUTO_SAVE_DELAY_MS = 30_000;
+const DEFAULT_AUTO_SAVE_INTERVAL_MS = 30_000;
+const AUTO_SAVE_INTERVAL_OPTIONS_MS = [15_000, 30_000, 60_000, 300_000] as const;
 const INLINE_ANNOTATION_REFRESH_DEBOUNCE_MS = 120;
 const KEYMAP_HINTS_STORAGE_KEY = 'grainery-keymap-hints-enabled';
+const AUTO_SAVE_PREFERENCES_STORAGE_KEY = 'grainery-autosave-preferences';
+
+interface AutoSavePreferences {
+  enabled: boolean;
+  intervalMs: number;
+}
 
 function getPreviousNodeType(editor: Editor): string | null {
   const { $from } = editor.state.selection;
@@ -106,6 +113,40 @@ function getStoredKeymapHintsEnabled(): boolean {
   return localStorage.getItem(KEYMAP_HINTS_STORAGE_KEY) !== 'false';
 }
 
+function isValidAutoSaveInterval(value: unknown): value is typeof AUTO_SAVE_INTERVAL_OPTIONS_MS[number] {
+  return (
+    typeof value === 'number' &&
+    AUTO_SAVE_INTERVAL_OPTIONS_MS.includes(value as typeof AUTO_SAVE_INTERVAL_OPTIONS_MS[number])
+  );
+}
+
+function getStoredAutoSavePreferences(): AutoSavePreferences {
+  const fallback: AutoSavePreferences = {
+    enabled: true,
+    intervalMs: DEFAULT_AUTO_SAVE_INTERVAL_MS,
+  };
+  const raw = localStorage.getItem(AUTO_SAVE_PREFERENCES_STORAGE_KEY);
+
+  if (!raw) {
+    return fallback;
+  }
+
+  try {
+    const stored = JSON.parse(raw) as Partial<AutoSavePreferences>;
+
+    return {
+      enabled: typeof stored.enabled === 'boolean' ? stored.enabled : fallback.enabled,
+      intervalMs: isValidAutoSaveInterval(stored.intervalMs) ? stored.intervalMs : fallback.intervalMs,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function storeAutoSavePreferences(preferences: AutoSavePreferences): void {
+  localStorage.setItem(AUTO_SAVE_PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
+}
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -123,6 +164,7 @@ function App() {
   const [inlineAnnotations, setInlineAnnotations] = useState<RenderedInlineAnnotation[]>([]);
   const [isResolvingInitialOpen, setIsResolvingInitialOpen] = useState(true);
   const [keymapHintsEnabled, setKeymapHintsEnabled] = useState(getStoredKeymapHintsEnabled);
+  const [autoSavePreferences, setAutoSavePreferences] = useState(getStoredAutoSavePreferences);
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
   const [updateDialogStatus, setUpdateDialogStatus] = useState<UpdateDialogStatus>('checking');
   const [availableUpdate, setAvailableUpdate] = useState<AvailableAppUpdate | null>(null);
@@ -140,15 +182,25 @@ function App() {
   const showSettingsRef = useRef(showSettings);
   const isClosingRef = useRef(false);
 
-  const queueAutoSave = useCallback(() => {
+  const clearQueuedAutoSave = useCallback(() => {
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+  }, []);
+
+  const queueAutoSave = useCallback(() => {
+    clearQueuedAutoSave();
+
+    if (!autoSavePreferences.enabled) {
+      return;
     }
 
     autoSaveTimerRef.current = setTimeout(() => {
+      autoSaveTimerRef.current = null;
       void performAutoSaveRef.current();
-    }, AUTO_SAVE_DELAY_MS);
-  }, []);
+    }, autoSavePreferences.intervalMs);
+  }, [autoSavePreferences.enabled, autoSavePreferences.intervalMs, clearQueuedAutoSave]);
 
   const getPluginDataForPlugin = useCallback((pluginId: string): unknown | null => {
     return pluginDataRef.current[pluginId] ?? null;
@@ -830,6 +882,33 @@ function App() {
     localStorage.setItem(KEYMAP_HINTS_STORAGE_KEY, String(enabled));
   }, []);
 
+  const handleAutoSaveEnabledChange = useCallback(
+    (enabled: boolean) => {
+      setAutoSavePreferences((prev) => {
+        const next = { ...prev, enabled };
+        storeAutoSavePreferences(next);
+        return next;
+      });
+
+      if (!enabled) {
+        clearQueuedAutoSave();
+      }
+    },
+    [clearQueuedAutoSave]
+  );
+
+  const handleAutoSaveIntervalChange = useCallback((intervalMs: number) => {
+    if (!isValidAutoSaveInterval(intervalMs)) {
+      return;
+    }
+
+    setAutoSavePreferences((prev) => {
+      const next = { ...prev, intervalMs };
+      storeAutoSavePreferences(next);
+      return next;
+    });
+  }, []);
+
   const handleFindNext = useCallback(() => {
     const editor = editorRef.current;
     if (!editor) {
@@ -1023,14 +1102,20 @@ function App() {
     };
   }, [pluginManager]);
 
-  // Cleanup auto-save timer on unmount
   useEffect(() => {
-    return () => {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-      }
-    };
-  }, []);
+    return clearQueuedAutoSave;
+  }, [clearQueuedAutoSave]);
+
+  useEffect(() => {
+    if (!autoSavePreferences.enabled) {
+      clearQueuedAutoSave();
+      return;
+    }
+
+    if (isDirtyRef.current) {
+      queueAutoSave();
+    }
+  }, [autoSavePreferences.enabled, autoSavePreferences.intervalMs, clearQueuedAutoSave, queueAutoSave]);
 
   useEffect(() => {
     viewRef.current = view;
@@ -1294,6 +1379,10 @@ function App() {
             pluginStateVersion={pluginStateVersion}
             keymapHintsEnabled={keymapHintsEnabled}
             onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
+            autoSaveEnabled={autoSavePreferences.enabled}
+            autoSaveIntervalMs={autoSavePreferences.intervalMs}
+            onAutoSaveEnabledChange={handleAutoSaveEnabledChange}
+            onAutoSaveIntervalChange={handleAutoSaveIntervalChange}
           />
         )}
 

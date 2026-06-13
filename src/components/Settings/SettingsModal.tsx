@@ -19,6 +19,10 @@ interface SettingsModalProps {
   pluginStateVersion: number;
   keymapHintsEnabled: boolean;
   onKeymapHintsEnabledChange: (enabled: boolean) => void;
+  autoSaveEnabled: boolean;
+  autoSaveIntervalMs: number;
+  onAutoSaveEnabledChange: (enabled: boolean) => void;
+  onAutoSaveIntervalChange: (intervalMs: number) => void;
 }
 
 type SettingsTab = 'theme' | 'editor' | 'title-page' | 'plugins';
@@ -33,6 +37,13 @@ const EMPTY_TITLE_PAGE: TitlePageData = {
   copyright: '',
   notes: '',
 };
+
+const AUTO_SAVE_INTERVAL_OPTIONS = [
+  { value: 15_000, label: '15 seconds' },
+  { value: 30_000, label: '30 seconds' },
+  { value: 60_000, label: '1 minute' },
+  { value: 300_000, label: '5 minutes' },
+] as const;
 
 function capitalizeTheme(theme: string): string {
   return theme.charAt(0).toUpperCase() + theme.slice(1);
@@ -100,6 +111,10 @@ export function SettingsModal({
   pluginStateVersion,
   keymapHintsEnabled,
   onKeymapHintsEnabledChange,
+  autoSaveEnabled,
+  autoSaveIntervalMs,
+  onAutoSaveEnabledChange,
+  onAutoSaveIntervalChange,
 }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<SettingsTab>('theme');
@@ -293,6 +308,48 @@ export function SettingsModal({
                       />
                     </span>
                   </label>
+                </div>
+
+                <div className="settings-editor-group">
+                  <p className="settings-section-label">Autosave</p>
+
+                  <label className="settings-editor-option">
+                    <span className="settings-editor-option-copy">
+                      <span>Autosave</span>
+                      <small>Automatically save changes while you write.</small>
+                    </span>
+                    <span className="settings-editor-option-control">
+                      <span aria-hidden="true">{autoSaveEnabled ? 'On' : 'Off'}</span>
+                      <input
+                        type="checkbox"
+                        className="toggle toggle-sm"
+                        checked={autoSaveEnabled}
+                        onChange={(event) => onAutoSaveEnabledChange(event.target.checked)}
+                      />
+                    </span>
+                  </label>
+
+                  {autoSaveEnabled && (
+                    <label className="settings-editor-option settings-editor-option-select">
+                      <span className="settings-editor-option-copy">
+                        <span>Save every</span>
+                        <small>Choose how long Grainery waits after your last change.</small>
+                      </span>
+                      <span className="settings-editor-option-control">
+                        <select
+                          className="settings-editor-select"
+                          value={autoSaveIntervalMs}
+                          onChange={(event) => onAutoSaveIntervalChange(Number(event.target.value))}
+                        >
+                          {AUTO_SAVE_INTERVAL_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </span>
+                    </label>
+                  )}
                 </div>
               </div>
             )}
