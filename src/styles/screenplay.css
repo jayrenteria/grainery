@@ -707,6 +707,10 @@
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.settings-editor-option-select {
+  @apply cursor-default;
+}
+
 .settings-editor-option:hover .settings-editor-option-copy > span,
 .settings-editor-option:focus-within .settings-editor-option-copy > span {
   color: var(--color-base-content);
@@ -735,6 +739,20 @@
   @apply text-xs uppercase leading-none;
   color: color-mix(in oklch, var(--color-base-content) 42%, transparent);
   letter-spacing: 0.12em;
+}
+
+.settings-editor-select {
+  @apply h-9 rounded-md border px-3 text-sm;
+  min-width: 132px;
+  border-color: color-mix(in oklch, var(--color-base-content) 18%, transparent);
+  background: var(--color-base-100);
+  color: var(--color-base-content);
+}
+
+.settings-editor-select:focus {
+  @apply outline-none;
+  border-color: color-mix(in oklch, var(--color-primary) 72%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 18%, transparent);
 }
 
 .settings-plugins-panel {

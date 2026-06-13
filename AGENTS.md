@@ -1,7 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 Grainery - A minimal screenwriting application built with Tauri (Rust backend) and React/TypeScript frontend using TipTap editor.
