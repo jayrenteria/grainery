@@ -6,7 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask as askDialog } from '@tauri-apps/plugin-dialog';
 
-import { ScreenplayEditor } from './components/Editor';
+import { RecentDocumentsPanel, ScreenplayEditor } from './components/Editor';
 import { SettingsModal } from './components/Settings';
 import { StartScreen } from './components/StartScreen';
 import { UpdateDialog, type UpdateDialogStatus } from './components/Updates';
@@ -170,6 +170,7 @@ function App() {
   const [availableUpdate, setAvailableUpdate] = useState<AvailableAppUpdate | null>(null);
   const [updateProgress, setUpdateProgress] = useState<UpdateDownloadProgress | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [isRecentDocumentsPanelOpen, setIsRecentDocumentsPanelOpen] = useState(false);
 
   const editorRef = useRef<Editor | null>(null);
   const editorContentRef = useRef<JSONContent>(document.document);
@@ -438,6 +439,7 @@ function App() {
         setDocument(doc);
         editorContentRef.current = transformed;
         setIsDirty(false);
+        setIsRecentDocumentsPanelOpen(false);
         setView('editor');
         setStartScreenError(null);
         refreshRecentFiles();
@@ -502,6 +504,7 @@ function App() {
     setDocument(nextDoc);
     editorContentRef.current = nextDoc.document;
     setIsDirty(false);
+    setIsRecentDocumentsPanelOpen(false);
     setView('editor');
     setStartScreenError(null);
     await updateWindowTitle(null);
@@ -525,6 +528,7 @@ function App() {
       setDocument(doc);
       editorContentRef.current = transformed;
       setIsDirty(false);
+      setIsRecentDocumentsPanelOpen(false);
       setView('editor');
       setStartScreenError(null);
       refreshRecentFiles();
@@ -546,6 +550,7 @@ function App() {
 
     setView('start');
     setIsDirty(false);
+    setIsRecentDocumentsPanelOpen(false);
     setStartScreenError(null);
     editorRef.current = null;
     refreshRecentFiles();
@@ -570,6 +575,7 @@ function App() {
       setDocument(doc);
       editorContentRef.current = transformed;
       setIsDirty(false);
+      setIsRecentDocumentsPanelOpen(false);
       setView('editor');
       setStartScreenError(null);
       refreshRecentFiles();
@@ -605,6 +611,43 @@ function App() {
         console.error('Failed to open recent file:', error);
         const message = error instanceof Error ? error.message : String(error);
         setStartScreenError(`Failed to open recent file. ${message}`);
+      }
+    },
+    [openPathIntoEditor]
+  );
+
+  const handleOpenRecentFromEditor = useCallback(
+    async (path: string) => {
+      try {
+        const exists = await invoke<boolean>('file_exists', { path });
+        if (!exists) {
+          const next = removeRecentFile(path);
+          setRecentFiles(next);
+          await askDialog('This file is no longer available. It has been removed from Recent Files.', {
+            title: 'Recent File Unavailable',
+            kind: 'info',
+            okLabel: 'OK',
+          });
+          return;
+        }
+
+        const opened = await openPathIntoEditor(path, {
+          confirmIfDirty: true,
+          errorPrefix: 'Failed to open recent file.',
+          showStartError: false,
+        });
+
+        if (opened) {
+          setIsRecentDocumentsPanelOpen(false);
+        }
+      } catch (error) {
+        console.error('Failed to open recent file:', error);
+        const message = error instanceof Error ? error.message : String(error);
+        await askDialog(`Failed to open recent file. ${message}`, {
+          title: 'Open Failed',
+          kind: 'error',
+          okLabel: 'OK',
+        });
       }
     },
     [openPathIntoEditor]
@@ -1332,6 +1375,23 @@ function App() {
           )
         ) : (
           <>
+            <RecentDocumentsPanel
+              recentFiles={recentFiles}
+              currentFilePath={document.meta.filePath}
+              isOpen={isRecentDocumentsPanelOpen}
+              onToggle={() => setIsRecentDocumentsPanelOpen((prev) => !prev)}
+              onClose={() => setIsRecentDocumentsPanelOpen(false)}
+              onCreateDocument={() => {
+                void handleShowStartScreen();
+              }}
+              onOpenRecent={(path) => {
+                void handleOpenRecentFromEditor(path);
+              }}
+              onOpenFile={() => {
+                void handleOpen();
+              }}
+            />
+
             <ScreenplayEditor
               key={document.meta.id}
               documentMode={document.documentMode}
