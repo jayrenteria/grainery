@@ -7,6 +7,8 @@ use std::path::Path;
 use std::sync::Mutex;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{Emitter, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+#[cfg(desktop)]
+use tauri_plugin_window_state::{StateFlags, DEFAULT_FILENAME};
 
 mod pdf;
 mod plugins;
@@ -19,6 +21,44 @@ struct PendingOpenFiles {
 #[derive(Default)]
 struct ExitControl {
     allow_exit: Mutex<bool>,
+}
+
+#[cfg(target_os = "macos")]
+fn apply_macos_titlebar_theme(
+    window: &tauri::WebviewWindow,
+    red: u8,
+    green: u8,
+    blue: u8,
+    dark: bool,
+) -> Result<(), String> {
+    use cocoa::appkit::{NSColor, NSWindow, NSWindowTitleVisibility};
+    use cocoa::base::{id, nil};
+    use cocoa::foundation::NSString;
+
+    let ns_window = window.ns_window().map_err(|e| e.to_string())? as id;
+    unsafe {
+        let bg_color = NSColor::colorWithRed_green_blue_alpha_(
+            nil,
+            red as f64 / 255.0,
+            green as f64 / 255.0,
+            blue as f64 / 255.0,
+            1.0,
+        );
+        ns_window.setBackgroundColor_(bg_color);
+
+        let appearance_name = if dark {
+            "NSAppearanceNameDarkAqua"
+        } else {
+            "NSAppearanceNameAqua"
+        };
+        let appearance_name = NSString::alloc(nil).init_str(appearance_name);
+        let appearance: id = msg_send![class!(NSAppearance), appearanceNamed: appearance_name];
+        let () = msg_send![ns_window, setAppearance: appearance];
+
+        ns_window.setTitleVisibility_(NSWindowTitleVisibility::NSWindowTitleVisible);
+    }
+
+    Ok(())
 }
 
 impl PendingOpenFiles {
@@ -82,6 +122,46 @@ fn exit_app(app: tauri::AppHandle, state: tauri::State<'_, ExitControl>) {
     app.exit(0);
 }
 
+#[tauri::command]
+fn set_titlebar_theme_color(
+    app: tauri::AppHandle,
+    red: u8,
+    green: u8,
+    blue: u8,
+    dark: bool,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let window = app
+            .get_webview_window("main")
+            .ok_or_else(|| "main window not found".to_string())?;
+        apply_macos_titlebar_theme(&window, red, green, blue, dark)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, red, green, blue, dark);
+        Ok(())
+    }
+}
+
+#[cfg(desktop)]
+fn has_saved_window_state(app: &tauri::AppHandle) -> bool {
+    let Ok(config_dir) = app.path().app_config_dir() else {
+        return false;
+    };
+
+    let path = config_dir.join(DEFAULT_FILENAME);
+    let Ok(contents) = fs::read_to_string(path) else {
+        return false;
+    };
+
+    serde_json::from_str::<serde_json::Value>(&contents)
+        .ok()
+        .and_then(|value| value.get("main").cloned())
+        .is_some()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -91,6 +171,15 @@ pub fn run() {
         .manage(PendingOpenFiles::default())
         .manage(ExitControl::default())
         .setup(|app| {
+            #[cfg(desktop)]
+            app.handle().plugin(
+                tauri_plugin_window_state::Builder::default()
+                    .with_state_flags(
+                        StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED,
+                    )
+                    .build(),
+            )?;
+
             // File menu items
             let new_item = MenuItemBuilder::with_id("new", "New Screenplay")
                 .accelerator("CmdOrCtrl+N")
@@ -200,12 +289,7 @@ pub fn run() {
                 .build()?;
 
             let menu = MenuBuilder::new(app)
-                .items(&[
-                    &app_menu,
-                    &file_menu,
-                    &edit_menu,
-                    &window_menu,
-                ])
+                .items(&[&app_menu, &file_menu, &edit_menu, &window_menu])
                 .build()?;
 
             app.set_menu(menu)?;
@@ -221,14 +305,32 @@ pub fn run() {
 
             let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("Untitled")
-                .inner_size(800.0, 600.0)
-                .maximized(true);
+                .inner_size(800.0, 600.0);
+
+            #[cfg(desktop)]
+            let win_builder = {
+                let win_builder = win_builder.visible(false);
+                if has_saved_window_state(app.handle()) {
+                    win_builder
+                } else {
+                    win_builder.maximized(true)
+                }
+            };
+
+            #[cfg(not(desktop))]
+            let win_builder = win_builder.maximized(true);
 
             // set transparent title bar only when building for macOS
             #[cfg(target_os = "macos")]
             let win_builder = win_builder.title_bar_style(TitleBarStyle::Transparent);
 
             let window = win_builder.build().unwrap();
+
+            #[cfg(desktop)]
+            {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
 
             // Collect files passed as command line arguments (Windows/Linux and fallback on macOS).
             let startup_paths = std::env::args()
@@ -244,31 +346,7 @@ pub fn run() {
             // set background color and title color only when building for macOS
             #[cfg(target_os = "macos")]
             {
-                use cocoa::appkit::{NSColor, NSWindow, NSWindowTitleVisibility};
-                use cocoa::base::{id, nil};
-                use cocoa::foundation::NSString;
-
-                let ns_window = window.ns_window().unwrap() as id;
-                unsafe {
-                    let bg_color = NSColor::colorWithRed_green_blue_alpha_(
-                        nil,
-                        245.0 / 255.0,
-                        241.0 / 255.0,
-                        232.0 / 255.0,
-                        1.0,
-                    );
-                    ns_window.setBackgroundColor_(bg_color);
-
-                    // Use light appearance to get black title text
-                    let appearance_name =
-                        cocoa::foundation::NSString::alloc(nil).init_str("NSAppearanceNameAqua");
-                    let appearance: id =
-                        msg_send![class!(NSAppearance), appearanceNamed: appearance_name];
-                    let () = msg_send![ns_window, setAppearance: appearance];
-
-                    // Ensure title is visible
-                    ns_window.setTitleVisibility_(NSWindowTitleVisibility::NSWindowTitleVisible);
-                }
+                let _ = apply_macos_titlebar_theme(&window, 245, 241, 232, false);
             }
 
             Ok(())
@@ -279,6 +357,7 @@ pub fn run() {
             file_exists,
             consume_pending_open_files,
             exit_app,
+            set_titlebar_theme_color,
             export_pdf,
             plugins::plugin_list_installed,
             plugins::plugin_get_lock_records,

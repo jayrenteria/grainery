@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { syncNativeTitlebarTheme } from '../lib/nativeTheme';
 
 export const THEMES = [
   'grainery',
@@ -35,12 +36,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
     localStorage.setItem(STORAGE_KEY, newTheme);
-    document.documentElement.setAttribute('data-theme', newTheme);
   };
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-  }, []);
+    void syncNativeTitlebarTheme();
+  }, [theme]);
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>

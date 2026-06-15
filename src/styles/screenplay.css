@@ -1049,6 +1049,182 @@
   padding: 28px 20px 40px 20px;
 }
 
+.recent-documents-dock {
+  --recent-documents-panel-width: 304px;
+  @apply fixed inset-y-0 left-0 z-[180] pointer-events-none;
+  width: var(--recent-documents-panel-width);
+}
+
+.recent-documents-rail {
+  @apply fixed left-2 top-1/2 z-[181] h-10 w-1.5 -translate-y-1/2 rounded-full border-0 p-0 shadow-none transition-all;
+  background: color-mix(in oklch, var(--color-base-content) 18%, transparent);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.recent-documents-rail:hover,
+.recent-documents-rail:focus-visible {
+  @apply w-2;
+  background: color-mix(in oklch, var(--color-base-content) 34%, transparent);
+  outline: none;
+}
+
+.recent-documents-rail:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 20%, transparent);
+}
+
+.recent-documents-dock.is-open .recent-documents-rail {
+  @apply left-[calc(var(--recent-documents-panel-width)+4px)] h-12 w-1;
+  background: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+}
+
+.recent-documents-panel {
+  @apply flex h-full min-h-0 flex-col border-r shadow-2xl transition-transform duration-200 ease-out;
+  width: var(--recent-documents-panel-width);
+  transform: translateX(calc(-1 * var(--recent-documents-panel-width)));
+  pointer-events: auto;
+  border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+  background: color-mix(in oklch, var(--color-base-100) 90%, transparent);
+  color: var(--color-base-content);
+  backdrop-filter: blur(18px);
+}
+
+.recent-documents-dock.is-open .recent-documents-panel {
+  transform: translateX(0);
+}
+
+.recent-documents-dock:not(.is-open) .recent-documents-panel {
+  pointer-events: none;
+}
+
+.recent-documents-header {
+  @apply flex h-16 shrink-0 items-center justify-between gap-4 px-5;
+}
+
+.recent-documents-header h2 {
+  @apply m-0 text-left text-sm uppercase leading-none;
+  color: var(--color-base-content);
+  font-family: Courier, monospace;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.recent-documents-header h2 span {
+  @apply ml-2;
+  color: var(--color-primary);
+}
+
+.recent-documents-actions {
+  @apply flex shrink-0 items-center gap-1.5;
+}
+
+.recent-documents-icon-button {
+  @apply flex h-7 w-7 items-center justify-center rounded-md border-0 bg-transparent p-0 text-base leading-none shadow-none transition-colors;
+  color: color-mix(in oklch, var(--color-base-content) 48%, transparent);
+  font-family: Courier, monospace;
+}
+
+.recent-documents-icon-button:hover,
+.recent-documents-icon-button:focus-visible {
+  background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+  color: var(--color-base-content);
+  outline: none;
+}
+
+.recent-documents-icon-button:focus-visible,
+.recent-documents-item:focus-visible,
+.recent-documents-footer-button:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 28%, transparent);
+}
+
+.recent-documents-scroll {
+  @apply min-h-0 flex-1 overflow-y-auto px-3 pb-5;
+}
+
+.recent-documents-group {
+  @apply mt-5;
+}
+
+.recent-documents-group:first-child {
+  @apply mt-2;
+}
+
+.recent-documents-group-header {
+  @apply mb-2 flex items-center justify-between gap-3 px-2;
+}
+
+.recent-documents-group-header h3 {
+  @apply m-0 text-[0.66rem] uppercase leading-none;
+  color: color-mix(in oklch, var(--color-base-content) 34%, transparent);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+}
+
+.recent-documents-group-header span {
+  @apply text-[0.65rem] leading-none;
+  color: color-mix(in oklch, var(--color-base-content) 24%, transparent);
+  font-family: Courier, monospace;
+}
+
+.recent-documents-list {
+  @apply m-0 flex list-none flex-col gap-1 p-0;
+}
+
+.recent-documents-item {
+  @apply grid w-full min-w-0 cursor-pointer gap-1 rounded-md border-0 px-2.5 py-2 text-left shadow-none transition-colors;
+  background: transparent;
+  color: var(--color-base-content);
+}
+
+.recent-documents-item:hover,
+.recent-documents-item:focus-visible,
+.recent-documents-item.is-current {
+  background: color-mix(in oklch, var(--color-primary) 10%, transparent);
+  outline: none;
+}
+
+.recent-documents-name {
+  @apply truncate text-[0.82rem] leading-5;
+  font-family: Courier, monospace;
+  letter-spacing: 0;
+}
+
+.recent-documents-meta {
+  @apply truncate text-[0.68rem] leading-none;
+  color: color-mix(in oklch, var(--color-base-content) 35%, transparent);
+  font-family: Courier, monospace;
+}
+
+.recent-documents-empty {
+  @apply m-0 px-2 py-2 text-xs leading-5;
+  color: color-mix(in oklch, var(--color-base-content) 28%, transparent);
+  font-family: Courier, monospace;
+}
+
+.recent-documents-footer {
+  @apply flex h-12 shrink-0 items-center justify-end border-t px-5;
+  border-color: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+}
+
+.recent-documents-footer-button {
+  @apply rounded-md border-0 bg-transparent px-2 py-1 text-xs leading-none shadow-none transition-colors;
+  color: color-mix(in oklch, var(--color-base-content) 46%, transparent);
+  font-family: Courier, monospace;
+}
+
+.recent-documents-footer-button:hover,
+.recent-documents-footer-button:focus-visible {
+  background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+  color: var(--color-base-content);
+  outline: none;
+}
+
+@media (max-width: 520px) {
+  .recent-documents-dock {
+    --recent-documents-panel-width: min(86vw, 304px);
+  }
+}
+
 /* Title Page Modal Styles */
 .modal-overlay {
   @apply fixed inset-0 bg-black/40 flex items-center justify-center z-[9999];
