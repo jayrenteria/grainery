@@ -19,6 +19,8 @@ interface SettingsModalProps {
   pluginStateVersion: number;
   keymapHintsEnabled: boolean;
   onKeymapHintsEnabledChange: (enabled: boolean) => void;
+  recentDocumentsPanelEnabled: boolean;
+  onRecentDocumentsPanelEnabledChange: (enabled: boolean) => void;
   autoSaveEnabled: boolean;
   autoSaveIntervalMs: number;
   onAutoSaveEnabledChange: (enabled: boolean) => void;
@@ -111,6 +113,8 @@ export function SettingsModal({
   pluginStateVersion,
   keymapHintsEnabled,
   onKeymapHintsEnabledChange,
+  recentDocumentsPanelEnabled,
+  onRecentDocumentsPanelEnabledChange,
   autoSaveEnabled,
   autoSaveIntervalMs,
   onAutoSaveEnabledChange,
@@ -305,6 +309,22 @@ export function SettingsModal({
                         className="toggle toggle-sm"
                         checked={keymapHintsEnabled}
                         onChange={(event) => onKeymapHintsEnabledChange(event.target.checked)}
+                      />
+                    </span>
+                  </label>
+
+                  <label className="settings-editor-option">
+                    <span className="settings-editor-option-copy">
+                      <span>Recent documents rail</span>
+                      <small>Show the side rail for opening recent documents from the editor.</small>
+                    </span>
+                    <span className="settings-editor-option-control">
+                      <span aria-hidden="true">{recentDocumentsPanelEnabled ? 'On' : 'Off'}</span>
+                      <input
+                        type="checkbox"
+                        className="toggle toggle-sm"
+                        checked={recentDocumentsPanelEnabled}
+                        onChange={(event) => onRecentDocumentsPanelEnabledChange(event.target.checked)}
                       />
                     </span>
                   </label>

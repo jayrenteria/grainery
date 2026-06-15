@@ -58,6 +58,7 @@ const DEFAULT_AUTO_SAVE_INTERVAL_MS = 30_000;
 const AUTO_SAVE_INTERVAL_OPTIONS_MS = [15_000, 30_000, 60_000, 300_000] as const;
 const INLINE_ANNOTATION_REFRESH_DEBOUNCE_MS = 120;
 const KEYMAP_HINTS_STORAGE_KEY = 'grainery-keymap-hints-enabled';
+const RECENT_DOCUMENTS_PANEL_STORAGE_KEY = 'grainery-recent-documents-panel-enabled';
 const AUTO_SAVE_PREFERENCES_STORAGE_KEY = 'grainery-autosave-preferences';
 
 interface AutoSavePreferences {
@@ -113,6 +114,10 @@ function getStoredKeymapHintsEnabled(): boolean {
   return localStorage.getItem(KEYMAP_HINTS_STORAGE_KEY) !== 'false';
 }
 
+function getStoredRecentDocumentsPanelEnabled(): boolean {
+  return localStorage.getItem(RECENT_DOCUMENTS_PANEL_STORAGE_KEY) !== 'false';
+}
+
 function isValidAutoSaveInterval(value: unknown): value is typeof AUTO_SAVE_INTERVAL_OPTIONS_MS[number] {
   return (
     typeof value === 'number' &&
@@ -164,6 +169,9 @@ function App() {
   const [inlineAnnotations, setInlineAnnotations] = useState<RenderedInlineAnnotation[]>([]);
   const [isResolvingInitialOpen, setIsResolvingInitialOpen] = useState(true);
   const [keymapHintsEnabled, setKeymapHintsEnabled] = useState(getStoredKeymapHintsEnabled);
+  const [recentDocumentsPanelEnabled, setRecentDocumentsPanelEnabled] = useState(
+    getStoredRecentDocumentsPanelEnabled
+  );
   const [autoSavePreferences, setAutoSavePreferences] = useState(getStoredAutoSavePreferences);
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
   const [updateDialogStatus, setUpdateDialogStatus] = useState<UpdateDialogStatus>('checking');
@@ -925,6 +933,15 @@ function App() {
     localStorage.setItem(KEYMAP_HINTS_STORAGE_KEY, String(enabled));
   }, []);
 
+  const handleRecentDocumentsPanelEnabledChange = useCallback((enabled: boolean) => {
+    setRecentDocumentsPanelEnabled(enabled);
+    localStorage.setItem(RECENT_DOCUMENTS_PANEL_STORAGE_KEY, String(enabled));
+
+    if (!enabled) {
+      setIsRecentDocumentsPanelOpen(false);
+    }
+  }, []);
+
   const handleAutoSaveEnabledChange = useCallback(
     (enabled: boolean) => {
       setAutoSavePreferences((prev) => {
@@ -1375,22 +1392,24 @@ function App() {
           )
         ) : (
           <>
-            <RecentDocumentsPanel
-              recentFiles={recentFiles}
-              currentFilePath={document.meta.filePath}
-              isOpen={isRecentDocumentsPanelOpen}
-              onToggle={() => setIsRecentDocumentsPanelOpen((prev) => !prev)}
-              onClose={() => setIsRecentDocumentsPanelOpen(false)}
-              onCreateDocument={() => {
-                void handleShowStartScreen();
-              }}
-              onOpenRecent={(path) => {
-                void handleOpenRecentFromEditor(path);
-              }}
-              onOpenFile={() => {
-                void handleOpen();
-              }}
-            />
+            {recentDocumentsPanelEnabled && (
+              <RecentDocumentsPanel
+                recentFiles={recentFiles}
+                currentFilePath={document.meta.filePath}
+                isOpen={isRecentDocumentsPanelOpen}
+                onToggle={() => setIsRecentDocumentsPanelOpen((prev) => !prev)}
+                onClose={() => setIsRecentDocumentsPanelOpen(false)}
+                onCreateDocument={() => {
+                  void handleShowStartScreen();
+                }}
+                onOpenRecent={(path) => {
+                  void handleOpenRecentFromEditor(path);
+                }}
+                onOpenFile={() => {
+                  void handleOpen();
+                }}
+              />
+            )}
 
             <ScreenplayEditor
               key={document.meta.id}
@@ -1439,6 +1458,8 @@ function App() {
             pluginStateVersion={pluginStateVersion}
             keymapHintsEnabled={keymapHintsEnabled}
             onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
+            recentDocumentsPanelEnabled={recentDocumentsPanelEnabled}
+            onRecentDocumentsPanelEnabledChange={handleRecentDocumentsPanelEnabledChange}
             autoSaveEnabled={autoSavePreferences.enabled}
             autoSaveIntervalMs={autoSavePreferences.intervalMs}
             onAutoSaveEnabledChange={handleAutoSaveEnabledChange}
