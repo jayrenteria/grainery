@@ -7,6 +7,8 @@ use std::path::Path;
 use std::sync::Mutex;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{Emitter, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+#[cfg(desktop)]
+use tauri_plugin_window_state::{StateFlags, DEFAULT_FILENAME};
 
 mod pdf;
 mod plugins;
@@ -82,6 +84,23 @@ fn exit_app(app: tauri::AppHandle, state: tauri::State<'_, ExitControl>) {
     app.exit(0);
 }
 
+#[cfg(desktop)]
+fn has_saved_window_state(app: &tauri::AppHandle) -> bool {
+    let Ok(config_dir) = app.path().app_config_dir() else {
+        return false;
+    };
+
+    let path = config_dir.join(DEFAULT_FILENAME);
+    let Ok(contents) = fs::read_to_string(path) else {
+        return false;
+    };
+
+    serde_json::from_str::<serde_json::Value>(&contents)
+        .ok()
+        .and_then(|value| value.get("main").cloned())
+        .is_some()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -91,6 +110,17 @@ pub fn run() {
         .manage(PendingOpenFiles::default())
         .manage(ExitControl::default())
         .setup(|app| {
+            #[cfg(desktop)]
+            app.handle().plugin(
+                tauri_plugin_window_state::Builder::default()
+                    .with_state_flags(
+                        StateFlags::SIZE
+                            | StateFlags::POSITION
+                            | StateFlags::MAXIMIZED,
+                    )
+                    .build(),
+            )?;
+
             // File menu items
             let new_item = MenuItemBuilder::with_id("new", "New Screenplay")
                 .accelerator("CmdOrCtrl+N")
@@ -221,14 +251,32 @@ pub fn run() {
 
             let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("Untitled")
-                .inner_size(800.0, 600.0)
-                .maximized(true);
+                .inner_size(800.0, 600.0);
+
+            #[cfg(desktop)]
+            let win_builder = {
+                let win_builder = win_builder.visible(false);
+                if has_saved_window_state(app.handle()) {
+                    win_builder
+                } else {
+                    win_builder.maximized(true)
+                }
+            };
+
+            #[cfg(not(desktop))]
+            let win_builder = win_builder.maximized(true);
 
             // set transparent title bar only when building for macOS
             #[cfg(target_os = "macos")]
             let win_builder = win_builder.title_bar_style(TitleBarStyle::Transparent);
 
             let window = win_builder.build().unwrap();
+
+            #[cfg(desktop)]
+            {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
 
             // Collect files passed as command line arguments (Windows/Linux and fallback on macOS).
             let startup_paths = std::env::args()
