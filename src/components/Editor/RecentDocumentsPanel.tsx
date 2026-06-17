@@ -124,7 +124,9 @@ export function RecentDocumentsPanel({
               aria-label="Close recent documents"
               title="Close recent documents"
             >
-              x
+              <span className="recent-documents-close-glyph" aria-hidden="true">
+                X
+              </span>
             </button>
           </div>
         </header>

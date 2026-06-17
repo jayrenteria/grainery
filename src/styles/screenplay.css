@@ -1137,6 +1137,11 @@
   box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 28%, transparent);
 }
 
+.recent-documents-close-glyph {
+  @apply block text-[0.72rem] leading-none;
+  transform: translateY(0.5px);
+}
+
 .recent-documents-scroll {
   @apply min-h-0 flex-1 overflow-y-auto px-3 pb-5;
 }
