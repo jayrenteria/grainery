@@ -11,12 +11,15 @@ import {
   isListElementType,
   isScreenplayElementType,
 } from '../lib/elementConfig';
+import { resolveElementLoopFromPreferences } from '../lib/elementLoopPreferences';
+import type { ElementLoopPreferences } from '../lib/elementLoopPreferences';
 import type { DocumentMode, ScreenplayElementType } from '../lib/types';
 import type { ElementLoopContext } from '../plugins';
 
 export interface ScreenplayKeymapOptions {
   documentMode: DocumentMode;
   resolveElementLoop?: (context: ElementLoopContext) => ScreenplayElementType | null;
+  elementLoopPreferences?: ElementLoopPreferences;
 }
 
 function getPreviousNodeType($from: ResolvedPos): string | null {
@@ -43,6 +46,17 @@ function resolveFromPlugins(
     console.error('[ScreenplayKeymap] Plugin loop resolver failed', error);
     return null;
   }
+}
+
+function resolveFromPreferences(
+  preferences: ElementLoopPreferences | undefined,
+  context: ElementLoopContext
+): ScreenplayElementType | null {
+  if (!preferences) {
+    return null;
+  }
+
+  return resolveElementLoopFromPreferences(context, preferences);
 }
 
 function insertNewNodeOfType(editor: Editor, nextType: ScreenplayElementType): boolean {
@@ -98,6 +112,7 @@ export const ScreenplayKeymap = Extension.create<ScreenplayKeymapOptions>({
     return {
       documentMode: 'screenplay',
       resolveElementLoop: undefined,
+      elementLoopPreferences: undefined,
     };
   },
 
@@ -126,7 +141,15 @@ export const ScreenplayKeymap = Extension.create<ScreenplayKeymapOptions>({
           return setCurrentNodeType(editor, currentType, pluginType, currentText);
         }
 
-        const nextType = getNextElementType(this.options.documentMode, currentType, prevNodeType);
+        const preferenceType = resolveFromPreferences(this.options.elementLoopPreferences, {
+          event: 'tab',
+          currentType,
+          documentMode: this.options.documentMode,
+          previousType: prevNodeType,
+          isCurrentEmpty: isNodeEffectivelyEmpty(currentType, currentText),
+        });
+
+        const nextType = preferenceType ?? getNextElementType(this.options.documentMode, currentType, prevNodeType);
         return setCurrentNodeType(editor, currentType, nextType, currentText);
       },
       'Shift-Tab': ({ editor }) => {
@@ -152,7 +175,15 @@ export const ScreenplayKeymap = Extension.create<ScreenplayKeymapOptions>({
           return setCurrentNodeType(editor, currentType, pluginType, currentText);
         }
 
-        const prevType = getPreviousElementType(this.options.documentMode, currentType, prevNodeType);
+        const preferenceType = resolveFromPreferences(this.options.elementLoopPreferences, {
+          event: 'shift-tab',
+          currentType,
+          documentMode: this.options.documentMode,
+          previousType: prevNodeType,
+          isCurrentEmpty: isNodeEffectivelyEmpty(currentType, currentText),
+        });
+
+        const prevType = preferenceType ?? getPreviousElementType(this.options.documentMode, currentType, prevNodeType);
         return setCurrentNodeType(editor, currentType, prevType, currentText);
       },
       // Escape returns to Action element
@@ -179,7 +210,14 @@ export const ScreenplayKeymap = Extension.create<ScreenplayKeymapOptions>({
           return setCurrentNodeType(editor, currentType, pluginType, currentText);
         }
 
-        const escapeType = getEscapeElementType(this.options.documentMode);
+        const preferenceType = resolveFromPreferences(this.options.elementLoopPreferences, {
+          event: 'escape',
+          currentType,
+          documentMode: this.options.documentMode,
+          previousType: prevNodeType,
+          isCurrentEmpty: isNodeEffectivelyEmpty(currentType, currentText),
+        });
+        const escapeType = preferenceType ?? getEscapeElementType(this.options.documentMode);
         if (currentType !== escapeType) {
           return setCurrentNodeType(editor, currentType, escapeType, currentText);
         }
@@ -210,7 +248,15 @@ export const ScreenplayKeymap = Extension.create<ScreenplayKeymapOptions>({
           return insertNewNodeOfType(editor, pluginType);
         }
 
-        const nextType = getEnterElementType(this.options.documentMode, currentType, isCurrentEmpty);
+        const preferenceType = resolveFromPreferences(this.options.elementLoopPreferences, {
+          event: 'enter',
+          currentType,
+          documentMode: this.options.documentMode,
+          previousType: prevNodeType,
+          isCurrentEmpty,
+        });
+
+        const nextType = preferenceType ?? getEnterElementType(this.options.documentMode, currentType, isCurrentEmpty);
 
         // Enter on an empty list item converts it in place instead of adding a new block.
         if (isCurrentEmpty && isListElementType(currentType) && nextType !== currentType) {

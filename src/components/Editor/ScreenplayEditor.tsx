@@ -46,6 +46,7 @@ import { FormatToolbar } from './FormatToolbar';
 import { KeymapHint } from './KeymapHint';
 import { PaginatedEditor } from './PaginatedEditor';
 import type { ScreenplayElementType, CharacterExtension, DocumentMode } from '../../lib/types';
+import type { ElementLoopPreferences } from '../../lib/elementLoopPreferences';
 import type { Editor, JSONContent } from '@tiptap/react';
 import type { ElementLoopContext, RenderedInlineAnnotation } from '../../plugins';
 
@@ -55,6 +56,7 @@ interface ScreenplayEditorProps {
   onChange?: (content: JSONContent) => void;
   onSelectionChange?: () => void;
   resolveElementLoop?: (context: ElementLoopContext) => ScreenplayElementType | null;
+  elementLoopPreferences?: ElementLoopPreferences;
   onEditorReady?: (editor: Editor | null) => void;
   showKeymapHint?: boolean;
   documentMode?: DocumentMode;
@@ -119,6 +121,7 @@ export function ScreenplayEditor({
   onChange,
   onSelectionChange,
   resolveElementLoop,
+  elementLoopPreferences,
   onEditorReady,
   showKeymapHint = true,
   documentMode = 'screenplay',
@@ -188,6 +191,7 @@ export function ScreenplayEditor({
       ScreenplayKeymap.configure({
         documentMode,
         resolveElementLoop,
+        elementLoopPreferences,
       }),
       // Free write is a continuous canvas; only paginated modes compute page breaks.
       ...(documentMode === 'freewrite'
@@ -226,6 +230,16 @@ export function ScreenplayEditor({
       syncElementContext(editor);
     }
   }, [editor, onEditorReady]);
+
+  useEffect(() => {
+    const keymapExtension = editor?.extensionManager.extensions.find(
+      (extension) => extension.name === 'screenplayKeymap'
+    );
+
+    if (keymapExtension) {
+      keymapExtension.options.elementLoopPreferences = elementLoopPreferences;
+    }
+  }, [editor, elementLoopPreferences]);
 
   useEffect(() => {
     if (!editor) {
@@ -277,6 +291,7 @@ export function ScreenplayEditor({
           previousType={previousElement}
           isCurrentEmpty={isCurrentElementEmpty}
           resolveElementLoop={resolveElementLoop}
+          elementLoopPreferences={elementLoopPreferences}
         />
       )}
       <EditorStats editor={editor} showPageCount={documentMode !== 'freewrite'} />

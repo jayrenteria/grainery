@@ -2,7 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { confirm, open } from '@tauri-apps/plugin-dialog';
 import { useTheme, THEMES, Theme } from '../../contexts/ThemeContext';
 import { TitlePagePreviewPage } from '../TitlePage';
-import type { DocumentMode, TitlePageData } from '../../lib/types';
+import {
+  ELEMENT_LABELS,
+  MODE_ELEMENT_TYPES,
+} from '../../lib/elementConfig';
+import {
+  getDefaultElementLoopPreferences,
+  normalizeElementLoopPreferences,
+  type ElementLoopPreferences,
+  type ModeElementLoopPreferences,
+} from '../../lib/elementLoopPreferences';
+import type { DocumentMode, ScreenplayElementType, TitlePageData } from '../../lib/types';
 import type {
   OptionalPermission,
   PluginPermissionGrant,
@@ -25,9 +35,11 @@ interface SettingsModalProps {
   autoSaveIntervalMs: number;
   onAutoSaveEnabledChange: (enabled: boolean) => void;
   onAutoSaveIntervalChange: (intervalMs: number) => void;
+  elementLoopPreferences: ElementLoopPreferences;
+  onElementLoopPreferencesChange: (preferences: ElementLoopPreferences) => void;
 }
 
-type SettingsTab = 'theme' | 'editor' | 'title-page' | 'plugins';
+type SettingsTab = 'theme' | 'editor' | 'smart-loop' | 'title-page' | 'plugins';
 
 const EMPTY_TITLE_PAGE: TitlePageData = {
   title: '',
@@ -46,6 +58,12 @@ const AUTO_SAVE_INTERVAL_OPTIONS = [
   { value: 60_000, label: '1 minute' },
   { value: 300_000, label: '5 minutes' },
 ] as const;
+
+const DOCUMENT_MODE_LABELS: Record<DocumentMode, string> = {
+  screenplay: 'Screenplay',
+  comic: 'Comic',
+  freewrite: 'Free Write',
+};
 
 function capitalizeTheme(theme: string): string {
   return theme.charAt(0).toUpperCase() + theme.slice(1);
@@ -104,6 +122,36 @@ function updatePermission(
   });
 }
 
+function cloneModeElementLoopPreferences(
+  preferences: ModeElementLoopPreferences
+): ModeElementLoopPreferences {
+  return {
+    tabOrder: [...preferences.tabOrder],
+    enterTransitions: { ...preferences.enterTransitions },
+    emptyEnterTransitions: { ...preferences.emptyEnterTransitions },
+    escapeTarget: preferences.escapeTarget,
+    contextTransitions: preferences.contextTransitions.map((transition) => ({ ...transition })),
+  };
+}
+
+function cloneElementLoopPreferences(
+  preferences: ElementLoopPreferences
+): ElementLoopPreferences {
+  return {
+    screenplay: cloneModeElementLoopPreferences(preferences.screenplay),
+    comic: cloneModeElementLoopPreferences(preferences.comic),
+    freewrite: cloneModeElementLoopPreferences(preferences.freewrite),
+  };
+}
+
+function getTransitionSubject(transition: { currentTypes?: ScreenplayElementType[] }): string {
+  if (!transition.currentTypes || transition.currentTypes.length === 0) {
+    return 'Any element';
+  }
+
+  return transition.currentTypes.map((type) => ELEMENT_LABELS[type]).join(', ');
+}
+
 export function SettingsModal({
   onClose,
   documentMode,
@@ -119,15 +167,23 @@ export function SettingsModal({
   autoSaveIntervalMs,
   onAutoSaveEnabledChange,
   onAutoSaveIntervalChange,
+  elementLoopPreferences,
+  onElementLoopPreferencesChange,
 }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<SettingsTab>('theme');
   const [titlePageForm, setTitlePageForm] = useState<TitlePageData>(titlePage || EMPTY_TITLE_PAGE);
+  const [selectedLoopMode, setSelectedLoopMode] = useState<DocumentMode>(documentMode);
   const [isBusy, setIsBusy] = useState(false);
   const [pluginError, setPluginError] = useState<string | null>(null);
   const isScreenplayDocument = documentMode === 'screenplay';
 
   const plugins = useMemo(() => pluginManager.getInstalledPlugins(), [pluginManager, pluginStateVersion]);
+  const loopModePreferences = elementLoopPreferences[selectedLoopMode];
+  const loopModeElements = MODE_ELEMENT_TYPES[selectedLoopMode];
+  const elementsOutsideTabOrder = loopModeElements.filter(
+    (elementType) => !loopModePreferences.tabOrder.includes(elementType)
+  );
 
   useEffect(() => {
     setTitlePageForm(titlePage || EMPTY_TITLE_PAGE);
@@ -144,6 +200,84 @@ export function SettingsModal({
   const handleClearTitlePage = () => {
     setTitlePageForm(EMPTY_TITLE_PAGE);
     onTitlePageChange(null);
+  };
+
+  const updateElementLoopPreferences = (
+    updater: (preferences: ElementLoopPreferences) => void
+  ) => {
+    const next = cloneElementLoopPreferences(elementLoopPreferences);
+    updater(next);
+    onElementLoopPreferencesChange(normalizeElementLoopPreferences(next));
+  };
+
+  const handleMoveTabElement = (index: number, direction: -1 | 1) => {
+    updateElementLoopPreferences((next) => {
+      const order = next[selectedLoopMode].tabOrder;
+      const targetIndex = index + direction;
+
+      if (targetIndex < 0 || targetIndex >= order.length) {
+        return;
+      }
+
+      const [item] = order.splice(index, 1);
+      order.splice(targetIndex, 0, item);
+    });
+  };
+
+  const handleRemoveTabElement = (type: ScreenplayElementType) => {
+    updateElementLoopPreferences((next) => {
+      const order = next[selectedLoopMode].tabOrder;
+      if (order.length <= 1) {
+        return;
+      }
+
+      next[selectedLoopMode].tabOrder = order.filter((item) => item !== type);
+    });
+  };
+
+  const handleAddTabElement = (type: ScreenplayElementType) => {
+    updateElementLoopPreferences((next) => {
+      const order = next[selectedLoopMode].tabOrder;
+      if (!order.includes(type)) {
+        order.push(type);
+      }
+    });
+  };
+
+  const handleEnterTransitionChange = (
+    from: ScreenplayElementType,
+    to: ScreenplayElementType
+  ) => {
+    updateElementLoopPreferences((next) => {
+      next[selectedLoopMode].enterTransitions[from] = to;
+    });
+  };
+
+  const handleContextTransitionChange = (transitionId: string, to: ScreenplayElementType) => {
+    updateElementLoopPreferences((next) => {
+      next[selectedLoopMode].contextTransitions = next[selectedLoopMode].contextTransitions.map(
+        (transition) => transition.id === transitionId
+          ? { ...transition, nextType: to }
+          : transition
+      );
+    });
+  };
+
+  const handleEscapeTargetChange = (to: ScreenplayElementType) => {
+    updateElementLoopPreferences((next) => {
+      next[selectedLoopMode].escapeTarget = to;
+    });
+  };
+
+  const handleResetLoopMode = () => {
+    const defaults = getDefaultElementLoopPreferences();
+    updateElementLoopPreferences((next) => {
+      next[selectedLoopMode] = cloneModeElementLoopPreferences(defaults[selectedLoopMode]);
+    });
+  };
+
+  const handleResetAllLoops = () => {
+    onElementLoopPreferencesChange(getDefaultElementLoopPreferences());
   };
 
   const runBusy = async (task: () => Promise<void>) => {
@@ -218,6 +352,7 @@ export function SettingsModal({
   const tabs: Array<{ id: SettingsTab; label: string; icon: string }> = [
     { id: 'theme', label: 'Themes', icon: '◐' },
     { id: 'editor', label: 'Editor', icon: '¶' },
+    { id: 'smart-loop', label: 'Smart Loop', icon: '∞' },
     ...(isScreenplayDocument
       ? [{ id: 'title-page' as const, label: 'Title Page', icon: '▤' }]
       : []),
@@ -370,6 +505,187 @@ export function SettingsModal({
                       </span>
                     </label>
                   )}
+                </div>
+
+              </div>
+            )}
+
+            {activeTab === 'smart-loop' && (
+              <div className="settings-panel settings-smart-loop-panel">
+                <div className="settings-smart-loop-header">
+                  <div>
+                    <p className="settings-section-label">Smart Loop</p>
+                    <span>{DOCUMENT_MODE_LABELS[selectedLoopMode]}</span>
+                  </div>
+                  <div className="settings-loop-actions">
+                    <button type="button" className="settings-inline-button" onClick={handleResetLoopMode}>
+                      Reset mode
+                    </button>
+                    <button type="button" className="settings-inline-button" onClick={handleResetAllLoops}>
+                      Reset all
+                    </button>
+                  </div>
+                </div>
+
+                <div className="settings-loop-mode-tabs" role="tablist" aria-label="Smart loop document mode">
+                  {(Object.keys(DOCUMENT_MODE_LABELS) as DocumentMode[]).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="tab"
+                      aria-selected={selectedLoopMode === mode}
+                      className={selectedLoopMode === mode ? 'is-active' : ''}
+                      onClick={() => setSelectedLoopMode(mode)}
+                    >
+                      {DOCUMENT_MODE_LABELS[mode]}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="settings-loop-block">
+                  <div className="settings-loop-block-title">
+                    <span>Tab order</span>
+                    {elementsOutsideTabOrder.length > 0 && (
+                      <select
+                        className="settings-editor-select"
+                        value=""
+                        aria-label="Add element to Tab order"
+                        onChange={(event) => {
+                          const value = event.target.value as ScreenplayElementType;
+                          if (value) {
+                            handleAddTabElement(value);
+                          }
+                        }}
+                      >
+                        <option value="">Add element</option>
+                        {elementsOutsideTabOrder.map((elementType) => (
+                          <option key={elementType} value={elementType}>
+                            {ELEMENT_LABELS[elementType]}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  <div className="settings-loop-order-list">
+                    {loopModePreferences.tabOrder.map((elementType, index) => (
+                      <div key={elementType} className="settings-loop-order-item">
+                        <span>{ELEMENT_LABELS[elementType]}</span>
+                        <div className="settings-loop-order-controls">
+                          <button
+                            type="button"
+                            className="settings-loop-icon-button"
+                            aria-label={`Move ${ELEMENT_LABELS[elementType]} up`}
+                            disabled={index === 0}
+                            onClick={() => handleMoveTabElement(index, -1)}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="settings-loop-icon-button"
+                            aria-label={`Move ${ELEMENT_LABELS[elementType]} down`}
+                            disabled={index === loopModePreferences.tabOrder.length - 1}
+                            onClick={() => handleMoveTabElement(index, 1)}
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            className="settings-loop-remove-button"
+                            disabled={loopModePreferences.tabOrder.length <= 1}
+                            onClick={() => handleRemoveTabElement(elementType)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="settings-loop-block">
+                  <div className="settings-loop-block-title">
+                    <span>Enter creates</span>
+                  </div>
+
+                  <div className="settings-loop-transition-list">
+                    {loopModeElements.map((elementType) => (
+                      <label key={elementType} className="settings-loop-transition-row">
+                        <span>{ELEMENT_LABELS[elementType]}</span>
+                        <select
+                          className="settings-editor-select"
+                          value={loopModePreferences.enterTransitions[elementType] ?? loopModeElements[0]}
+                          onChange={(event) =>
+                            handleEnterTransitionChange(
+                              elementType,
+                              event.target.value as ScreenplayElementType
+                            )
+                          }
+                        >
+                          {loopModeElements.map((targetType) => (
+                            <option key={targetType} value={targetType}>
+                              {ELEMENT_LABELS[targetType]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {loopModePreferences.contextTransitions.length > 0 && (
+                  <div className="settings-loop-block">
+                    <div className="settings-loop-block-title">
+                      <span>Context</span>
+                    </div>
+
+                    <div className="settings-loop-transition-list">
+                      {loopModePreferences.contextTransitions.map((transition) => (
+                        <label key={transition.id} className="settings-loop-transition-row">
+                          <span>
+                            {transition.label}
+                            <small>{getTransitionSubject(transition)}</small>
+                          </span>
+                          <select
+                            className="settings-editor-select"
+                            value={transition.nextType}
+                            onChange={(event) =>
+                              handleContextTransitionChange(
+                                transition.id,
+                                event.target.value as ScreenplayElementType
+                              )
+                            }
+                          >
+                            {loopModeElements.map((targetType) => (
+                              <option key={targetType} value={targetType}>
+                                {ELEMENT_LABELS[targetType]}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="settings-loop-block">
+                  <label className="settings-loop-transition-row">
+                    <span>Escape returns to</span>
+                    <select
+                      className="settings-editor-select"
+                      value={loopModePreferences.escapeTarget}
+                      onChange={(event) =>
+                        handleEscapeTargetChange(event.target.value as ScreenplayElementType)
+                      }
+                    >
+                      {loopModeElements.map((targetType) => (
+                        <option key={targetType} value={targetType}>
+                          {ELEMENT_LABELS[targetType]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
               </div>
             )}
