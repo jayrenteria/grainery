@@ -7,6 +7,8 @@ import {
   getNextElementType,
   getPreviousElementType,
 } from '../../lib/elementConfig';
+import { resolveElementLoopFromPreferences } from '../../lib/elementLoopPreferences';
+import type { ElementLoopPreferences } from '../../lib/elementLoopPreferences';
 import type { ElementLoopContext } from '../../plugins';
 
 const HIDE_DELAY_MS = 5_000;
@@ -19,6 +21,7 @@ interface KeymapHintProps {
   previousType: string | null;
   isCurrentEmpty: boolean;
   resolveElementLoop?: (context: ElementLoopContext) => ScreenplayElementType | null;
+  elementLoopPreferences?: ElementLoopPreferences;
 }
 
 interface KeyHint {
@@ -29,17 +32,24 @@ interface KeyHint {
 function resolveHintTarget(
   resolver: KeymapHintProps['resolveElementLoop'],
   context: ElementLoopContext,
+  preferences: ElementLoopPreferences | undefined,
   fallback: ScreenplayElementType
 ): ScreenplayElementType {
   if (!resolver) {
-    return fallback;
+    return preferences
+      ? resolveElementLoopFromPreferences(context, preferences) ?? fallback
+      : fallback;
   }
 
   try {
-    return resolver(context) ?? fallback;
+    return resolver(context) ??
+      (preferences ? resolveElementLoopFromPreferences(context, preferences) : null) ??
+      fallback;
   } catch (error) {
     console.error('[KeymapHint] Plugin loop resolver failed', error);
-    return fallback;
+    return preferences
+      ? resolveElementLoopFromPreferences(context, preferences) ?? fallback
+      : fallback;
   }
 }
 
@@ -49,6 +59,7 @@ function getKeyHints({
   previousType,
   isCurrentEmpty,
   resolveElementLoop,
+  elementLoopPreferences,
 }: KeymapHintProps): KeyHint[] {
   if (!currentType) {
     return [];
@@ -64,16 +75,19 @@ function getKeyHints({
   const tabTarget = resolveHintTarget(
     resolveElementLoop,
     { ...baseContext, event: 'tab' },
+    elementLoopPreferences,
     getNextElementType(documentMode, currentType, previousType)
   );
   const shiftTabTarget = resolveHintTarget(
     resolveElementLoop,
     { ...baseContext, event: 'shift-tab' },
+    elementLoopPreferences,
     getPreviousElementType(documentMode, currentType, previousType)
   );
   const enterTarget = resolveHintTarget(
     resolveElementLoop,
     { ...baseContext, event: 'enter' },
+    elementLoopPreferences,
     getEnterElementType(documentMode, currentType, isCurrentEmpty)
   );
 
@@ -87,6 +101,7 @@ function getKeyHints({
   const escapeTarget = resolveHintTarget(
     resolveElementLoop,
     { ...baseContext, event: 'escape' },
+    elementLoopPreferences,
     escapeFallback
   );
 

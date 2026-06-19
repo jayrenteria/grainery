@@ -755,6 +755,111 @@
   box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 18%, transparent);
 }
 
+.settings-smart-loop-panel {
+  @apply max-w-[760px] gap-6;
+}
+
+.settings-smart-loop-header {
+  @apply flex flex-wrap items-start justify-between gap-4;
+}
+
+.settings-smart-loop-header > div:first-child > span {
+  @apply block text-base leading-6;
+  color: color-mix(in oklch, var(--color-base-content) 86%, transparent);
+  font-family: Courier, monospace;
+}
+
+.settings-loop-actions {
+  @apply flex flex-wrap gap-2;
+}
+
+.settings-loop-mode-tabs {
+  @apply grid gap-2;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings-loop-mode-tabs button {
+  @apply h-10 rounded-md border px-3 text-sm transition-colors;
+  border-color: color-mix(in oklch, var(--color-base-content) 14%, transparent);
+  color: color-mix(in oklch, var(--color-base-content) 58%, transparent);
+}
+
+.settings-loop-mode-tabs button:hover,
+.settings-loop-mode-tabs button:focus-visible,
+.settings-loop-mode-tabs button.is-active {
+  @apply outline-none;
+  border-color: color-mix(in oklch, var(--color-primary) 58%, transparent);
+  color: var(--color-base-content);
+  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+}
+
+.settings-loop-block {
+  @apply flex flex-col gap-3 border-t pt-5;
+  border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+}
+
+.settings-loop-block-title {
+  @apply flex flex-wrap items-center justify-between gap-3;
+}
+
+.settings-loop-block-title > span {
+  @apply text-sm uppercase leading-none;
+  color: color-mix(in oklch, var(--color-base-content) 48%, transparent);
+  letter-spacing: 0.12em;
+}
+
+.settings-loop-order-list,
+.settings-loop-transition-list {
+  @apply flex flex-col gap-2;
+}
+
+.settings-loop-order-item,
+.settings-loop-transition-row {
+  @apply grid min-h-12 items-center gap-4 rounded-md border px-3 py-2;
+  grid-template-columns: minmax(0, 1fr) auto;
+  border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+}
+
+.settings-loop-order-item > span,
+.settings-loop-transition-row > span {
+  @apply min-w-0 text-sm leading-5;
+  color: color-mix(in oklch, var(--color-base-content) 86%, transparent);
+}
+
+.settings-loop-transition-row > span small {
+  @apply mt-0.5 block text-xs leading-4;
+  color: color-mix(in oklch, var(--color-base-content) 44%, transparent);
+}
+
+.settings-loop-order-controls {
+  @apply flex items-center gap-2;
+}
+
+.settings-loop-icon-button,
+.settings-loop-remove-button {
+  @apply h-8 rounded-md border px-2 text-xs transition-colors;
+  border-color: color-mix(in oklch, var(--color-base-content) 14%, transparent);
+  color: color-mix(in oklch, var(--color-base-content) 64%, transparent);
+}
+
+.settings-loop-icon-button {
+  @apply w-8 px-0;
+}
+
+.settings-loop-icon-button:hover,
+.settings-loop-icon-button:focus-visible,
+.settings-loop-remove-button:hover,
+.settings-loop-remove-button:focus-visible {
+  @apply outline-none;
+  border-color: color-mix(in oklch, var(--color-primary) 58%, transparent);
+  color: var(--color-base-content);
+}
+
+.settings-loop-icon-button:disabled,
+.settings-loop-remove-button:disabled {
+  @apply cursor-not-allowed opacity-40;
+}
+
 .settings-plugins-panel {
   @apply max-w-[760px] gap-9;
 }
@@ -1028,15 +1133,22 @@
 
 @media (max-width: 520px) {
   .settings-theme-grid,
-  .settings-field-grid {
+  .settings-field-grid,
+  .settings-loop-mode-tabs {
     grid-template-columns: 1fr;
   }
 
   .settings-plugin-option,
   .settings-plugin-registry,
   .settings-plugin-card-top,
-  .settings-plugin-permission-grid {
+  .settings-plugin-permission-grid,
+  .settings-loop-order-item,
+  .settings-loop-transition-row {
     grid-template-columns: 1fr;
+  }
+
+  .settings-loop-order-controls {
+    @apply flex-wrap;
   }
 
   .settings-inline-button {

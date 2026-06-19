@@ -7,6 +7,10 @@ import {
   type DocumentMode,
   type ScreenplayElementType,
 } from './types';
+import {
+  resolveElementLoopFromPreferences,
+  type ElementLoopPreferences,
+} from './elementLoopPreferences';
 
 export const ELEMENT_LABELS: Record<ScreenplayElementType, string> = {
   sceneHeading: 'Scene Heading',
@@ -114,7 +118,14 @@ export function isListElementType(type: ScreenplayElementType): boolean {
   return type === 'bulletItem' || type === 'numberedItem';
 }
 
-export function getEscapeElementType(mode: DocumentMode): ScreenplayElementType {
+export function getEscapeElementType(
+  mode: DocumentMode,
+  preferences?: ElementLoopPreferences
+): ScreenplayElementType {
+  if (preferences) {
+    return preferences[mode].escapeTarget;
+  }
+
   return mode === 'freewrite' ? 'body' : 'action';
 }
 
@@ -218,8 +229,22 @@ function getEnterComicElementType(currentType: ScreenplayElementType): Screenpla
 export function getNextElementType(
   mode: DocumentMode,
   currentType: ScreenplayElementType,
-  previousType: string | null
+  previousType: string | null,
+  preferences?: ElementLoopPreferences
 ): ScreenplayElementType {
+  if (preferences) {
+    return resolveElementLoopFromPreferences(
+      {
+        event: 'tab',
+        currentType,
+        documentMode: mode,
+        previousType,
+        isCurrentEmpty: false,
+      },
+      preferences
+    ) ?? (mode === 'freewrite' ? 'body' : 'action');
+  }
+
   if (mode === 'comic') {
     return cycle(COMIC_TAB_CYCLE, currentType, 1, 'action');
   }
@@ -234,8 +259,22 @@ export function getNextElementType(
 export function getPreviousElementType(
   mode: DocumentMode,
   currentType: ScreenplayElementType,
-  previousType: string | null
+  previousType: string | null,
+  preferences?: ElementLoopPreferences
 ): ScreenplayElementType {
+  if (preferences) {
+    return resolveElementLoopFromPreferences(
+      {
+        event: 'shift-tab',
+        currentType,
+        documentMode: mode,
+        previousType,
+        isCurrentEmpty: false,
+      },
+      preferences
+    ) ?? (mode === 'freewrite' ? 'body' : 'action');
+  }
+
   if (mode === 'comic') {
     return cycle(COMIC_TAB_CYCLE, currentType, -1, 'action');
   }
@@ -250,8 +289,22 @@ export function getPreviousElementType(
 export function getEnterElementType(
   mode: DocumentMode,
   currentType: ScreenplayElementType,
-  isCurrentEmpty = false
+  isCurrentEmpty = false,
+  preferences?: ElementLoopPreferences
 ): ScreenplayElementType {
+  if (preferences) {
+    return resolveElementLoopFromPreferences(
+      {
+        event: 'enter',
+        currentType,
+        documentMode: mode,
+        previousType: null,
+        isCurrentEmpty,
+      },
+      preferences
+    ) ?? (mode === 'freewrite' ? 'body' : 'action');
+  }
+
   if (mode === 'comic') {
     return getEnterComicElementType(currentType);
   }

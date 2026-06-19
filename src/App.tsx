@@ -49,6 +49,12 @@ import {
   hasOnlyElementSeedText,
   isScreenplayElementType,
 } from './lib/elementConfig';
+import {
+  getDefaultElementLoopPreferences,
+  normalizeElementLoopPreferences,
+  resolveElementLoopFromPreferences,
+  type ElementLoopPreferences,
+} from './lib/elementLoopPreferences';
 import { PluginManager } from './plugins';
 import type { RenderedInlineAnnotation, RenderedStatusBadge } from './plugins';
 import { PluginUIHost } from './components/PluginUI';
@@ -60,6 +66,7 @@ const INLINE_ANNOTATION_REFRESH_DEBOUNCE_MS = 120;
 const KEYMAP_HINTS_STORAGE_KEY = 'grainery-keymap-hints-enabled';
 const RECENT_DOCUMENTS_PANEL_STORAGE_KEY = 'grainery-recent-documents-panel-enabled';
 const AUTO_SAVE_PREFERENCES_STORAGE_KEY = 'grainery-autosave-preferences';
+const ELEMENT_LOOP_PREFERENCES_STORAGE_KEY = 'grainery-element-loop-preferences-v1';
 
 interface AutoSavePreferences {
   enabled: boolean;
@@ -152,6 +159,24 @@ function storeAutoSavePreferences(preferences: AutoSavePreferences): void {
   localStorage.setItem(AUTO_SAVE_PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
 }
 
+function getStoredElementLoopPreferences(): ElementLoopPreferences {
+  const raw = localStorage.getItem(ELEMENT_LOOP_PREFERENCES_STORAGE_KEY);
+
+  if (!raw) {
+    return getDefaultElementLoopPreferences();
+  }
+
+  try {
+    return normalizeElementLoopPreferences(JSON.parse(raw));
+  } catch {
+    return getDefaultElementLoopPreferences();
+  }
+}
+
+function storeElementLoopPreferences(preferences: ElementLoopPreferences): void {
+  localStorage.setItem(ELEMENT_LOOP_PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
+}
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -173,6 +198,7 @@ function App() {
     getStoredRecentDocumentsPanelEnabled
   );
   const [autoSavePreferences, setAutoSavePreferences] = useState(getStoredAutoSavePreferences);
+  const [elementLoopPreferences, setElementLoopPreferences] = useState(getStoredElementLoopPreferences);
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
   const [updateDialogStatus, setUpdateDialogStatus] = useState<UpdateDialogStatus>('checking');
   const [availableUpdate, setAvailableUpdate] = useState<AvailableAppUpdate | null>(null);
@@ -382,9 +408,18 @@ function App() {
           previousType,
           isCurrentEmpty: isEditorCurrentNodeEffectivelyEmpty(editor),
         });
+        const baseContext = {
+          event: direction === 'next' ? 'tab' as const : 'shift-tab' as const,
+          currentType,
+          documentMode: document.documentMode,
+          previousType,
+          isCurrentEmpty: isEditorCurrentNodeEffectivelyEmpty(editor),
+        };
 
         const target =
-          pluginResolved ?? (direction === 'next'
+          pluginResolved ??
+          resolveElementLoopFromPreferences(baseContext, elementLoopPreferences) ??
+          (direction === 'next'
             ? getNextElementType(document.documentMode, currentType, previousType)
             : getPreviousElementType(document.documentMode, currentType, previousType));
 
@@ -396,11 +431,11 @@ function App() {
         if (!editor) {
           return;
         }
-        editor.commands.setNode(getEscapeElementType(document.documentMode));
+        editor.commands.setNode(getEscapeElementType(document.documentMode, elementLoopPreferences));
         setEditorVersion((prev) => prev + 1);
       },
     }),
-    [document.documentMode, pluginManager]
+    [document.documentMode, elementLoopPreferences, pluginManager]
   );
 
   const runTransformHook = useCallback(
@@ -969,6 +1004,12 @@ function App() {
     });
   }, []);
 
+  const handleElementLoopPreferencesChange = useCallback((preferences: ElementLoopPreferences) => {
+    const normalized = normalizeElementLoopPreferences(preferences);
+    setElementLoopPreferences(normalized);
+    storeElementLoopPreferences(normalized);
+  }, []);
+
   const handleFindNext = useCallback(() => {
     const editor = editorRef.current;
     if (!editor) {
@@ -1418,6 +1459,7 @@ function App() {
               inlineAnnotations={inlineAnnotations}
               onChange={handleEditorChange}
               resolveElementLoop={(context) => pluginManager.resolveElementLoop(context)}
+              elementLoopPreferences={elementLoopPreferences}
               onSelectionChange={() => {
                 setEditorVersion((prev) => prev + 1);
               }}
@@ -1464,6 +1506,8 @@ function App() {
             autoSaveIntervalMs={autoSavePreferences.intervalMs}
             onAutoSaveEnabledChange={handleAutoSaveEnabledChange}
             onAutoSaveIntervalChange={handleAutoSaveIntervalChange}
+            elementLoopPreferences={elementLoopPreferences}
+            onElementLoopPreferencesChange={handleElementLoopPreferencesChange}
           />
         )}
 
