@@ -16,7 +16,7 @@ export const Title = Node.create<TitleOptions>({
   name: 'title',
   group: 'block',
   content: 'text*',
-  marks: 'bold italic underline strike',
+  marks: 'bold italic underline strike fontFamily textSize',
   defining: true,
 
   addOptions() {

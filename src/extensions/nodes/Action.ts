@@ -16,7 +16,7 @@ export const Action = Node.create<ActionOptions>({
   name: 'action',
   group: 'block',
   content: 'text*',
-  marks: 'bold italic underline',
+  marks: 'bold italic underline fontFamily textSize',
   defining: true,
 
   addOptions() {

@@ -19,7 +19,7 @@ export const NumberedItem = Node.create<NumberedItemOptions>({
   name: 'numberedItem',
   group: 'block',
   content: 'text*',
-  marks: 'bold italic underline strike',
+  marks: 'bold italic underline strike fontFamily textSize',
   defining: true,
 
   addOptions() {

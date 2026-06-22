@@ -19,7 +19,7 @@ export const BulletItem = Node.create<BulletItemOptions>({
   name: 'bulletItem',
   group: 'block',
   content: 'text*',
-  marks: 'bold italic underline strike',
+  marks: 'bold italic underline strike fontFamily textSize',
   defining: true,
 
   addOptions() {

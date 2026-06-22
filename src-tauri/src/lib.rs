@@ -2,6 +2,8 @@
 #[macro_use]
 extern crate objc;
 
+use base64::engine::general_purpose::URL_SAFE_NO_PAD as BASE64_URL_SAFE_NO_PAD;
+use base64::Engine;
 use std::fs;
 use std::path::Path;
 use std::sync::Mutex;
@@ -10,8 +12,12 @@ use tauri::{Emitter, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 #[cfg(desktop)]
 use tauri_plugin_window_state::{StateFlags, DEFAULT_FILENAME};
 
+mod fonts;
 mod pdf;
 mod plugins;
+
+const FONT_SIZE_MENU_VALUES: [u16; 16] =
+    [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72];
 
 #[derive(Default)]
 struct PendingOpenFiles {
@@ -21,6 +27,28 @@ struct PendingOpenFiles {
 #[derive(Default)]
 struct ExitControl {
     allow_exit: Mutex<bool>,
+}
+
+fn encode_menu_payload(value: &str) -> String {
+    BASE64_URL_SAFE_NO_PAD.encode(value.as_bytes())
+}
+
+fn font_family_menu_id(family: &str, variant: &fonts::SystemFontVariant) -> String {
+    format!(
+        "font_family:{}:{}:{}:{}",
+        encode_menu_payload(family),
+        encode_menu_payload(&variant.name),
+        variant.weight,
+        variant.style
+    )
+}
+
+fn font_size_menu_id(size: u16) -> String {
+    format!("font_size:{}", size)
+}
+
+fn text_alignment_menu_id(alignment: &str) -> String {
+    format!("text_alignment:{}", alignment)
 }
 
 #[cfg(target_os = "macos")]
@@ -280,6 +308,68 @@ pub fn run() {
                 .item(&quit_item)
                 .build()?;
 
+            // Font menu
+            let left_align_item =
+                MenuItemBuilder::with_id(text_alignment_menu_id("left"), "Left Align")
+                    .build(app)?;
+            let center_align_item =
+                MenuItemBuilder::with_id(text_alignment_menu_id("center"), "Center Align")
+                    .build(app)?;
+            let right_align_item =
+                MenuItemBuilder::with_id(text_alignment_menu_id("right"), "Right Align")
+                    .build(app)?;
+            let alignment_menu = SubmenuBuilder::new(app, "Alignment")
+                .item(&left_align_item)
+                .item(&center_align_item)
+                .item(&right_align_item)
+                .build()?;
+
+            let mut font_size_menu_builder = SubmenuBuilder::new(app, "Size");
+            for size in FONT_SIZE_MENU_VALUES {
+                let label = format!("{} pt", size);
+                let size_item =
+                    MenuItemBuilder::with_id(font_size_menu_id(size), label).build(app)?;
+                font_size_menu_builder = font_size_menu_builder.item(&size_item);
+            }
+            let font_size_menu = font_size_menu_builder.build()?;
+
+            let clear_font_item =
+                MenuItemBuilder::with_id("font_family_clear", "Clear Font").build(app)?;
+
+            let mut font_menu_builder = SubmenuBuilder::new(app, "Font")
+                .item(&alignment_menu)
+                .separator()
+                .item(&font_size_menu)
+                .separator()
+                .item(&clear_font_item);
+
+            let font_families = fonts::list_system_font_families();
+            if !font_families.is_empty() {
+                font_menu_builder = font_menu_builder.separator();
+            }
+
+            for family in font_families {
+                if family.variants.is_empty() {
+                    continue;
+                }
+
+                let mut family_menu_builder = SubmenuBuilder::new(app, family.name.as_str());
+                for variant in &family.variants {
+                    let variant_item = MenuItemBuilder::with_id(
+                        font_family_menu_id(&family.name, variant),
+                        variant.name.as_str(),
+                    )
+                    .build(app)?;
+                    family_menu_builder = family_menu_builder.item(&variant_item);
+                }
+
+                let family_menu = family_menu_builder.build()?;
+
+                font_menu_builder = font_menu_builder.item(&family_menu);
+            }
+
+            let font_menu = font_menu_builder.build()?;
+
             // Window menu
             let window_menu = SubmenuBuilder::new(app, "Window")
                 .minimize()
@@ -289,7 +379,7 @@ pub fn run() {
                 .build()?;
 
             let menu = MenuBuilder::new(app)
-                .items(&[&app_menu, &file_menu, &edit_menu, &window_menu])
+                .items(&[&app_menu, &file_menu, &edit_menu, &font_menu, &window_menu])
                 .build()?;
 
             app.set_menu(menu)?;

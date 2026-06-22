@@ -31,6 +31,9 @@ import {
   FindReplaceExtension,
   getFindReplaceState,
   PluginAnnotationsExtension,
+  FontFamily,
+  TextSize,
+  BlockAlignment,
 } from '../../extensions';
 import {
   DEFAULT_ELEMENT_BY_MODE,
@@ -170,6 +173,9 @@ export function ScreenplayEditor({
       Italic,
       Underline,
       Strike,
+      FontFamily,
+      TextSize,
+      BlockAlignment,
       SceneHeading,
       Action,
       Character,

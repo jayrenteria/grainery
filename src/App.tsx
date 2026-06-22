@@ -35,6 +35,15 @@ import {
 } from './lib/appUpdates';
 import { getRecentFiles, removeRecentFile } from './lib/recentFiles';
 import {
+  normalizeFontFamily,
+  normalizeFontStyle,
+  normalizeFontWeight,
+  normalizeTextAlignment,
+  normalizeTextSize,
+  type FontStyleValue,
+  type TextAlignment,
+} from './lib/textStyles';
+import {
   type DocumentMode,
   type RecentFileEntry,
   type ScreenplayDocument,
@@ -67,6 +76,16 @@ const KEYMAP_HINTS_STORAGE_KEY = 'grainery-keymap-hints-enabled';
 const RECENT_DOCUMENTS_PANEL_STORAGE_KEY = 'grainery-recent-documents-panel-enabled';
 const AUTO_SAVE_PREFERENCES_STORAGE_KEY = 'grainery-autosave-preferences';
 const ELEMENT_LOOP_PREFERENCES_STORAGE_KEY = 'grainery-element-loop-preferences-v1';
+const FONT_FAMILY_MENU_PREFIX = 'font_family:';
+const FONT_FAMILY_CLEAR_MENU_ID = 'font_family_clear';
+const FONT_SIZE_MENU_PREFIX = 'font_size:';
+const TEXT_ALIGNMENT_MENU_PREFIX = 'text_alignment:';
+
+interface FontFamilyMenuRequest {
+  family: string;
+  fontWeight: number;
+  fontStyle: FontStyleValue;
+}
 
 interface AutoSavePreferences {
   enabled: boolean;
@@ -115,6 +134,60 @@ function setEditorNodeType(editor: Editor, type: ScreenplayElementType): void {
   }
 
   chain.setNode(type).focus().run();
+}
+
+function decodeBase64UrlPayload(value: string): string | null {
+  try {
+    const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+function parseFontFamilyMenuEvent(eventId: string): FontFamilyMenuRequest | null {
+  if (!eventId.startsWith(FONT_FAMILY_MENU_PREFIX)) {
+    return null;
+  }
+
+  const [, encodedFamily, encodedVariant, rawWeight, rawStyle] = eventId.split(':');
+  if (!encodedFamily || !encodedVariant || !rawWeight || !rawStyle) {
+    return null;
+  }
+
+  const family = normalizeFontFamily(decodeBase64UrlPayload(encodedFamily));
+  const variant = decodeBase64UrlPayload(encodedVariant);
+  const fontWeight = normalizeFontWeight(rawWeight);
+  const fontStyle = normalizeFontStyle(rawStyle);
+  if (!family || !variant || fontWeight === null || !fontStyle) {
+    return null;
+  }
+
+  return { family, fontWeight, fontStyle };
+}
+
+function parseFontSizeMenuEvent(eventId: string): number | null {
+  if (!eventId.startsWith(FONT_SIZE_MENU_PREFIX)) {
+    return null;
+  }
+
+  const sizePt = Number.parseInt(eventId.slice(FONT_SIZE_MENU_PREFIX.length), 10);
+  if (!Number.isFinite(sizePt)) {
+    return null;
+  }
+
+  return normalizeTextSize(sizePt);
+}
+
+function parseTextAlignmentMenuEvent(eventId: string): TextAlignment | null {
+  if (!eventId.startsWith(TEXT_ALIGNMENT_MENU_PREFIX)) {
+    return null;
+  }
+
+  return normalizeTextAlignment(eventId.slice(TEXT_ALIGNMENT_MENU_PREFIX.length));
 }
 
 function getStoredKeymapHintsEnabled(): boolean {
@@ -1042,6 +1115,62 @@ function App() {
     setEditorVersion((prev) => prev + 1);
   }, []);
 
+  const applyFontFamilyFromMenu = useCallback(
+    (family: string, fontWeight: number, fontStyle: FontStyleValue) => {
+      const editor = editorRef.current;
+      const normalized = normalizeFontFamily(family);
+      if (!editor || !normalized) {
+        return;
+      }
+
+      const chain = editor
+        .chain()
+        .focus()
+        .setFontFamily(normalized, { fontWeight, fontStyle })
+        .unsetBold()
+        .unsetItalic();
+
+      if (chain.run()) {
+        setEditorVersion((prev) => prev + 1);
+      }
+    },
+    []
+  );
+
+  const clearFontFamilyFromMenu = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    if (editor.chain().focus().unsetFontFamily().run()) {
+      setEditorVersion((prev) => prev + 1);
+    }
+  }, []);
+
+  const setTextSizeFromMenu = useCallback((sizePt: number) => {
+    const editor = editorRef.current;
+    const normalized = normalizeTextSize(sizePt);
+    if (!editor || normalized === null) {
+      return;
+    }
+
+    if (editor.chain().focus().setTextSize(normalized).run()) {
+      setEditorVersion((prev) => prev + 1);
+    }
+  }, []);
+
+  const setTextAlignmentFromMenu = useCallback((alignment: TextAlignment) => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    if (editor.chain().focus().setTextAlignment(alignment).run()) {
+      setEditorVersion((prev) => prev + 1);
+    }
+  }, []);
+
   useEffect(() => {
     const claimFindShortcut = (event: KeyboardEvent) => {
       if (showSettingsRef.current) {
@@ -1268,6 +1397,28 @@ function App() {
   // Listen for native menu events
   useEffect(() => {
     const unlisten = listen<string>('menu-event', (event) => {
+      const fontFamilyRequest = parseFontFamilyMenuEvent(event.payload);
+      if (fontFamilyRequest) {
+        applyFontFamilyFromMenu(
+          fontFamilyRequest.family,
+          fontFamilyRequest.fontWeight,
+          fontFamilyRequest.fontStyle
+        );
+        return;
+      }
+
+      const fontSizeRequest = parseFontSizeMenuEvent(event.payload);
+      if (fontSizeRequest !== null) {
+        setTextSizeFromMenu(fontSizeRequest);
+        return;
+      }
+
+      const textAlignmentRequest = parseTextAlignmentMenuEvent(event.payload);
+      if (textAlignmentRequest) {
+        setTextAlignmentFromMenu(textAlignmentRequest);
+        return;
+      }
+
       if (event.payload.startsWith('plugin:command:')) {
         void pluginManager.executeCommand(event.payload.replace('plugin:command:', ''));
         return;
@@ -1319,6 +1470,9 @@ function App() {
         case 'replace':
           handleReplace();
           break;
+        case FONT_FAMILY_CLEAR_MENU_ID:
+          clearFontFamilyFromMenu();
+          break;
         case 'settings':
           setShowSettings(true);
           break;
@@ -1335,6 +1489,8 @@ function App() {
       void unlisten.then((fn) => fn());
     };
   }, [
+    applyFontFamilyFromMenu,
+    clearFontFamilyFromMenu,
     handleExportFdx,
     handleExportFountain,
     handleExportPdf,
@@ -1350,6 +1506,8 @@ function App() {
     handleSaveAs,
     handleCheckForUpdates,
     requestAppExit,
+    setTextAlignmentFromMenu,
+    setTextSizeFromMenu,
     pluginManager,
   ]);
 
