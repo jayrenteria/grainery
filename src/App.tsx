@@ -4,7 +4,7 @@ import { TextSelection } from '@tiptap/pm/state';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ask as askDialog } from '@tauri-apps/plugin-dialog';
+import { ask as askDialog, message as messageDialog } from '@tauri-apps/plugin-dialog';
 
 import { RecentDocumentsPanel, ScreenplayEditor } from './components/Editor';
 import { SettingsModal } from './components/Settings';
@@ -34,6 +34,11 @@ import {
   shouldRunStartupUpdateCheck,
 } from './lib/appUpdates';
 import { getRecentFiles, removeRecentFile } from './lib/recentFiles';
+import {
+  getDocumentSanitizationWarning,
+  sanitizeEditorDocument,
+  type DocumentSanitizationReport,
+} from './lib/documentSanitizer';
 import {
   normalizeFontFamily,
   normalizeFontStyle,
@@ -85,6 +90,11 @@ interface FontFamilyMenuRequest {
   family: string;
   fontWeight: number;
   fontStyle: FontStyleValue;
+}
+
+interface PreparedDocument {
+  doc: ScreenplayDocument;
+  report: DocumentSanitizationReport;
 }
 
 interface AutoSavePreferences {
@@ -310,6 +320,21 @@ function App() {
     }, autoSavePreferences.intervalMs);
   }, [autoSavePreferences.enabled, autoSavePreferences.intervalMs, clearQueuedAutoSave]);
 
+  const showDocumentCompatibilityWarning = useCallback((report: DocumentSanitizationReport) => {
+    const warning = getDocumentSanitizationWarning(report);
+    if (!warning) {
+      return;
+    }
+
+    void messageDialog(warning, {
+      title: 'Document Compatibility',
+      kind: 'warning',
+      okLabel: 'OK',
+    }).catch((error) => {
+      console.error('Failed to show document compatibility warning:', error);
+    });
+  }, []);
+
   const getPluginDataForPlugin = useCallback((pluginId: string): unknown | null => {
     return pluginDataRef.current[pluginId] ?? null;
   }, []);
@@ -349,15 +374,16 @@ function App() {
 
   const applyDocumentFromPlugin = useCallback(
     (next: JSONContent) => {
-      editorContentRef.current = next;
+      const sanitized = sanitizeEditorDocument(next, document.documentMode);
+      editorContentRef.current = sanitized.document;
 
       if (editorRef.current) {
-        editorRef.current.commands.setContent(next, { emitUpdate: false });
+        editorRef.current.commands.setContent(sanitized.document, { emitUpdate: false });
       }
 
       setDocument((prev) => ({
         ...prev,
-        document: next,
+        document: sanitized.document,
         meta: {
           ...prev.meta,
           modifiedAt: new Date().toISOString(),
@@ -371,8 +397,9 @@ function App() {
 
       queueAutoSave();
       setEditorVersion((prev) => prev + 1);
+      showDocumentCompatibilityWarning(sanitized.report);
     },
-    [document.meta.filename, isDirty, queueAutoSave]
+    [document.documentMode, document.meta.filename, isDirty, queueAutoSave, showDocumentCompatibilityWarning]
   );
 
   if (!pluginManagerRef.current) {
@@ -529,6 +556,37 @@ function App() {
     setRecentFiles(getRecentFiles());
   }, []);
 
+  const prepareDocumentForEditor = useCallback(
+    async (doc: ScreenplayDocument): Promise<PreparedDocument> => {
+      const transformed = await runTransformHook('post-open', doc.document);
+      const sanitized = sanitizeEditorDocument(transformed, doc.documentMode);
+
+      return {
+        doc: {
+          ...doc,
+          document: sanitized.document,
+        },
+        report: sanitized.report,
+      };
+    },
+    [runTransformHook]
+  );
+
+  const openDocumentInEditor = useCallback(
+    async ({ doc, report }: PreparedDocument) => {
+      setDocument(doc);
+      editorContentRef.current = doc.document;
+      setIsDirty(false);
+      setIsRecentDocumentsPanelOpen(false);
+      setView('editor');
+      setStartScreenError(null);
+      refreshRecentFiles();
+      await updateWindowTitle(doc.meta.filename);
+      showDocumentCompatibilityWarning(report);
+    },
+    [refreshRecentFiles, showDocumentCompatibilityWarning]
+  );
+
   const openPathIntoEditor = useCallback(
     async (
       path: string,
@@ -549,17 +607,7 @@ function App() {
 
       try {
         const doc = await openFileAtPath(path);
-        const transformed = await runTransformHook('post-open', doc.document);
-        doc.document = transformed;
-
-        setDocument(doc);
-        editorContentRef.current = transformed;
-        setIsDirty(false);
-        setIsRecentDocumentsPanelOpen(false);
-        setView('editor');
-        setStartScreenError(null);
-        refreshRecentFiles();
-        await updateWindowTitle(doc.meta.filename);
+        await openDocumentInEditor(await prepareDocumentForEditor(doc));
         return true;
       } catch (error) {
         console.error('Failed to open file at path:', error);
@@ -570,7 +618,7 @@ function App() {
         return false;
       }
     },
-    [refreshRecentFiles, runTransformHook]
+    [openDocumentInEditor, prepareDocumentForEditor]
   );
 
   const performAutoSave = useCallback(async () => {
@@ -638,17 +686,7 @@ function App() {
         return;
       }
 
-      const transformed = await runTransformHook('post-open', doc.document);
-      doc.document = transformed;
-
-      setDocument(doc);
-      editorContentRef.current = transformed;
-      setIsDirty(false);
-      setIsRecentDocumentsPanelOpen(false);
-      setView('editor');
-      setStartScreenError(null);
-      refreshRecentFiles();
-      await updateWindowTitle(doc.meta.filename);
+      await openDocumentInEditor(await prepareDocumentForEditor(doc));
     } catch (error) {
       console.error('Failed to open file:', error);
       if (view === 'start') {
@@ -656,7 +694,7 @@ function App() {
         setStartScreenError(`Failed to open file. ${message}`);
       }
     }
-  }, [isDirty, refreshRecentFiles, runTransformHook, view]);
+  }, [isDirty, openDocumentInEditor, prepareDocumentForEditor, view]);
 
   const handleShowStartScreen = useCallback(async () => {
     if (view === 'editor' && isDirty) {
@@ -685,17 +723,7 @@ function App() {
         return;
       }
 
-      const transformed = await runTransformHook('post-open', doc.document);
-      doc.document = transformed;
-
-      setDocument(doc);
-      editorContentRef.current = transformed;
-      setIsDirty(false);
-      setIsRecentDocumentsPanelOpen(false);
-      setView('editor');
-      setStartScreenError(null);
-      refreshRecentFiles();
-      await updateWindowTitle(doc.meta.filename);
+      await openDocumentInEditor(await prepareDocumentForEditor(doc));
     } catch (error) {
       console.error('Failed to import Final Draft file:', error);
       if (view === 'start') {
@@ -703,7 +731,7 @@ function App() {
         setStartScreenError(`Failed to import Final Draft file. ${message}`);
       }
     }
-  }, [isDirty, refreshRecentFiles, runTransformHook, view]);
+  }, [isDirty, openDocumentInEditor, prepareDocumentForEditor, view]);
 
   const handleOpenRecent = useCallback(
     async (path: string) => {
