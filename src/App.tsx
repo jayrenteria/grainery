@@ -222,6 +222,7 @@ function App() {
   const performAutoSaveRef = useRef<() => Promise<void>>(async () => undefined);
   const pluginDataRef = useRef<Record<string, unknown>>(document.pluginData ?? {});
   const pluginManagerRef = useRef<PluginManager | null>(null);
+  const lastTextSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const viewRef = useRef(view);
   const isDirtyRef = useRef(isDirty);
   const showSettingsRef = useRef(showSettings);
@@ -302,10 +303,32 @@ function App() {
   const applyDocumentFromPlugin = useCallback(
     (next: JSONContent) => {
       const sanitized = sanitizeEditorDocument(next, document.documentMode);
+      const editor = editorRef.current;
+      const currentSelection = editor?.state.selection;
+      const restoreSelection =
+        currentSelection && currentSelection.from !== currentSelection.to
+          ? { from: currentSelection.from, to: currentSelection.to }
+          : lastTextSelectionRef.current;
+
       editorContentRef.current = sanitized.document;
 
-      if (editorRef.current) {
-        editorRef.current.commands.setContent(sanitized.document, { emitUpdate: false });
+      if (editor) {
+        editor.commands.setContent(sanitized.document, { emitUpdate: false });
+
+        if (restoreSelection) {
+          try {
+            const maxPosition = Math.max(1, editor.state.doc.content.size);
+            const from = Math.min(Math.max(restoreSelection.from, 1), maxPosition);
+            const to = Math.min(Math.max(restoreSelection.to, from), maxPosition);
+            editor.view.dispatch(
+              editor.state.tr.setSelection(TextSelection.create(editor.state.doc, from, to))
+            );
+            editor.view.focus();
+            lastTextSelectionRef.current = { from, to };
+          } catch {
+            lastTextSelectionRef.current = null;
+          }
+        }
       }
 
       setDocument((prev) => ({
@@ -369,6 +392,17 @@ function App() {
           return { from: 0, to: 0 };
         }
         const { from, to } = editor.state.selection;
+        if (from !== to) {
+          lastTextSelectionRef.current = { from, to };
+          return { from, to };
+        }
+        if (editor.isFocused) {
+          lastTextSelectionRef.current = null;
+          return { from, to };
+        }
+        if (lastTextSelectionRef.current) {
+          return lastTextSelectionRef.current;
+        }
         return { from, to };
       },
       setElementType: (type: ScreenplayElementType) => {

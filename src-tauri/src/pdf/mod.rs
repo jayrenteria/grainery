@@ -1,5 +1,7 @@
+use crate::fonts;
 use printpdf::*;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufWriter;
 
@@ -57,6 +59,7 @@ pub struct TitlePageData {
 pub struct MarkNode {
     #[serde(rename = "type")]
     pub mark_type: String,
+    pub attrs: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,12 +72,16 @@ pub struct DocumentNode {
     pub marks: Option<Vec<MarkNode>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 struct TextStyle {
     bold: bool,
     italic: bool,
     underline: bool,
     strike: bool,
+    font_family: Option<String>,
+    font_weight: Option<u16>,
+    font_style: Option<String>,
+    size_pt: Option<f32>,
 }
 
 #[derive(Debug, Clone)]
@@ -134,7 +141,7 @@ fn wrap_styled(chars: &[(char, TextStyle)], max_chars: usize) -> Vec<Vec<(char, 
                 words.push(std::mem::take(&mut current_word));
             }
         } else {
-            current_word.push((*c, *style));
+            current_word.push((*c, style.clone()));
         }
     }
     if !current_word.is_empty() {
@@ -148,14 +155,18 @@ fn wrap_styled(chars: &[(char, TextStyle)], max_chars: usize) -> Vec<Vec<(char, 
         if line.is_empty() {
             line = word;
         } else if line.len() + 1 + word.len() <= max_chars {
-            let prev = line.last().map(|(_, s)| *s).unwrap_or_default();
-            let next = word.first().map(|(_, s)| *s).unwrap_or_default();
+            let prev = line.last().map(|(_, s)| s.clone()).unwrap_or_default();
+            let next = word.first().map(|(_, s)| s.clone()).unwrap_or_default();
             // Joining spaces keep decorations only when both neighbors share them
             let space_style = TextStyle {
                 bold: prev.bold,
                 italic: prev.italic,
                 underline: prev.underline && next.underline,
                 strike: prev.strike && next.strike,
+                font_family: prev.font_family.clone(),
+                font_weight: prev.font_weight,
+                font_style: prev.font_style.clone(),
+                size_pt: prev.size_pt,
             };
             line.push((' ', space_style));
             line.extend(word);
@@ -185,7 +196,7 @@ fn to_segments(line: &[(char, TextStyle)]) -> Vec<StyledSegment> {
             Some(last) if last.style == *style => last.text.push(*c),
             _ => segments.push(StyledSegment {
                 text: c.to_string(),
-                style: *style,
+                style: style.clone(),
             }),
         }
     }
@@ -196,7 +207,7 @@ fn to_segments(line: &[(char, TextStyle)]) -> Vec<StyledSegment> {
 #[derive(Debug, Deserialize)]
 pub struct ScreenplayContent {
     #[serde(rename = "type")]
-    pub doc_type: String,
+    pub _doc_type: String,
     pub content: Option<Vec<DocumentNode>>,
 }
 
@@ -208,6 +219,7 @@ pub struct PdfGenerator {
     bold_font: IndirectFontRef,
     italic_font: IndirectFontRef,
     bold_italic_font: IndirectFontRef,
+    external_fonts: HashMap<String, IndirectFontRef>,
     is_sans: bool,
     char_width: f32,
     y_position: f32,
@@ -266,6 +278,7 @@ impl PdfGenerator {
             bold_font,
             italic_font,
             bold_italic_font,
+            external_fonts: HashMap::new(),
             is_sans: is_freewrite,
             char_width,
             y_position: PAGE_HEIGHT - MARGIN_TOP,
@@ -274,7 +287,36 @@ impl PdfGenerator {
         })
     }
 
-    fn font_for(&self, style: TextStyle) -> IndirectFontRef {
+    fn font_for(&mut self, style: &TextStyle) -> IndirectFontRef {
+        if let Some(font_family) = &style.font_family {
+            let requested_weight = style
+                .font_weight
+                .or_else(|| if style.bold { Some(700) } else { Some(400) });
+            let requested_style = style
+                .font_style
+                .as_deref()
+                .or_else(|| if style.italic { Some("italic") } else { Some("normal") });
+            let cache_key = format!(
+                "{}:{}:{}",
+                font_family.to_lowercase(),
+                requested_weight.unwrap_or(400),
+                requested_style.unwrap_or("normal")
+            );
+
+            if let Some(font) = self.external_fonts.get(&cache_key) {
+                return font.clone();
+            }
+
+            if let Some(path) = fonts::resolve_system_font(font_family, requested_weight, requested_style) {
+                if let Ok(file) = File::open(path) {
+                    if let Ok(font) = self.doc.add_external_font(file) {
+                        self.external_fonts.insert(cache_key, font.clone());
+                        return font;
+                    }
+                }
+            }
+        }
+
         match (style.bold, style.italic) {
             (true, true) => self.bold_italic_font.clone(),
             (true, false) => self.bold_font.clone(),
@@ -283,20 +325,87 @@ impl PdfGenerator {
         }
     }
 
-    fn glyph_width_pt(&self, c: char, bold: bool, size: f32) -> f32 {
-        if self.is_sans {
-            helvetica_width_units(c, bold) as f32 * size / 1000.0
+    fn style_size(style: &TextStyle, fallback: f32) -> f32 {
+        style.size_pt.unwrap_or(fallback).clamp(6.0, 72.0)
+    }
+
+    fn glyph_width_pt(&self, c: char, style: &TextStyle, fallback_size: f32) -> f32 {
+        let size = Self::style_size(style, fallback_size);
+        if self.is_sans || style.font_family.is_some() {
+            helvetica_width_units(c, style.bold) as f32 * size / 1000.0
         } else {
             size * 0.6 // Courier is monospaced at 0.6em
         }
     }
 
-    fn segment_width_pt(&self, segment: &StyledSegment, size: f32) -> f32 {
+    fn segment_width_pt(&self, segment: &StyledSegment, fallback_size: f32) -> f32 {
         segment
             .text
             .chars()
-            .map(|c| self.glyph_width_pt(c, segment.style.bold, size))
+            .map(|c| self.glyph_width_pt(c, &segment.style, fallback_size))
             .sum()
+    }
+
+    fn line_width_pt(&self, segments: &[StyledSegment], fallback_size: f32) -> f32 {
+        segments
+            .iter()
+            .map(|segment| self.segment_width_pt(segment, fallback_size))
+            .sum()
+    }
+
+    fn line_max_size(segments: &[StyledSegment], fallback_size: f32) -> f32 {
+        segments
+            .iter()
+            .map(|segment| Self::style_size(&segment.style, fallback_size))
+            .fold(fallback_size, f32::max)
+    }
+
+    fn styled_line_advance(segments: &[StyledSegment], fallback_size: f32, fallback_line_height: f32) -> f32 {
+        let max_size = Self::line_max_size(segments, fallback_size);
+        if max_size <= fallback_size {
+            fallback_line_height
+        } else {
+            fallback_line_height.max(max_size * 1.2)
+        }
+    }
+
+    fn styled_line_baseline_adjust(segments: &[StyledSegment], fallback_size: f32) -> f32 {
+        let max_size = Self::line_max_size(segments, fallback_size);
+        (max_size - fallback_size).max(0.0) * 0.75
+    }
+
+    fn styled_lines_height(
+        lines: &[Vec<StyledSegment>],
+        fallback_size: f32,
+        fallback_line_height: f32,
+    ) -> f32 {
+        lines
+            .iter()
+            .map(|line| Self::styled_line_advance(line, fallback_size, fallback_line_height))
+            .sum()
+    }
+
+    fn node_alignment(node: &DocumentNode) -> Option<&str> {
+        node
+            .attrs
+            .as_ref()
+            .and_then(|attrs| attrs.get("textAlign"))
+            .and_then(|value| value.as_str())
+    }
+
+    fn aligned_x_with_default(
+        &self,
+        node: &DocumentNode,
+        base_x: f32,
+        max_width: f32,
+        line_width: f32,
+        default_alignment: &str,
+    ) -> f32 {
+        match Self::node_alignment(node).unwrap_or(default_alignment) {
+            "center" => base_x + ((max_width - line_width) / 2.0).max(0.0),
+            "right" => base_x + (max_width - line_width).max(0.0),
+            _ => base_x,
+        }
     }
 
     fn new_page(&mut self) {
@@ -351,10 +460,6 @@ impl PdfGenerator {
         self.write_line_with_font(text, x_offset, self.font.clone());
     }
 
-    fn write_bold_line(&mut self, text: &str, x_offset: f32) {
-        self.write_line_with_font(text, x_offset, self.bold_font.clone());
-    }
-
     fn write_line_with_font(&mut self, text: &str, x_offset: f32, font: IndirectFontRef) {
         self.check_page_break(1);
 
@@ -376,39 +481,6 @@ impl PdfGenerator {
 
     fn write_blank_line(&mut self) {
         self.y_position -= LINE_HEIGHT;
-    }
-
-    fn wrap_text(&self, text: &str, max_width: f32) -> Vec<String> {
-        self.wrap_text_with_char_width(text, max_width, self.char_width)
-    }
-
-    fn wrap_text_with_char_width(&self, text: &str, max_width: f32, char_width: f32) -> Vec<String> {
-        let max_chars = (max_width / char_width) as usize;
-
-        let mut lines = Vec::new();
-        let mut current_line = String::new();
-
-        for word in text.split_whitespace() {
-            if current_line.is_empty() {
-                current_line = word.to_string();
-            } else if current_line.len() + 1 + word.len() <= max_chars {
-                current_line.push(' ');
-                current_line.push_str(word);
-            } else {
-                lines.push(current_line);
-                current_line = word.to_string();
-            }
-        }
-
-        if !current_line.is_empty() {
-            lines.push(current_line);
-        }
-
-        if lines.is_empty() {
-            lines.push(String::new());
-        }
-
-        lines
     }
 
     fn get_node_text(node: &DocumentNode) -> String {
@@ -435,20 +507,54 @@ impl PdfGenerator {
                         "italic" => style.italic = true,
                         "underline" => style.underline = true,
                         "strike" => style.strike = true,
+                        "fontFamily" => {
+                            if let Some(attrs) = &mark.attrs {
+                                if let Some(font_family) =
+                                    attrs.get("fontFamily").and_then(|value| value.as_str())
+                                {
+                                    style.font_family = Some(font_family.to_string());
+                                }
+                                if let Some(font_weight) =
+                                    attrs.get("fontWeight").and_then(|value| value.as_u64())
+                                {
+                                    style.font_weight = Some(font_weight.min(1000) as u16);
+                                    if font_weight >= 600 {
+                                        style.bold = true;
+                                    }
+                                }
+                                if let Some(font_style) =
+                                    attrs.get("fontStyle").and_then(|value| value.as_str())
+                                {
+                                    style.font_style = Some(font_style.to_string());
+                                    if font_style == "italic" || font_style == "oblique" {
+                                        style.italic = true;
+                                    }
+                                }
+                            }
+                        }
+                        "textSize" => {
+                            if let Some(attrs) = &mark.attrs {
+                                if let Some(size_pt) =
+                                    attrs.get("sizePt").and_then(|value| value.as_f64())
+                                {
+                                    style.size_pt = Some((size_pt as f32).clamp(6.0, 72.0));
+                                }
+                            }
+                        }
                         _ => {}
                     }
                 }
             }
 
             for c in text.chars() {
-                out.push((c, style));
+                out.push((c, style.clone()));
             }
             return;
         }
 
         if let Some(content) = &node.content {
             for child in content {
-                Self::collect_styled_chars(child, base, out);
+                Self::collect_styled_chars(child, base.clone(), out);
             }
         }
     }
@@ -461,14 +567,38 @@ impl PdfGenerator {
         uppercase: bool,
         max_chars: usize,
     ) -> Vec<Vec<StyledSegment>> {
+        Self::styled_lines_with_affixes(node, base, uppercase, max_chars, "", "")
+    }
+
+    fn styled_lines_with_affixes(
+        node: &DocumentNode,
+        base: TextStyle,
+        uppercase: bool,
+        max_chars: usize,
+        prefix: &str,
+        suffix: &str,
+    ) -> Vec<Vec<StyledSegment>> {
         let mut chars: Vec<(char, TextStyle)> = Vec::new();
-        Self::collect_styled_chars(node, base, &mut chars);
+        Self::collect_styled_chars(node, base.clone(), &mut chars);
 
         if uppercase {
             chars = chars
                 .into_iter()
-                .flat_map(|(c, style)| c.to_uppercase().map(move |upper| (upper, style)))
+                .flat_map(|(c, style)| {
+                    c.to_uppercase()
+                        .map(move |upper| (upper, style.clone()))
+                })
                 .collect();
+        }
+
+        if !prefix.is_empty() || !suffix.is_empty() {
+            let mut affixed = prefix
+                .chars()
+                .map(|c| (c, base.clone()))
+                .collect::<Vec<_>>();
+            affixed.extend(chars);
+            affixed.extend(suffix.chars().map(|c| (c, base.clone())));
+            chars = affixed;
         }
 
         wrap_styled(&chars, max_chars)
@@ -477,12 +607,64 @@ impl PdfGenerator {
             .collect()
     }
 
-    fn write_styled_line(&mut self, segments: &[StyledSegment], x: f32, size: f32, line_height: f32) {
-        if self.y_position - line_height < MARGIN_BOTTOM {
+    fn write_styled_lines_aligned(
+        &mut self,
+        node: &DocumentNode,
+        lines: &[Vec<StyledSegment>],
+        base_x: f32,
+        max_width: f32,
+        size: f32,
+        line_height: f32,
+    ) {
+        self.write_styled_lines_aligned_with_default(
+            node,
+            lines,
+            base_x,
+            max_width,
+            size,
+            line_height,
+            "left",
+        );
+    }
+
+    fn write_styled_lines_aligned_with_default(
+        &mut self,
+        node: &DocumentNode,
+        lines: &[Vec<StyledSegment>],
+        base_x: f32,
+        max_width: f32,
+        size: f32,
+        line_height: f32,
+        default_alignment: &str,
+    ) {
+        let space_needed = Self::styled_lines_height(lines, size, line_height);
+        if self.y_position - space_needed < MARGIN_BOTTOM {
             self.new_page();
         }
 
-        let y = self.y_position;
+        for line in lines {
+            let line_width = self.line_width_pt(line, size);
+            let x = self.aligned_x_with_default(node, base_x, max_width, line_width, default_alignment);
+            self.write_styled_line(line, x, size, line_height);
+        }
+    }
+
+    fn write_styled_line(&mut self, segments: &[StyledSegment], x: f32, size: f32, line_height: f32) {
+        let line_advance = Self::styled_line_advance(segments, size, line_height);
+        if self.y_position - line_advance < MARGIN_BOTTOM {
+            self.new_page();
+        }
+
+        let y = self.y_position - Self::styled_line_baseline_adjust(segments, size);
+        let runs = segments
+            .iter()
+            .map(|segment| {
+                let font = self.font_for(&segment.style);
+                let segment_size = Self::style_size(&segment.style, size);
+                let width = self.segment_width_pt(segment, size);
+                (segment, font, segment_size, width)
+            })
+            .collect::<Vec<_>>();
         let layer = self
             .doc
             .get_page(self.current_page)
@@ -490,27 +672,37 @@ impl PdfGenerator {
 
         layer.begin_text_section();
         layer.set_text_cursor(Mm::from(Pt(x)), Mm::from(Pt(y)));
-        for segment in segments {
-            let font = self.font_for(segment.style);
-            layer.set_font(&font, size);
-            layer.write_text(&segment.text, &font);
+        for (segment, font, segment_size, _) in &runs {
+            layer.set_font(font, *segment_size);
+            layer.write_text(&segment.text, font);
         }
         layer.end_text_section();
 
         // Underline / strikethrough rules
         let mut cursor_x = x;
-        for segment in segments {
-            let width = self.segment_width_pt(segment, size);
+        for (segment, _, segment_size, width) in &runs {
             if segment.style.underline {
-                Self::draw_rule(&layer, cursor_x, y - size * 0.09, width, size * 0.05);
+                Self::draw_rule(
+                    &layer,
+                    cursor_x,
+                    y - segment_size * 0.09,
+                    *width,
+                    segment_size * 0.05,
+                );
             }
             if segment.style.strike {
-                Self::draw_rule(&layer, cursor_x, y + size * 0.27, width, size * 0.05);
+                Self::draw_rule(
+                    &layer,
+                    cursor_x,
+                    y + segment_size * 0.27,
+                    *width,
+                    segment_size * 0.05,
+                );
             }
-            cursor_x += width;
+            cursor_x += *width;
         }
 
-        self.y_position -= line_height;
+        self.y_position -= line_advance;
     }
 
     fn draw_rule(layer: &PdfLayerReference, x: f32, y: f32, width: f32, thickness: f32) {
@@ -658,7 +850,8 @@ impl PdfGenerator {
 
     fn render_freewrite_node(&mut self, node: &DocumentNode, list_number: i32) {
         let max_width = PAGE_WIDTH - FW_MARGIN_LEFT - FW_MARGIN_RIGHT;
-        let max_chars = |size: f32, width: f32| (width / (size * HELVETICA_CHAR_WIDTH_RATIO)) as usize;
+        let max_chars =
+            |size: f32, width: f32| ((width / (size * HELVETICA_CHAR_WIDTH_RATIO)) as usize).max(1);
         let bold_base = TextStyle {
             bold: true,
             ..TextStyle::default()
@@ -669,14 +862,14 @@ impl PdfGenerator {
                 self.freewrite_space_before(FW_TITLE_SPACE_BEFORE);
                 let lines =
                     Self::styled_lines(node, bold_base, false, max_chars(FW_TITLE_SIZE, max_width));
-                for line in lines {
-                    self.write_styled_line(
-                        &line,
-                        FW_MARGIN_LEFT,
-                        FW_TITLE_SIZE,
-                        FW_TITLE_LINE_HEIGHT,
-                    );
-                }
+                self.write_styled_lines_aligned(
+                    node,
+                    &lines,
+                    FW_MARGIN_LEFT,
+                    max_width,
+                    FW_TITLE_SIZE,
+                    FW_TITLE_LINE_HEIGHT,
+                );
                 self.y_position -= FW_TITLE_SPACE_AFTER;
             }
             "heading" => {
@@ -687,14 +880,14 @@ impl PdfGenerator {
                     false,
                     max_chars(FW_HEADING_SIZE, max_width),
                 );
-                for line in lines {
-                    self.write_styled_line(
-                        &line,
-                        FW_MARGIN_LEFT,
-                        FW_HEADING_SIZE,
-                        FW_HEADING_LINE_HEIGHT,
-                    );
-                }
+                self.write_styled_lines_aligned(
+                    node,
+                    &lines,
+                    FW_MARGIN_LEFT,
+                    max_width,
+                    FW_HEADING_SIZE,
+                    FW_HEADING_LINE_HEIGHT,
+                );
                 self.y_position -= FW_HEADING_SPACE_AFTER;
             }
             "bulletItem" | "numberedItem" => {
@@ -719,14 +912,14 @@ impl PdfGenerator {
                     (FW_MARGIN_LEFT + FW_LIST_INDENT - 6.0 - marker_width).max(FW_MARGIN_LEFT);
                 self.put_freewrite_text(&marker, marker_x, FW_BODY_SIZE, false);
 
-                for line in lines {
-                    self.write_styled_line(
-                        &line,
-                        FW_MARGIN_LEFT + FW_LIST_INDENT,
-                        FW_BODY_SIZE,
-                        FW_BODY_LINE_HEIGHT,
-                    );
-                }
+                self.write_styled_lines_aligned(
+                    node,
+                    &lines,
+                    FW_MARGIN_LEFT + FW_LIST_INDENT,
+                    max_width - FW_LIST_INDENT,
+                    FW_BODY_SIZE,
+                    FW_BODY_LINE_HEIGHT,
+                );
                 self.y_position -= FW_LIST_SPACING;
             }
             // "body" and anything unexpected render as plain paragraphs
@@ -737,14 +930,14 @@ impl PdfGenerator {
                     false,
                     max_chars(FW_BODY_SIZE, max_width),
                 );
-                for line in lines {
-                    self.write_styled_line(
-                        &line,
-                        FW_MARGIN_LEFT,
-                        FW_BODY_SIZE,
-                        FW_BODY_LINE_HEIGHT,
-                    );
-                }
+                self.write_styled_lines_aligned(
+                    node,
+                    &lines,
+                    FW_MARGIN_LEFT,
+                    max_width,
+                    FW_BODY_SIZE,
+                    FW_BODY_LINE_HEIGHT,
+                );
                 self.y_position -= FW_BLOCK_SPACING;
             }
         }
@@ -755,96 +948,179 @@ impl PdfGenerator {
         if text.trim().is_empty() && node.node_type != "pageBreak" {
             return;
         }
+        let content_width = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
+        let content_max_chars = (content_width / self.char_width) as usize;
 
         match node.node_type.as_str() {
             "comicPage" => {
                 self.check_page_break(2);
-                self.write_line(&text.to_uppercase(), 0.0);
+                let lines = Self::styled_lines(
+                    node,
+                    TextStyle::default(),
+                    true,
+                    content_max_chars.max(1),
+                );
+                self.write_styled_lines_aligned(
+                    node,
+                    &lines,
+                    MARGIN_LEFT,
+                    content_width,
+                    FONT_SIZE,
+                    LINE_HEIGHT,
+                );
                 self.write_blank_line();
             }
             "comicPanel" => {
                 self.write_blank_line();
                 self.check_page_break(2);
-                self.write_line(&text.to_uppercase(), 0.0);
+                let lines = Self::styled_lines(
+                    node,
+                    TextStyle::default(),
+                    true,
+                    content_max_chars.max(1),
+                );
+                self.write_styled_lines_aligned(
+                    node,
+                    &lines,
+                    MARGIN_LEFT,
+                    content_width,
+                    FONT_SIZE,
+                    LINE_HEIGHT,
+                );
                 self.write_blank_line();
             }
             "caption" => {
-                let max_chars =
-                    ((PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT) / self.char_width) as usize;
+                let max_width = content_width - 36.0;
+                let max_chars = (max_width / self.char_width) as usize;
                 let lines = Self::styled_lines(node, TextStyle::default(), false, max_chars);
-                self.check_page_break(lines.len() as i32);
-                for line in lines {
-                    self.write_styled_line(&line, MARGIN_LEFT + 36.0, FONT_SIZE, LINE_HEIGHT);
-                }
+                self.write_styled_lines_aligned(
+                    node,
+                    &lines,
+                    MARGIN_LEFT + 36.0,
+                    max_width,
+                    FONT_SIZE,
+                    LINE_HEIGHT,
+                );
             }
             "soundEffect" => {
-                let max_chars =
-                    ((PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT) / self.char_width) as usize;
+                let max_width = content_width - 36.0;
+                let max_chars = (max_width / self.char_width) as usize;
                 let lines = Self::styled_lines(node, TextStyle::default(), true, max_chars);
-                self.check_page_break(lines.len() as i32);
-                for line in lines {
-                    self.write_styled_line(&line, MARGIN_LEFT + 36.0, FONT_SIZE, LINE_HEIGHT);
-                }
+                self.write_styled_lines_aligned(
+                    node,
+                    &lines,
+                    MARGIN_LEFT + 36.0,
+                    max_width,
+                    FONT_SIZE,
+                    LINE_HEIGHT,
+                );
             }
             "sceneHeading" => {
                 self.write_blank_line();
-                self.check_page_break(2);
-                self.write_bold_line(&text.to_uppercase(), 0.0);
+                let lines = Self::styled_lines(
+                    node,
+                    TextStyle {
+                        bold: true,
+                        ..TextStyle::default()
+                    },
+                    true,
+                    content_max_chars.max(1),
+                );
+                self.write_styled_lines_aligned(
+                    node,
+                    &lines,
+                    MARGIN_LEFT,
+                    content_width,
+                    FONT_SIZE,
+                    LINE_HEIGHT,
+                );
                 self.write_blank_line();
             }
             "action" => {
                 self.write_blank_line();
-                let max_chars =
-                    ((PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT) / self.char_width) as usize;
-                let lines = Self::styled_lines(node, TextStyle::default(), false, max_chars);
-                self.check_page_break(lines.len() as i32);
-                for line in lines {
-                    self.write_styled_line(&line, MARGIN_LEFT, FONT_SIZE, LINE_HEIGHT);
-                }
+                let lines =
+                    Self::styled_lines(node, TextStyle::default(), false, content_max_chars.max(1));
+                self.write_styled_lines_aligned(
+                    node,
+                    &lines,
+                    MARGIN_LEFT,
+                    content_width,
+                    FONT_SIZE,
+                    LINE_HEIGHT,
+                );
             }
             "character" => {
                 self.write_blank_line();
-                let mut char_text = text.to_uppercase();
-
-                // Add extension if present
-                if let Some(attrs) = &node.attrs {
-                    if let Some(ext) = attrs.get("extension").and_then(|v| v.as_str()) {
-                        char_text = format!("{} ({})", char_text, ext);
-                    }
-                }
-
-                self.check_page_break(1);
-                self.write_line(&char_text, CHARACTER_INDENT);
+                let suffix = node
+                    .attrs
+                    .as_ref()
+                    .and_then(|attrs| attrs.get("extension"))
+                    .and_then(|value| value.as_str())
+                    .map(|extension| format!(" ({})", extension))
+                    .unwrap_or_default();
+                let max_width = (content_width - CHARACTER_INDENT).max(self.char_width);
+                let max_chars = (max_width / self.char_width) as usize;
+                let lines = Self::styled_lines_with_affixes(
+                    node,
+                    TextStyle::default(),
+                    true,
+                    max_chars.max(1),
+                    "",
+                    &suffix,
+                );
+                self.write_styled_lines_aligned(
+                    node,
+                    &lines,
+                    MARGIN_LEFT + CHARACTER_INDENT,
+                    max_width,
+                    FONT_SIZE,
+                    LINE_HEIGHT,
+                );
             }
             "dialogue" => {
                 let max_chars = (DIALOGUE_WIDTH / self.char_width) as usize;
-                let lines = Self::styled_lines(node, TextStyle::default(), false, max_chars);
-                self.check_page_break(lines.len() as i32);
-                for line in lines {
-                    self.write_styled_line(
-                        &line,
-                        MARGIN_LEFT + DIALOGUE_INDENT,
-                        FONT_SIZE,
-                        LINE_HEIGHT,
-                    );
-                }
+                let lines = Self::styled_lines(node, TextStyle::default(), false, max_chars.max(1));
+                self.write_styled_lines_aligned(
+                    node,
+                    &lines,
+                    MARGIN_LEFT + DIALOGUE_INDENT,
+                    DIALOGUE_WIDTH,
+                    FONT_SIZE,
+                    LINE_HEIGHT,
+                );
             }
             "parenthetical" => {
-                let paren_text = format!("({})", text);
-                let wrapped = self.wrap_text(&paren_text, PARENTHETICAL_WIDTH);
-                self.check_page_break(wrapped.len() as i32);
-                for line in wrapped {
-                    self.write_line(&line, PARENTHETICAL_INDENT);
-                }
+                let max_chars = (PARENTHETICAL_WIDTH / self.char_width) as usize;
+                let lines = Self::styled_lines_with_affixes(
+                    node,
+                    TextStyle::default(),
+                    false,
+                    max_chars.max(1),
+                    "(",
+                    ")",
+                );
+                self.write_styled_lines_aligned(
+                    node,
+                    &lines,
+                    MARGIN_LEFT + PARENTHETICAL_INDENT,
+                    PARENTHETICAL_WIDTH,
+                    FONT_SIZE,
+                    LINE_HEIGHT,
+                );
             }
             "transition" => {
                 self.write_blank_line();
-                self.check_page_break(2);
-                // Right-align transition
-                let content_width = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
-                let text_upper = text.to_uppercase();
-                let text_width = text_upper.len() as f32 * self.char_width;
-                self.write_line(&text_upper, content_width - text_width);
+                let lines =
+                    Self::styled_lines(node, TextStyle::default(), true, content_max_chars.max(1));
+                self.write_styled_lines_aligned_with_default(
+                    node,
+                    &lines,
+                    MARGIN_LEFT,
+                    content_width,
+                    FONT_SIZE,
+                    LINE_HEIGHT,
+                    "right",
+                );
                 self.write_blank_line();
             }
             "pageBreak" => {
@@ -854,10 +1130,20 @@ impl PdfGenerator {
                 // Unknown node type, render as action
                 if !text.is_empty() {
                     self.write_blank_line();
-                    let wrapped = self.wrap_text(&text, PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT);
-                    for line in wrapped {
-                        self.write_line(&line, 0.0);
-                    }
+                    let lines = Self::styled_lines(
+                        node,
+                        TextStyle::default(),
+                        false,
+                        content_max_chars.max(1),
+                    );
+                    self.write_styled_lines_aligned(
+                        node,
+                        &lines,
+                        MARGIN_LEFT,
+                        content_width,
+                        FONT_SIZE,
+                        LINE_HEIGHT,
+                    );
                 }
             }
         }

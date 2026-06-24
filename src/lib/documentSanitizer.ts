@@ -105,6 +105,7 @@ const BLOCK_NODE_TYPES = new Set([
   ...FREEWRITE_BLOCK_TYPES,
 ]);
 const INLINE_STYLE_MARKS = ['bold', 'italic', 'underline', 'fontFamily', 'textSize'] as const;
+const BASIC_STYLE_MARKS = new Set(['fontFamily', 'textSize']);
 const RICH_TEXT_MARKS = new Set([...INLINE_STYLE_MARKS, 'strike']);
 const SCREENPLAY_TEXT_MARKS = new Set(INLINE_STYLE_MARKS);
 const PLAIN_TEXT_MARKS = new Set<string>();
@@ -159,8 +160,12 @@ function repairDocument(report: DocumentSanitizationReport): void {
 }
 
 function allowedMarksForNode(type: string | null): Set<string> {
-  if (!type || PLAIN_TEXT_NODES.has(type)) {
+  if (!type) {
     return PLAIN_TEXT_MARKS;
+  }
+
+  if (PLAIN_TEXT_NODES.has(type)) {
+    return BASIC_STYLE_MARKS;
   }
 
   return STRIKE_TEXT_NODES.has(type) ? RICH_TEXT_MARKS : SCREENPLAY_TEXT_MARKS;

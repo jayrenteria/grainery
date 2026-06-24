@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "com.grainery.system-font-styles",
   "name": "System Font Styles",
-  "version": "1.2.0",
+  "version": "1.2.5",
   "description": "Applies installed system font variants, common sizes, and block alignment to selected text.",
   "engine": {
     "grainery": ">=0.1.0",

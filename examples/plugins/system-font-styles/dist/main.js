@@ -18,12 +18,16 @@ const ALIGNABLE_NODE_TYPES = new Set([
 ]);
 const TEXT_STYLE_MARKS = new Set(['fontFamily', 'textSize']);
 const MAX_FONT_FAMILY_LENGTH = 128;
-const MAX_FONT_MATCHES = 16;
-const MAX_VARIANTS_PER_FAMILY = 5;
 
 let cachedFonts = null;
 let fontPermissionDenied = false;
-let fontActionMap = new Map();
+let familyActionMap = new Map();
+let variantActionMap = new Map();
+let lastQuery = '';
+let selectedFamilyKey = null;
+let lastAppliedFontKey = null;
+let lastAppliedSize = null;
+let lastAppliedAlignment = null;
 
 function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
@@ -80,6 +84,13 @@ function normalizeSize(value) {
   }
 
   return Math.round(Math.min(72, Math.max(6, numeric)) * 10) / 10;
+}
+
+function fontVariantKey(family, variant) {
+  const familyName = normalizeFontName(family).toLowerCase();
+  const weight = normalizeFontWeight(variant && variant.weight) || '';
+  const style = normalizeFontStyle(variant && variant.style) || 'normal';
+  return `${familyName}:${weight}:${style}`;
 }
 
 function normalizeFamilies(input) {
@@ -264,7 +275,7 @@ function applyMarksToSelection(document, from, to, applyMarks) {
   const rangeTo = Math.max(from, to);
   const next = cloneJson(document);
   const blocks = Array.isArray(next.content) ? next.content : [];
-  let position = 1;
+  let position = 0;
   let changed = false;
 
   for (let index = 0; index < blocks.length; index += 1) {
@@ -314,6 +325,43 @@ function clearStylesInSelection(document, context) {
   return applyMarksToSelection(document, context.selectionFrom, context.selectionTo, withoutTextStyleMarks);
 }
 
+function clearAlignment(document, context) {
+  const next = cloneJson(document);
+  const blocks = Array.isArray(next.content) ? next.content : [];
+  const range = selectionRange(context);
+  let position = 0;
+  let changed = false;
+
+  for (const block of blocks) {
+    const size = Math.max(getNodeSize(block), 1);
+    const blockFrom = position;
+    const blockTo = position + size;
+    const matches = range.empty
+      ? range.from >= blockFrom && range.from <= blockTo
+      : blockFrom < range.to && blockTo > range.from;
+
+    if (matches && block.attrs && Object.prototype.hasOwnProperty.call(block.attrs, 'textAlign')) {
+      const attrs = { ...block.attrs };
+      delete attrs.textAlign;
+      block.attrs = Object.keys(attrs).length > 0 ? attrs : undefined;
+      changed = true;
+    }
+
+    position += size;
+  }
+
+  return { changed, document: next };
+}
+
+function clearStylesAndAlignment(document, context) {
+  const styleResult = clearStylesInSelection(document, context);
+  const alignmentResult = clearAlignment(styleResult.document, context);
+  return {
+    changed: styleResult.changed || alignmentResult.changed,
+    document: alignmentResult.document
+  };
+}
+
 function applyAlignment(document, context, alignment) {
   if (alignment !== 'left' && alignment !== 'center' && alignment !== 'right') {
     return { changed: false, document };
@@ -326,7 +374,7 @@ function applyAlignment(document, context, alignment) {
   const rangeFrom = Math.min(from, to);
   const rangeTo = Math.max(from, to);
   const empty = rangeFrom === rangeTo;
-  let position = 1;
+  let position = 0;
   let changed = false;
 
   for (const block of blocks) {
@@ -355,43 +403,206 @@ function applyAlignment(document, context, alignment) {
 
 function matchFonts(families, query) {
   const normalized = cleanString(query, 80).toLowerCase();
-  const matches = normalized
-    ? families.filter((family) => family.name.toLowerCase().includes(normalized))
-    : families;
+  if (!normalized) {
+    return families;
+  }
 
-  return matches.slice(0, MAX_FONT_MATCHES);
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  return families.filter((family) => {
+    const searchable = [
+      family.name,
+      ...family.variants.map((variant) => variant.name)
+    ].join(' ').toLowerCase();
+
+    return tokens.every((token) => searchable.includes(token));
+  });
 }
 
-function buildFontResultBlocks(families, query) {
+function fontFamilyKey(family) {
+  return family.name.toLowerCase();
+}
+
+function findFamilyByKey(families, key) {
+  if (!key) {
+    return null;
+  }
+
+  return families.find((family) => fontFamilyKey(family) === key) || null;
+}
+
+function styleValueState() {
+  return { value: null, mixed: false, sawText: false };
+}
+
+function addStyleValue(state, value) {
+  state.sawText = true;
+  if (value === null || value === undefined || value === '') {
+    state.mixed = true;
+    return;
+  }
+  if (state.value === null) {
+    state.value = value;
+    return;
+  }
+  if (state.value !== value) {
+    state.mixed = true;
+  }
+}
+
+function textNodeOverlapsSelection(text, textPos, range) {
+  if (range.empty) {
+    return range.from >= textPos && range.from <= textPos + text.length;
+  }
+
+  return textPos < range.to && textPos + text.length > range.from;
+}
+
+function collectTextStyleValues(node, startPos, range, fontState, sizeState) {
+  if (!node) {
+    return;
+  }
+
+  if (typeof node.text === 'string') {
+    if (!textNodeOverlapsSelection(node.text, startPos, range)) {
+      return;
+    }
+
+    const marks = normalizeMarks(node.marks);
+    const fontMark = marks.find((mark) => mark.type === 'fontFamily');
+    const sizeMark = marks.find((mark) => mark.type === 'textSize');
+    if (fontMark && typeof fontMark.attrs?.fontFamily === 'string') {
+      addStyleValue(fontState, fontVariantKey(fontMark.attrs.fontFamily, {
+        weight: fontMark.attrs.fontWeight,
+        style: fontMark.attrs.fontStyle
+      }));
+    } else {
+      addStyleValue(fontState, null);
+    }
+
+    const size = sizeMark ? normalizeSize(sizeMark.attrs?.sizePt) : null;
+    addStyleValue(sizeState, size);
+    return;
+  }
+
+  let childPos = startPos + 1;
+  for (const child of Array.isArray(node.content) ? node.content : []) {
+    collectTextStyleValues(child, childPos, range, fontState, sizeState);
+    childPos += getNodeSize(child);
+  }
+}
+
+function collectSelectionStyles(document, context) {
+  const range = selectionRange(context);
+  const fontState = styleValueState();
+  const sizeState = styleValueState();
+  const alignmentState = styleValueState();
+  const blocks = Array.isArray(document && document.content) ? document.content : [];
+  let position = 0;
+
+  for (const block of blocks) {
+    const size = Math.max(getNodeSize(block), 1);
+    const blockFrom = position;
+    const blockTo = position + size;
+    const matches = range.empty
+      ? range.from >= blockFrom && range.from <= blockTo
+      : blockFrom < range.to && blockTo > range.from;
+
+    if (matches) {
+      collectTextStyleValues(block, position, range, fontState, sizeState);
+      if (ALIGNABLE_NODE_TYPES.has(block.type)) {
+        const alignment = block.attrs && typeof block.attrs.textAlign === 'string'
+          ? block.attrs.textAlign
+          : 'left';
+        addStyleValue(alignmentState, alignment);
+      }
+    }
+
+    position += size;
+  }
+
+  const fontVariant = fontState.sawText && !fontState.mixed ? fontState.value : null;
+  return {
+    hasText: fontState.sawText || sizeState.sawText,
+    hasAlignmentBlock: alignmentState.sawText,
+    fontVariant,
+    fontFamilyKey: fontVariant ? fontVariant.split(':')[0] : null,
+    sizePt: sizeState.sawText && !sizeState.mixed ? sizeState.value : null,
+    alignment: alignmentState.sawText && !alignmentState.mixed ? alignmentState.value : null
+  };
+}
+
+function setLastQuery(query) {
+  const nextQuery = cleanString(query, 80);
+  if (nextQuery !== lastQuery) {
+    lastQuery = nextQuery;
+    selectedFamilyKey = null;
+  }
+}
+
+function selectionRange(context) {
+  const from = Number.isFinite(context.selectionFrom) ? context.selectionFrom : 0;
+  const to = Number.isFinite(context.selectionTo) ? context.selectionTo : from;
+  return {
+    from: Math.min(from, to),
+    to: Math.max(from, to),
+    empty: from === to
+  };
+}
+
+function fontPreview(family, variant = null) {
+  const preview = {
+    fontFamily: family
+  };
+  const weight = normalizeFontWeight(variant && variant.weight);
+  const style = normalizeFontStyle(variant && variant.style);
+  if (weight) {
+    preview.fontWeight = weight;
+  }
+  if (style) {
+    preview.fontStyle = style;
+  }
+  return preview;
+}
+
+function buildFontResultBlocks(families, query, selectionStyles) {
   const matches = matchFonts(families, query);
-  fontActionMap = new Map();
+  familyActionMap = new Map();
+  variantActionMap = new Map();
 
   if (matches.length === 0) {
     return [
+      {
+        type: 'keyValue',
+        items: [
+          { key: 'Fonts', value: String(families.length) },
+          { key: 'Matches', value: '0' }
+        ]
+      },
       { type: 'callout', tone: 'warning', title: 'No Fonts Found', text: 'Try a different font family search.' }
     ];
   }
 
-  let actionIndex = 0;
-  const actions = [];
-  const listItems = [];
-  for (const family of matches) {
-    const shownVariants = family.variants.slice(0, MAX_VARIANTS_PER_FAMILY);
-    listItems.push(`${family.name}: ${shownVariants.map((variant) => variant.name).join(', ')}`);
+  const selectedFamilyKeyForPanel = selectedFamilyKey || selectionStyles.fontFamilyKey;
+  const activeFontKey = selectionStyles.hasText
+    ? selectionStyles.fontVariant
+    : lastAppliedFontKey;
+  const selectedFamily = findFamilyByKey(matches, selectedFamilyKeyForPanel)
+    || (matches.length === 1 ? matches[0] : null);
+  const selectedKey = selectedFamily ? fontFamilyKey(selectedFamily) : null;
 
-    for (const variant of shownVariants) {
-      const actionId = `font-${actionIndex}`;
-      actionIndex += 1;
-      fontActionMap.set(actionId, { family: family.name, variant });
-      actions.push({
-        id: actionId,
-        label: `${family.name} / ${variant.name}`,
-        variant: 'outline'
-      });
-    }
-  }
+  const familyActions = matches.map((family, index) => {
+    const actionId = `family-${index}`;
+    const key = fontFamilyKey(family);
+    familyActionMap.set(actionId, key);
+    return {
+      id: actionId,
+      label: family.name,
+      preview: fontPreview(family.name),
+      variant: key === selectedKey ? 'primary' : 'outline'
+    };
+  });
 
-  return [
+  const blocks = [
     {
       type: 'keyValue',
       items: [
@@ -399,19 +610,60 @@ function buildFontResultBlocks(families, query) {
         { key: 'Matches', value: String(matches.length) }
       ]
     },
-    { type: 'list', items: listItems },
-    { type: 'actions', actions }
+    {
+      type: 'scroll',
+      maxHeight: 390,
+      blocks: [
+        {
+          type: 'actions',
+          actions: familyActions
+        }
+      ]
+    }
   ];
+
+  if (!selectedFamily) {
+    blocks.push({
+      type: 'text',
+      text: 'Select a font family to show its variants.'
+    });
+    return blocks;
+  }
+
+  blocks.push(
+    { type: 'heading', text: selectedFamily.name, level: 4 },
+    {
+      type: 'actions',
+      actions: selectedFamily.variants.map((variant, index) => {
+        const actionId = `variant-${index}`;
+        const variantKey = fontVariantKey(selectedFamily.name, variant);
+        variantActionMap.set(actionId, { family: selectedFamily.name, variant, variantKey });
+        return {
+          id: actionId,
+          label: variant.name,
+          preview: fontPreview(selectedFamily.name, variant),
+          variant: variantKey === activeFontKey ? 'primary' : 'outline'
+        };
+      })
+    }
+  );
+
+  return blocks;
 }
 
 async function renderPanel(api, context, options = {}) {
-  const query = cleanString(options.query ?? '', 80);
+  const query = cleanString(options.query ?? context.formValues?.fontQuery ?? lastQuery, 80);
+  setLastQuery(query);
   const status = options.status || null;
   const forceRefresh = options.forceRefresh === true;
   const fonts = await loadFonts(api, forceRefresh);
+  const selectionStyles = collectSelectionStyles(context.document, context);
+  const activeSize = selectionStyles.hasText ? selectionStyles.sizePt : lastAppliedSize;
+  const activeAlignment = selectionStyles.hasAlignmentBlock
+    ? selectionStyles.alignment
+    : lastAppliedAlignment;
   const hasSelection = context.selectionFrom !== context.selectionTo;
   const blocks = [
-    { type: 'heading', text: 'Fonts', level: 3 },
     {
       type: 'badgeList',
       items: [
@@ -445,19 +697,13 @@ async function renderPanel(api, context, options = {}) {
     {
       type: 'input',
       fieldId: 'fontQuery',
-      label: 'Font family',
+      label: 'Find Fonts',
       value: query,
       placeholder: 'Courier, Helvetica, Avenir',
       maxLength: 80
     },
-    {
-      type: 'actions',
-      actions: [
-        { id: 'find-fonts', label: 'Find Fonts', variant: 'primary' },
-        { id: 'refresh-fonts', label: 'Refresh', variant: 'outline' }
-      ]
-    },
-    ...buildFontResultBlocks(fonts.families, query),
+    { type: 'divider' },
+    ...buildFontResultBlocks(fonts.families, query, selectionStyles),
     { type: 'divider' },
     { type: 'heading', text: 'Size', level: 3 },
     {
@@ -465,7 +711,7 @@ async function renderPanel(api, context, options = {}) {
       actions: COMMON_SIZES.map((size) => ({
         id: `size-${size}`,
         label: `${size} pt`,
-        variant: size === 12 ? 'primary' : 'outline'
+        variant: size === activeSize ? 'primary' : 'outline'
       }))
     },
     { type: 'divider' },
@@ -473,15 +719,15 @@ async function renderPanel(api, context, options = {}) {
     {
       type: 'actions',
       actions: [
-        { id: 'align-left', label: 'Left', variant: 'outline' },
-        { id: 'align-center', label: 'Center', variant: 'outline' },
-        { id: 'align-right', label: 'Right', variant: 'outline' }
+        { id: 'align-left', label: 'Left', variant: activeAlignment === 'left' ? 'primary' : 'outline' },
+        { id: 'align-center', label: 'Center', variant: activeAlignment === 'center' ? 'primary' : 'outline' },
+        { id: 'align-right', label: 'Right', variant: activeAlignment === 'right' ? 'primary' : 'outline' }
       ]
     },
     { type: 'divider' },
     {
       type: 'actions',
-      actions: [{ id: 'clear-styles', label: 'Clear Font and Size', variant: 'ghost' }]
+      actions: [{ id: 'clear-styles', label: 'CLEAR STYLES', variant: 'outline' }]
     }
   );
 
@@ -547,21 +793,26 @@ export default {
       async onAction(context) {
         const query = cleanString(context.formValues && context.formValues.fontQuery, 80);
 
-        if (context.actionId === 'find-fonts') {
-          return { content: await renderPanel(api, context, { query }) };
-        }
-
         if (context.actionId === 'refresh-fonts') {
+          setLastQuery(query);
           cachedFonts = null;
           return { content: await renderPanel(api, context, { query, forceRefresh: true }) };
         }
 
-        if (context.actionId.startsWith('font-')) {
-          const font = fontActionMap.get(context.actionId);
+        if (context.actionId.startsWith('family-')) {
+          setLastQuery(query);
+          selectedFamilyKey = familyActionMap.get(context.actionId) || selectedFamilyKey;
+          return { content: await renderPanel(api, context, { query }) };
+        }
+
+        if (context.actionId.startsWith('variant-')) {
+          setLastQuery(query);
+          const font = variantActionMap.get(context.actionId);
           if (!font) {
             return { content: await renderPanel(api, context, { query }) };
           }
 
+          lastAppliedFontKey = font.variantKey;
           return replaceIfChanged(
             api,
             context,
@@ -573,6 +824,7 @@ export default {
 
         if (context.actionId.startsWith('size-')) {
           const size = normalizeSize(context.actionId.slice('size-'.length));
+          lastAppliedSize = size;
           return replaceIfChanged(
             api,
             context,
@@ -583,12 +835,15 @@ export default {
         }
 
         if (context.actionId === 'clear-styles') {
+          lastAppliedFontKey = null;
+          lastAppliedSize = null;
+          lastAppliedAlignment = null;
           return replaceIfChanged(
             api,
             context,
-            clearStylesInSelection(context.document, context),
+            clearStylesAndAlignment(context.document, context),
             query,
-            'Font and size removed'
+            'Styles cleared'
           );
         }
 
@@ -596,6 +851,7 @@ export default {
           const alignment = context.actionId.slice('align-'.length);
           const result = applyAlignment(context.document, context, alignment);
           if (result.changed) {
+            lastAppliedAlignment = alignment;
             await api.replaceDocument(result.document);
           }
           return {

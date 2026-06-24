@@ -19,6 +19,7 @@ pub struct SystemFontVariant {
     pub name: String,
     pub weight: u16,
     pub style: &'static str,
+    pub path: PathBuf,
 }
 
 pub fn list_system_font_families() -> Vec<SystemFontFamily> {
@@ -52,6 +53,34 @@ pub fn list_system_font_families() -> Vec<SystemFontFamily> {
     }
 
     families
+}
+
+pub fn resolve_system_font(
+    family_name: &str,
+    weight: Option<u16>,
+    style: Option<&str>,
+) -> Option<PathBuf> {
+    let normalized_family = normalize_font_family_name(family_name);
+    if normalized_family.is_empty() {
+        return None;
+    }
+
+    let requested_style = style.unwrap_or("normal");
+    let requested_weight = weight.unwrap_or(400);
+    let families = list_system_font_families();
+    let family = families
+        .iter()
+        .find(|candidate| candidate.name.eq_ignore_ascii_case(&normalized_family))?;
+
+    family
+        .variants
+        .iter()
+        .min_by_key(|variant| {
+            let style_penalty = if variant.style == requested_style { 0 } else { 1000 };
+            let weight_delta = variant.weight.abs_diff(requested_weight);
+            style_penalty + weight_delta
+        })
+        .map(|variant| variant.path.clone())
 }
 
 fn system_font_directories() -> Vec<PathBuf> {
@@ -147,11 +176,15 @@ fn collect_font_faces_from_file(path: &Path, output: &mut BTreeMap<String, Syste
             continue;
         };
 
-        collect_font_face(&face, output);
+        collect_font_face(&face, path, output);
     }
 }
 
-fn collect_font_face(face: &Face<'_>, output: &mut BTreeMap<String, SystemFontFamily>) {
+fn collect_font_face(
+    face: &Face<'_>,
+    path: &Path,
+    output: &mut BTreeMap<String, SystemFontFamily>,
+) {
     let Some(family) = preferred_family_name(face) else {
         return;
     };
@@ -171,6 +204,7 @@ fn collect_font_face(face: &Face<'_>, output: &mut BTreeMap<String, SystemFontFa
         name: variant_name,
         weight,
         style,
+        path: path.to_path_buf(),
     };
     let key = family.to_lowercase();
     let entry = output.entry(key).or_insert_with(|| SystemFontFamily {

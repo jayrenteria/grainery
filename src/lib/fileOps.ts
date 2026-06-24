@@ -7,6 +7,10 @@ import { exportToFountain } from './fountain';
 import { exportToFdx, importFromFdx } from './fdx';
 import { recordRecentFile } from './recentFiles';
 import { getDefaultContent } from './elementConfig';
+import {
+  prepareDocumentForCompatibilitySave,
+  restoreCompatibleTextStyles,
+} from './textStyleCompatibility';
 
 export async function updateWindowTitle(filename: string | null, isDirty: boolean = false): Promise<void> {
   const title = (filename || 'Untitled') + (isDirty ? ' - Edited' : '');
@@ -110,7 +114,9 @@ export async function openFileAtPath(path: string): Promise<ScreenplayDocument> 
   }
 
   const doc = JSON.parse(content) as ScreenplayDocument;
-  const normalized = populateDocumentMetaFromPath(normalizeDocument(doc), path);
+  const normalized = restoreCompatibleTextStyles(
+    populateDocumentMetaFromPath(normalizeDocument(doc), path)
+  );
   recordRecentFile(path, normalized.documentMode);
   return normalized;
 }
@@ -179,14 +185,15 @@ export async function saveFile(
       modifiedAt: new Date().toISOString(),
     },
   };
+  const compatible = prepareDocumentForCompatibilitySave(updatedDoc);
 
   await invoke('save_screenplay', {
     path: doc.meta.filePath,
-    content: JSON.stringify(updatedDoc, null, 2),
+    content: JSON.stringify(compatible.diskDocument, null, 2),
   });
 
-  recordRecentFile(doc.meta.filePath, updatedDoc.documentMode);
-  return updatedDoc;
+  recordRecentFile(doc.meta.filePath, compatible.appDocument.documentMode);
+  return compatible.appDocument;
 }
 
 export async function saveFileAs(
@@ -215,14 +222,15 @@ export async function saveFileAs(
       modifiedAt: new Date().toISOString(),
     },
   };
+  const compatible = prepareDocumentForCompatibilitySave(updatedDoc);
 
   await invoke('save_screenplay', {
     path: filePath,
-    content: JSON.stringify(updatedDoc, null, 2),
+    content: JSON.stringify(compatible.diskDocument, null, 2),
   });
 
-  recordRecentFile(filePath, updatedDoc.documentMode);
-  return updatedDoc;
+  recordRecentFile(filePath, compatible.appDocument.documentMode);
+  return compatible.appDocument;
 }
 
 export async function confirmUnsavedChanges(): Promise<boolean> {

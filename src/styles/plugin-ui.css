@@ -75,6 +75,10 @@
   @apply my-3 border-base-300/70;
 }
 
+.plugin-panel-scroll {
+  @apply mb-2 overflow-y-auto rounded-sm border border-base-300/50 px-1.5 py-1;
+}
+
 .plugin-panel-callout {
   @apply mb-2 rounded-md border px-2 py-2 text-xs leading-relaxed;
 }
@@ -178,6 +182,14 @@
 
 .plugin-panel-actions {
   @apply mt-2 flex flex-wrap gap-1;
+}
+
+.plugin-panel-actions .btn {
+  @apply h-auto min-h-7 max-w-full whitespace-normal text-left leading-tight;
+}
+
+.plugin-panel-action-label {
+  @apply inline-block max-w-full break-words;
 }
 
 .plugin-panel-field {

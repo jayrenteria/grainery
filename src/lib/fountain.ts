@@ -95,60 +95,182 @@ function getNodeText(node: JSONContent): string {
   return '';
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function cssString(value: string): string {
+  const escaped = value
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/[\r\n\f]/g, ' ');
+  return `"${escaped}"`;
+}
+
+function cssFontStyle(value: unknown): string | null {
+  return value === 'normal' || value === 'italic' || value === 'oblique' ? value : null;
+}
+
+function cssNumber(value: unknown, min: number, max: number): string | null {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  return String(Math.min(max, Math.max(min, numeric)));
+}
+
+function maxTextSize(node: JSONContent): number {
+  let max = 12;
+  for (const mark of node.marks ?? []) {
+    if (mark.type === 'textSize') {
+      const size = Number(mark.attrs?.sizePt);
+      if (Number.isFinite(size)) {
+        max = Math.max(max, Math.min(72, Math.max(6, size)));
+      }
+    }
+  }
+
+  for (const child of node.content ?? []) {
+    max = Math.max(max, maxTextSize(child));
+  }
+
+  return max;
+}
+
+function roundCssPt(value: number): string {
+  return String(Math.round(value * 10) / 10);
+}
+
+function renderStyledText(node: JSONContent, uppercase = false): string {
+  if (typeof node.text === 'string') {
+    let output = escapeHtml(uppercase ? node.text.toUpperCase() : node.text);
+    const marks = Array.isArray(node.marks) ? [...node.marks].reverse() : [];
+
+    for (const mark of marks) {
+      if (mark.type === 'bold') {
+        output = `<strong>${output}</strong>`;
+        continue;
+      }
+      if (mark.type === 'italic') {
+        output = `<em>${output}</em>`;
+        continue;
+      }
+      if (mark.type === 'underline') {
+        output = `<u>${output}</u>`;
+        continue;
+      }
+      if (mark.type === 'strike') {
+        output = `<s>${output}</s>`;
+        continue;
+      }
+      if (mark.type === 'fontFamily' || mark.type === 'textSize') {
+        const styleParts: string[] = [];
+        if (mark.type === 'fontFamily' && typeof mark.attrs?.fontFamily === 'string') {
+          styleParts.push(`font-family: ${cssString(mark.attrs.fontFamily)}`);
+          const fontWeight = cssNumber(mark.attrs.fontWeight, 1, 1000);
+          if (fontWeight) {
+            styleParts.push(`font-weight: ${fontWeight}`);
+          }
+          const fontStyle = cssFontStyle(mark.attrs.fontStyle);
+          if (fontStyle) {
+            styleParts.push(`font-style: ${fontStyle}`);
+          }
+        }
+        if (mark.type === 'textSize' && mark.attrs?.sizePt !== null && mark.attrs?.sizePt !== undefined) {
+          const fontSize = cssNumber(mark.attrs.sizePt, 6, 72);
+          if (fontSize) {
+            styleParts.push(`font-size: ${fontSize}pt`);
+          }
+        }
+        if (styleParts.length > 0) {
+          output = `<span style="${escapeHtml(styleParts.join('; '))}">${output}</span>`;
+        }
+      }
+    }
+
+    return output;
+  }
+
+  return (node.content ?? []).map((child) => renderStyledText(child, uppercase)).join('');
+}
+
+function withAlignment(node: JSONContent, text: string): string {
+  const styles: string[] = [];
+  const textAlign = node.attrs?.textAlign;
+  if (textAlign === 'left' || textAlign === 'center' || textAlign === 'right') {
+    styles.push(`text-align: ${textAlign}`);
+  }
+
+  const size = maxTextSize(node);
+  if (size > 12) {
+    styles.push(`line-height: 1.2`);
+    styles.push(`margin-top: ${roundCssPt((size - 12) * 0.75)}pt`);
+  }
+
+  return styles.length > 0 ? `<div style="${escapeHtml(styles.join('; '))}">${text}</div>` : text;
+}
+
 /**
  * Convert a single node to Fountain format
  */
 function nodeToFountain(node: JSONContent): string | null {
   const text = getNodeText(node);
+  const styledText = renderStyledText(node);
 
   switch (node.type) {
     case 'sceneHeading': {
       // Scene headings in Fountain are auto-detected if they start with INT./EXT.
       // We uppercase them for consistency
       const heading = text.toUpperCase();
+      const styledHeading = renderStyledText(node, true);
       // If it doesn't start with a standard prefix, force it with a leading period
       if (/^(INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[\.\s]/i.test(heading)) {
-        return `\n${heading}`;
+        return `\n${withAlignment(node, styledHeading)}`;
       }
       // Force scene heading with period prefix
-      return `\n.${heading}`;
+      return `\n${withAlignment(node, `.${styledHeading}`)}`;
     }
 
     case 'action': {
       // Action is plain text, preceded by blank line
       if (!text.trim()) return null;
-      return `\n${text}`;
+      return `\n${withAlignment(node, styledText)}`;
     }
 
     case 'character': {
       // Character names are uppercase, preceded by blank line
-      const name = text.toUpperCase();
+      const styledName = renderStyledText(node, true);
       const extension = node.attrs?.extension;
       if (extension) {
-        return `\n${name} (${extension})`;
+        return `\n${withAlignment(node, `${styledName} (${extension})`)}`;
       }
-      return `\n${name}`;
+      return `\n${withAlignment(node, styledName)}`;
     }
 
     case 'parenthetical': {
       // Parentheticals are wrapped in parentheses, no blank line before
-      return `(${text})`;
+      return withAlignment(node, `(${styledText})`);
     }
 
     case 'dialogue': {
       // Dialogue follows character/parenthetical, no blank line before
-      return text;
+      return withAlignment(node, styledText);
     }
 
     case 'transition': {
       // Transitions are right-aligned, uppercase
       const transitionText = text.toUpperCase();
+      const styledTransition = renderStyledText(node, true);
       // If it ends with "TO:", Fountain auto-detects it
       if (transitionText.endsWith('TO:')) {
-        return `\n${transitionText}`;
+        return `\n${withAlignment(node, styledTransition)}`;
       }
       // Otherwise force with > prefix
-      return `\n> ${transitionText}`;
+      return `\n${withAlignment(node, `> ${styledTransition}`)}`;
     }
 
     case 'note': {
@@ -176,7 +298,7 @@ function nodeToFountain(node: JSONContent): string | null {
 
     default:
       // Unknown node type, just return text if any
-      return text ? `\n${text}` : null;
+      return text ? `\n${withAlignment(node, styledText)}` : null;
   }
 }
 

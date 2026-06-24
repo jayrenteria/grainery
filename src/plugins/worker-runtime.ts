@@ -534,6 +534,8 @@ async function evaluateUIState(
 ): Promise<UIEvaluateResponse> {
   const controls: Record<string, { visible: boolean; disabled: boolean; active: boolean; text?: string | null }> = {};
   const panels: Record<string, UIPanelContent> = {};
+  const panelFormValues =
+    (context.metadata?.panelFormValues as Record<string, Record<string, string>> | undefined) ?? {};
 
   for (const controlId of controlIds) {
     const visibleHandler = uiControlVisibleHandlers.get(controlId);
@@ -552,21 +554,22 @@ async function evaluateUIState(
     };
   }
 
-  const panelContext: UIPanelStateContext = {
-    document: context.document,
-    screenplay: context.screenplay,
-    documentMode: context.documentMode,
-    currentElementType: context.currentElementType,
-    selectionFrom: context.selectionFrom,
-    selectionTo: context.selectionTo,
-    metadata: context.metadata,
-  };
-
   for (const panelId of panelIds) {
     const renderHandler = uiPanelRenderHandlers.get(panelId);
     if (!renderHandler) {
       continue;
     }
+
+    const panelContext: UIPanelStateContext = {
+      document: context.document,
+      screenplay: context.screenplay,
+      documentMode: context.documentMode,
+      currentElementType: context.currentElementType,
+      selectionFrom: context.selectionFrom,
+      selectionTo: context.selectionTo,
+      formValues: panelFormValues[panelId],
+      metadata: context.metadata,
+    };
 
     const content = await renderHandler(panelContext);
     if (content) {
@@ -686,13 +689,20 @@ async function handleInvokeMessage(
         const payload = message.payload as {
           controlIds: string[];
           panelIds: string[];
+          panelFormValues?: Record<string, Record<string, string>>;
           context: UIControlStateContext;
         };
 
         const evaluated = await evaluateUIState(
           payload.controlIds ?? [],
           payload.panelIds ?? [],
-          enrichContext<UIControlStateContext>(payload.context)
+          enrichContext<UIControlStateContext>({
+            ...payload.context,
+            metadata: {
+              ...(payload.context?.metadata ?? {}),
+              panelFormValues: payload.panelFormValues ?? {},
+            },
+          })
         );
 
         respond(true, evaluated);
