@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "id": "com.grainery.system-font-styles",
+  "name": "System Font Styles",
+  "version": "1.2.0",
+  "description": "Applies installed system font variants, common sizes, and block alignment to selected text.",
+  "engine": {
+    "grainery": ">=0.1.0",
+    "pluginApi": "^1.2.0"
+  },
+  "entry": "dist/main.js",
+  "permissions": [
+    "document:read",
+    "document:write"
+  ],
+  "optionalPermissions": [
+    "ui:mount",
+    "system:fonts"
+  ],
+  "networkAllowlist": [],
+  "activationEvents": [
+    "onUIControl:toggle-font-styles",
+    "onUIPanel:system-font-styles-panel"
+  ],
+  "contributes": {
+    "commands": [],
+    "menus": [],
+    "keybindings": [],
+    "exporters": [],
+    "importers": [],
+    "statusBadges": [],
+    "inlineAnnotationProviders": [],
+    "uiControls": [
+      {
+        "id": "toggle-font-styles",
+        "mount": "bottom-bar",
+        "kind": "button",
+        "label": "Fonts",
+        "icon": "settings",
+        "priority": 30,
+        "tooltip": "Open system font styles panel",
+        "action": {
+          "type": "panel:toggle",
+          "panelId": "system-font-styles-panel"
+        },
+        "when": "plugin.enabled"
+      }
+    ],
+    "uiPanels": [
+      {
+        "id": "system-font-styles-panel",
+        "title": "System Font Styles",
+        "icon": "settings",
+        "defaultWidth": 340,
+        "minWidth": 280,
+        "maxWidth": 460,
+        "priority": 30,
+        "when": "plugin.enabled"
+      }
+    ],
+    "transforms": []
+  },
+  "permissionRationales": {
+    "ui:mount": "Adds a host-rendered panel and toolbar button for font styling.",
+    "system:fonts": "Lists installed font family and variant names so they can be applied to selected text."
+  },
+  "signature": {
+    "keyId": "main-2026",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "sig": "PLACEHOLDER"
+  }
+}

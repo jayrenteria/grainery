@@ -21,7 +21,7 @@ export const Character = Node.create<CharacterOptions>({
   name: 'character',
   group: 'block',
   content: 'text*',
-  marks: '',
+  marks: 'fontFamily textSize',
   defining: true,
 
   addOptions() {

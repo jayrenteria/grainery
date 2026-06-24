@@ -1,11 +1,3 @@
-import type { JSONContent } from '@tiptap/react';
-import {
-  COMIC_ELEMENT_TYPES,
-  FREEWRITE_ELEMENT_TYPES,
-  SCREENPLAY_ELEMENT_TYPES,
-  type CharacterExtension,
-  type DocumentMode,
-} from './types';
 import {
   normalizeFontFamily,
   normalizeFontStyle,
@@ -15,7 +7,34 @@ import {
 } from './textStyles';
 
 type Counter = Record<string, number>;
-type MarkContent = NonNullable<JSONContent['marks']>[number];
+type DocumentMode = 'screenplay' | 'comic' | 'freewrite';
+type CharacterExtension = 'V.O.' | 'O.S.' | "CONT'D" | 'O.C.' | null;
+
+interface SanitizableMark {
+  type?: string;
+  attrs?: Record<string, unknown>;
+}
+
+interface SanitizableContent {
+  type?: string;
+  attrs?: Record<string, unknown>;
+  content?: SanitizableContent[];
+  marks?: SanitizableMark[];
+  text?: string;
+}
+
+interface SanitizedMark {
+  type: string;
+  attrs?: Record<string, unknown>;
+}
+
+interface SanitizedContent {
+  type: string;
+  attrs?: Record<string, unknown>;
+  content?: SanitizedContent[];
+  marks?: SanitizedMark[];
+  text?: string;
+}
 
 export interface DocumentSanitizationReport {
   changed: boolean;
@@ -29,11 +48,30 @@ export interface DocumentSanitizationReport {
 }
 
 export interface DocumentSanitizationResult {
-  document: JSONContent;
+  document: SanitizedContent;
   report: DocumentSanitizationReport;
 }
 
 const CHARACTER_EXTENSIONS: CharacterExtension[] = [null, 'V.O.', 'O.S.', "CONT'D", 'O.C.'];
+const SCREENPLAY_ELEMENT_TYPES = [
+  'sceneHeading',
+  'action',
+  'character',
+  'dialogue',
+  'parenthetical',
+  'transition',
+];
+const COMIC_ELEMENT_TYPES = [
+  'comicPage',
+  'comicPanel',
+  'action',
+  'character',
+  'dialogue',
+  'parenthetical',
+  'caption',
+  'soundEffect',
+];
+const FREEWRITE_ELEMENT_TYPES = ['title', 'heading', 'body', 'bulletItem', 'numberedItem'];
 const DEFAULT_BLOCK_TYPE_BY_MODE: Record<DocumentMode, string> = {
   screenplay: 'sceneHeading',
   comic: 'comicPage',
@@ -132,7 +170,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function markKey(mark: MarkContent): string {
+function markKey(mark: SanitizedMark): string {
   return JSON.stringify({
     type: mark.type,
     attrs: mark.attrs ?? null,
@@ -140,10 +178,10 @@ function markKey(mark: MarkContent): string {
 }
 
 function sanitizeMark(
-  mark: MarkContent,
+  mark: SanitizableMark,
   allowedMarks: Set<string>,
   report: DocumentSanitizationReport
-): MarkContent | null {
+): SanitizedMark | null {
   const type = mark.type;
   if (!type || !allowedMarks.has(type)) {
     removeMark(report, type ?? 'unknown');
@@ -188,16 +226,16 @@ function sanitizeMark(
 }
 
 function sanitizeMarks(
-  marks: JSONContent['marks'],
+  marks: SanitizableContent['marks'],
   parentType: string | null,
   report: DocumentSanitizationReport
-): JSONContent['marks'] {
+): SanitizedContent['marks'] {
   if (!Array.isArray(marks) || marks.length === 0) {
     return undefined;
   }
 
   const allowedMarks = allowedMarksForNode(parentType);
-  const sanitized: NonNullable<JSONContent['marks']> = [];
+  const sanitized: SanitizedMark[] = [];
   const seen = new Set<string>();
 
   for (const mark of marks) {
@@ -290,7 +328,7 @@ function sanitizeNodeAttrs(
   return Object.keys(nextAttrs).length > 0 ? nextAttrs : undefined;
 }
 
-function textFromUnknownNode(node: JSONContent): string {
+function textFromUnknownNode(node: SanitizableContent): string {
   if (node.type === 'text' && typeof node.text === 'string') {
     return node.text;
   }
@@ -303,10 +341,10 @@ function textFromUnknownNode(node: JSONContent): string {
 }
 
 function sanitizeTextNode(
-  node: JSONContent,
+  node: SanitizableContent,
   parentType: string | null,
   report: DocumentSanitizationReport
-): JSONContent | null {
+): SanitizedContent | null {
   if (typeof node.text !== 'string' || node.text.length === 0) {
     repairDocument(report);
     return null;
@@ -321,15 +359,15 @@ function sanitizeTextNode(
 }
 
 function sanitizeInlineContent(
-  content: JSONContent['content'],
+  content: SanitizableContent['content'],
   parentType: string,
   report: DocumentSanitizationReport
-): JSONContent['content'] {
+): SanitizedContent['content'] {
   if (!Array.isArray(content)) {
     return undefined;
   }
 
-  const nextContent: JSONContent[] = [];
+  const nextContent: SanitizedContent[] = [];
   for (const child of content) {
     if (child.type === 'text') {
       const textNode = sanitizeTextNode(child, parentType, report);
@@ -357,14 +395,14 @@ function fallbackBlockType(documentMode: DocumentMode): string {
   return 'action';
 }
 
-function plainTextBlock(text: string, documentMode: DocumentMode): JSONContent {
+function plainTextBlock(text: string, documentMode: DocumentMode): SanitizedContent {
   return {
     type: fallbackBlockType(documentMode),
     content: text ? [{ type: 'text', text }] : [],
   };
 }
 
-function defaultDocument(documentMode: DocumentMode): JSONContent {
+function defaultDocument(documentMode: DocumentMode): SanitizedContent {
   return {
     type: 'doc',
     content: [
@@ -377,10 +415,10 @@ function defaultDocument(documentMode: DocumentMode): JSONContent {
 }
 
 function sanitizeBlockNode(
-  node: JSONContent,
+  node: SanitizableContent,
   documentMode: DocumentMode,
   report: DocumentSanitizationReport
-): JSONContent | null {
+): SanitizedContent | null {
   const type = node.type;
   if (!type || !BLOCK_TYPES_BY_MODE[documentMode].has(type)) {
     const text = textFromUnknownNode(node);
@@ -403,16 +441,16 @@ function sanitizeBlockNode(
 }
 
 function sanitizeDocContent(
-  content: JSONContent['content'],
+  content: SanitizableContent['content'],
   documentMode: DocumentMode,
   report: DocumentSanitizationReport
-): JSONContent['content'] {
+): SanitizedContent['content'] {
   if (!Array.isArray(content)) {
     repairDocument(report);
     return defaultDocument(documentMode).content;
   }
 
-  const nextContent: JSONContent[] = [];
+  const nextContent: SanitizedContent[] = [];
   for (const child of content) {
     const block = sanitizeBlockNode(child, documentMode, report);
     if (block) {
@@ -429,7 +467,7 @@ function sanitizeDocContent(
 }
 
 export function sanitizeEditorDocument(
-  document: JSONContent,
+  document: unknown,
   documentMode: DocumentMode
 ): DocumentSanitizationResult {
   const report = createReport();
@@ -444,7 +482,7 @@ export function sanitizeEditorDocument(
   return {
     document: {
       type: 'doc',
-      content: sanitizeDocContent(document.content, documentMode, report),
+      content: sanitizeDocContent((document as SanitizableContent).content, documentMode, report),
     },
     report,
   };

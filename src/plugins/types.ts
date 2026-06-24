@@ -16,7 +16,8 @@ export type OptionalPermission =
   | 'fs:pick-write'
   | 'network:https'
   | 'ui:mount'
-  | 'editor:annotations';
+  | 'editor:annotations'
+  | 'system:fonts';
 
 export type PluginPermission = CorePermission | OptionalPermission;
 
@@ -262,6 +263,7 @@ export type HostOperation =
   | 'plugin:set-global-data'
   | 'network:get_json'
   | 'network:get_text'
+  | 'system:list_fonts'
   | 'audit:log';
 
 export type ElementLoopEvent = 'tab' | 'shift-tab' | 'enter' | 'escape';

@@ -82,7 +82,8 @@
           "fs:pick-write",
           "network:https",
           "ui:mount",
-          "editor:annotations"
+          "editor:annotations",
+          "system:fonts"
         ]
       }
     },
@@ -428,7 +429,8 @@
           "fs:pick-write",
           "network:https",
           "ui:mount",
-          "editor:annotations"
+          "editor:annotations",
+          "system:fonts"
         ]
       },
       "properties": {
@@ -436,7 +438,8 @@
         "fs:pick-write": { "type": "string", "minLength": 1 },
         "network:https": { "type": "string", "minLength": 1 },
         "ui:mount": { "type": "string", "minLength": 1 },
-        "editor:annotations": { "type": "string", "minLength": 1 }
+        "editor:annotations": { "type": "string", "minLength": 1 },
+        "system:fonts": { "type": "string", "minLength": 1 }
       }
     },
     "signature": {

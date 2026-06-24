@@ -19,6 +19,7 @@ export const OPTIONAL_PERMISSIONS = new Set([
   'network:https',
   'ui:mount',
   'editor:annotations',
+  'system:fonts',
 ]);
 
 export const DOCUMENT_HOOKS = new Set(['post-open', 'pre-save', 'pre-export']);

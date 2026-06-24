@@ -18,7 +18,7 @@ export const ComicPanel = Node.create<ComicPanelOptions>({
   name: 'comicPanel',
   group: 'block',
   content: 'text*',
-  marks: '',
+  marks: 'fontFamily textSize',
   defining: true,
 
   addOptions() {

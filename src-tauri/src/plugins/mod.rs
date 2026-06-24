@@ -1,3 +1,4 @@
+use crate::fonts;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use chrono::Utc;
@@ -377,7 +378,12 @@ fn validate_plugin_id(plugin_id: &str) -> bool {
 fn is_optional_permission(permission: &str) -> bool {
     matches!(
         permission,
-        "fs:pick-read" | "fs:pick-write" | "network:https" | "ui:mount" | "editor:annotations"
+        "fs:pick-read"
+            | "fs:pick-write"
+            | "network:https"
+            | "ui:mount"
+            | "editor:annotations"
+            | "system:fonts"
     )
 }
 
@@ -1827,6 +1833,30 @@ pub async fn plugin_host_call(
         }
 
         "audit:log" => Ok(json!({ "ok": true })),
+
+        "system:list_fonts" => {
+            if !has_permission(plugin, "system:fonts") {
+                return Err("Permission denied: system:fonts".to_string());
+            }
+
+            let families = fonts::list_system_font_families()
+                .into_iter()
+                .map(|family| {
+                    json!({
+                        "name": family.name,
+                        "variants": family.variants.into_iter().map(|variant| {
+                            json!({
+                                "name": variant.name,
+                                "weight": variant.weight,
+                                "style": variant.style,
+                            })
+                        }).collect::<Vec<_>>(),
+                    })
+                })
+                .collect::<Vec<_>>();
+
+            Ok(json!({ "families": families }))
+        }
 
         "document:get" | "document:replace" => Err(
             "Document operations must be brokered by the frontend host, not plugin_host_call"

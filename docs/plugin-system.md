@@ -313,9 +313,11 @@ Optional permissions:
 - `network:https`
 - `ui:mount`
 - `editor:annotations`
+- `system:fonts`
 
 `ui:mount` only permits host-rendered declarative UI. It does not permit arbitrary DOM injection.
 Any future advanced custom UI must use a separate sandboxed permission gate.
+`system:fonts` only permits listing installed font family and variant metadata through the host broker. It does not grant filesystem access to font files.
 
 Core permissions are declared in manifest and validated:
 
@@ -343,6 +345,7 @@ Currently supported brokered operations:
 
 - `network:get_json`
 - `network:get_text`
+- `system:list_fonts`
 - `audit:log`
 
 Enforcements:
@@ -351,6 +354,7 @@ Enforcements:
 - Required optional permission must be granted
 - Network URL must be `https`
 - Host must match plugin `networkAllowlist`
+- `system:list_fonts` requires `system:fonts`
 - Operation is audit-logged
 
 ### Permission UX

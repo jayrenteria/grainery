@@ -16,7 +16,7 @@ export const Transition = Node.create<TransitionOptions>({
   name: 'transition',
   group: 'block',
   content: 'text*',
-  marks: '',
+  marks: 'fontFamily textSize',
   defining: true,
 
   addOptions() {

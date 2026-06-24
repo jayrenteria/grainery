@@ -172,7 +172,7 @@ Create `grainery-plugin.manifest.json`:
 Permission sets:
 
 - Core permissions: `document:read`, `document:write`, `editor:commands`, `export:register`
-- Optional permissions: `fs:pick-read`, `fs:pick-write`, `network:https`, `ui:mount`, `editor:annotations`
+- Optional permissions: `fs:pick-read`, `fs:pick-write`, `network:https`, `ui:mount`, `editor:annotations`, `system:fonts`
 
 Use `permissionRationales` for every optional permission you expect users to grant. Grainery shows this text in permission prompts and Settings next to the permission description, current allow/deny state, plugin name/id/version, and trust status.
 

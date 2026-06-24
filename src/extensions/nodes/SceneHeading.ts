@@ -19,7 +19,7 @@ export const SceneHeading = Node.create<SceneHeadingOptions>({
   name: 'sceneHeading',
   group: 'block',
   content: 'text*',
-  marks: '',
+  marks: 'fontFamily textSize',
   defining: true,
 
   addOptions() {
