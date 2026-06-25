@@ -18,7 +18,7 @@ export const ComicPage = Node.create<ComicPageOptions>({
   name: 'comicPage',
   group: 'block',
   content: 'text*',
-  marks: '',
+  marks: 'fontFamily textSize',
   defining: true,
 
   addOptions() {

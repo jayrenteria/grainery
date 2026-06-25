@@ -16,7 +16,8 @@ export type OptionalPermission =
   | 'fs:pick-write'
   | 'network:https'
   | 'ui:mount'
-  | 'editor:annotations';
+  | 'editor:annotations'
+  | 'system:fonts';
 
 export type PluginPermission = CorePermission | OptionalPermission;
 
@@ -262,6 +263,7 @@ export type HostOperation =
   | 'plugin:set-global-data'
   | 'network:get_json'
   | 'network:get_text'
+  | 'system:list_fonts'
   | 'audit:log';
 
 export type ElementLoopEvent = 'tab' | 'shift-tab' | 'enter' | 'escape';
@@ -553,12 +555,18 @@ export interface UIPanelActionItem {
   id: string;
   label: string;
   variant?: 'default' | 'primary' | 'outline' | 'ghost';
+  preview?: {
+    fontFamily?: string;
+    fontWeight?: number;
+    fontStyle?: 'normal' | 'italic' | 'oblique';
+  };
 }
 
 export type UIPanelBlock =
   | { type: 'heading'; text: string; level?: 2 | 3 | 4 }
   | { type: 'text'; text: string }
   | { type: 'divider' }
+  | { type: 'scroll'; maxHeight?: number; blocks: UIPanelBlock[] }
   | { type: 'callout'; tone?: 'info' | 'success' | 'warning' | 'danger'; title?: string; text: string }
   | { type: 'badgeList'; items: Array<{ label: string; value?: string; tone?: 'neutral' | 'info' | 'success' | 'warning' | 'danger' }> }
   | { type: 'progress'; label: string; value: number; max?: number; tone?: 'neutral' | 'primary' | 'success' | 'warning' | 'danger' }
@@ -594,6 +602,7 @@ export interface UIPanelStateContext {
   currentElementType: ScreenplayElementType | null;
   selectionFrom: number;
   selectionTo: number;
+  formValues?: Record<string, string>;
   metadata?: Record<string, unknown>;
 }
 

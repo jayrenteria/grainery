@@ -4,7 +4,7 @@ import { TextSelection } from '@tiptap/pm/state';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ask as askDialog } from '@tauri-apps/plugin-dialog';
+import { ask as askDialog, message as messageDialog } from '@tauri-apps/plugin-dialog';
 
 import { RecentDocumentsPanel, ScreenplayEditor } from './components/Editor';
 import { SettingsModal } from './components/Settings';
@@ -34,6 +34,11 @@ import {
   shouldRunStartupUpdateCheck,
 } from './lib/appUpdates';
 import { getRecentFiles, removeRecentFile } from './lib/recentFiles';
+import {
+  getDocumentSanitizationWarning,
+  sanitizeEditorDocument,
+  type DocumentSanitizationReport,
+} from './lib/documentSanitizer';
 import {
   type DocumentMode,
   type RecentFileEntry,
@@ -67,6 +72,11 @@ const KEYMAP_HINTS_STORAGE_KEY = 'grainery-keymap-hints-enabled';
 const RECENT_DOCUMENTS_PANEL_STORAGE_KEY = 'grainery-recent-documents-panel-enabled';
 const AUTO_SAVE_PREFERENCES_STORAGE_KEY = 'grainery-autosave-preferences';
 const ELEMENT_LOOP_PREFERENCES_STORAGE_KEY = 'grainery-element-loop-preferences-v1';
+
+interface PreparedDocument {
+  doc: ScreenplayDocument;
+  report: DocumentSanitizationReport;
+}
 
 interface AutoSavePreferences {
   enabled: boolean;
@@ -212,6 +222,7 @@ function App() {
   const performAutoSaveRef = useRef<() => Promise<void>>(async () => undefined);
   const pluginDataRef = useRef<Record<string, unknown>>(document.pluginData ?? {});
   const pluginManagerRef = useRef<PluginManager | null>(null);
+  const lastTextSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const viewRef = useRef(view);
   const isDirtyRef = useRef(isDirty);
   const showSettingsRef = useRef(showSettings);
@@ -236,6 +247,21 @@ function App() {
       void performAutoSaveRef.current();
     }, autoSavePreferences.intervalMs);
   }, [autoSavePreferences.enabled, autoSavePreferences.intervalMs, clearQueuedAutoSave]);
+
+  const showDocumentCompatibilityWarning = useCallback((report: DocumentSanitizationReport) => {
+    const warning = getDocumentSanitizationWarning(report);
+    if (!warning) {
+      return;
+    }
+
+    void messageDialog(warning, {
+      title: 'Document Compatibility',
+      kind: 'warning',
+      okLabel: 'OK',
+    }).catch((error) => {
+      console.error('Failed to show document compatibility warning:', error);
+    });
+  }, []);
 
   const getPluginDataForPlugin = useCallback((pluginId: string): unknown | null => {
     return pluginDataRef.current[pluginId] ?? null;
@@ -276,15 +302,38 @@ function App() {
 
   const applyDocumentFromPlugin = useCallback(
     (next: JSONContent) => {
-      editorContentRef.current = next;
+      const sanitized = sanitizeEditorDocument(next, document.documentMode);
+      const editor = editorRef.current;
+      const currentSelection = editor?.state.selection;
+      const restoreSelection =
+        currentSelection && currentSelection.from !== currentSelection.to
+          ? { from: currentSelection.from, to: currentSelection.to }
+          : lastTextSelectionRef.current;
 
-      if (editorRef.current) {
-        editorRef.current.commands.setContent(next, { emitUpdate: false });
+      editorContentRef.current = sanitized.document;
+
+      if (editor) {
+        editor.commands.setContent(sanitized.document, { emitUpdate: false });
+
+        if (restoreSelection) {
+          try {
+            const maxPosition = Math.max(1, editor.state.doc.content.size);
+            const from = Math.min(Math.max(restoreSelection.from, 1), maxPosition);
+            const to = Math.min(Math.max(restoreSelection.to, from), maxPosition);
+            editor.view.dispatch(
+              editor.state.tr.setSelection(TextSelection.create(editor.state.doc, from, to))
+            );
+            editor.view.focus();
+            lastTextSelectionRef.current = { from, to };
+          } catch {
+            lastTextSelectionRef.current = null;
+          }
+        }
       }
 
       setDocument((prev) => ({
         ...prev,
-        document: next,
+        document: sanitized.document,
         meta: {
           ...prev.meta,
           modifiedAt: new Date().toISOString(),
@@ -298,8 +347,9 @@ function App() {
 
       queueAutoSave();
       setEditorVersion((prev) => prev + 1);
+      showDocumentCompatibilityWarning(sanitized.report);
     },
-    [document.meta.filename, isDirty, queueAutoSave]
+    [document.documentMode, document.meta.filename, isDirty, queueAutoSave, showDocumentCompatibilityWarning]
   );
 
   if (!pluginManagerRef.current) {
@@ -342,6 +392,17 @@ function App() {
           return { from: 0, to: 0 };
         }
         const { from, to } = editor.state.selection;
+        if (from !== to) {
+          lastTextSelectionRef.current = { from, to };
+          return { from, to };
+        }
+        if (editor.isFocused) {
+          lastTextSelectionRef.current = null;
+          return { from, to };
+        }
+        if (lastTextSelectionRef.current) {
+          return lastTextSelectionRef.current;
+        }
         return { from, to };
       },
       setElementType: (type: ScreenplayElementType) => {
@@ -456,6 +517,37 @@ function App() {
     setRecentFiles(getRecentFiles());
   }, []);
 
+  const prepareDocumentForEditor = useCallback(
+    async (doc: ScreenplayDocument): Promise<PreparedDocument> => {
+      const transformed = await runTransformHook('post-open', doc.document);
+      const sanitized = sanitizeEditorDocument(transformed, doc.documentMode);
+
+      return {
+        doc: {
+          ...doc,
+          document: sanitized.document,
+        },
+        report: sanitized.report,
+      };
+    },
+    [runTransformHook]
+  );
+
+  const openDocumentInEditor = useCallback(
+    async ({ doc, report }: PreparedDocument) => {
+      setDocument(doc);
+      editorContentRef.current = doc.document;
+      setIsDirty(false);
+      setIsRecentDocumentsPanelOpen(false);
+      setView('editor');
+      setStartScreenError(null);
+      refreshRecentFiles();
+      await updateWindowTitle(doc.meta.filename);
+      showDocumentCompatibilityWarning(report);
+    },
+    [refreshRecentFiles, showDocumentCompatibilityWarning]
+  );
+
   const openPathIntoEditor = useCallback(
     async (
       path: string,
@@ -476,17 +568,7 @@ function App() {
 
       try {
         const doc = await openFileAtPath(path);
-        const transformed = await runTransformHook('post-open', doc.document);
-        doc.document = transformed;
-
-        setDocument(doc);
-        editorContentRef.current = transformed;
-        setIsDirty(false);
-        setIsRecentDocumentsPanelOpen(false);
-        setView('editor');
-        setStartScreenError(null);
-        refreshRecentFiles();
-        await updateWindowTitle(doc.meta.filename);
+        await openDocumentInEditor(await prepareDocumentForEditor(doc));
         return true;
       } catch (error) {
         console.error('Failed to open file at path:', error);
@@ -497,7 +579,7 @@ function App() {
         return false;
       }
     },
-    [refreshRecentFiles, runTransformHook]
+    [openDocumentInEditor, prepareDocumentForEditor]
   );
 
   const performAutoSave = useCallback(async () => {
@@ -565,17 +647,7 @@ function App() {
         return;
       }
 
-      const transformed = await runTransformHook('post-open', doc.document);
-      doc.document = transformed;
-
-      setDocument(doc);
-      editorContentRef.current = transformed;
-      setIsDirty(false);
-      setIsRecentDocumentsPanelOpen(false);
-      setView('editor');
-      setStartScreenError(null);
-      refreshRecentFiles();
-      await updateWindowTitle(doc.meta.filename);
+      await openDocumentInEditor(await prepareDocumentForEditor(doc));
     } catch (error) {
       console.error('Failed to open file:', error);
       if (view === 'start') {
@@ -583,7 +655,7 @@ function App() {
         setStartScreenError(`Failed to open file. ${message}`);
       }
     }
-  }, [isDirty, refreshRecentFiles, runTransformHook, view]);
+  }, [isDirty, openDocumentInEditor, prepareDocumentForEditor, view]);
 
   const handleShowStartScreen = useCallback(async () => {
     if (view === 'editor' && isDirty) {
@@ -612,17 +684,7 @@ function App() {
         return;
       }
 
-      const transformed = await runTransformHook('post-open', doc.document);
-      doc.document = transformed;
-
-      setDocument(doc);
-      editorContentRef.current = transformed;
-      setIsDirty(false);
-      setIsRecentDocumentsPanelOpen(false);
-      setView('editor');
-      setStartScreenError(null);
-      refreshRecentFiles();
-      await updateWindowTitle(doc.meta.filename);
+      await openDocumentInEditor(await prepareDocumentForEditor(doc));
     } catch (error) {
       console.error('Failed to import Final Draft file:', error);
       if (view === 'start') {
@@ -630,7 +692,7 @@ function App() {
         setStartScreenError(`Failed to import Final Draft file. ${message}`);
       }
     }
-  }, [isDirty, refreshRecentFiles, runTransformHook, view]);
+  }, [isDirty, openDocumentInEditor, prepareDocumentForEditor, view]);
 
   const handleOpenRecent = useCallback(
     async (path: string) => {

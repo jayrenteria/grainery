@@ -18,7 +18,7 @@ export const Caption = Node.create<CaptionOptions>({
   name: 'caption',
   group: 'block',
   content: 'text*',
-  marks: 'bold italic underline',
+  marks: 'bold italic underline fontFamily textSize',
   defining: true,
 
   addOptions() {

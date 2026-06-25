@@ -16,7 +16,7 @@ export const Body = Node.create<BodyOptions>({
   name: 'body',
   group: 'block',
   content: 'text*',
-  marks: 'bold italic underline strike',
+  marks: 'bold italic underline strike fontFamily textSize',
   defining: true,
 
   addOptions() {

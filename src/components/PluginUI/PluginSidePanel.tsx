@@ -1,5 +1,6 @@
+import type { CSSProperties } from 'react';
 import { PluginIcon } from '../../plugins/ui/icons';
-import type { EvaluatedUIPanel, UIPanelBlock } from '../../plugins';
+import type { EvaluatedUIPanel, UIPanelActionItem, UIPanelBlock } from '../../plugins';
 
 interface PluginSidePanelProps {
   panel: EvaluatedUIPanel | null;
@@ -15,6 +16,42 @@ const DEFAULT_TEXTAREA_MAX_LENGTH = 4000;
 function sanitizeInputValue(value: string, maxLength: number): string {
   const normalized = value.replace(/\u0000/g, '');
   return normalized.slice(0, maxLength);
+}
+
+function quotedFontFamily(value: string): string {
+  const family = value
+    .replace(/[\u0000\r\n\f]/g, ' ')
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .trim()
+    .slice(0, 128);
+  return family ? `"${family}", ui-sans-serif, system-ui, sans-serif` : 'inherit';
+}
+
+function actionPreviewStyle(action: UIPanelActionItem): CSSProperties | undefined {
+  const preview = action.preview;
+  if (!preview) {
+    return undefined;
+  }
+
+  const style: CSSProperties = {};
+  if (typeof preview.fontFamily === 'string') {
+    style.fontFamily = quotedFontFamily(preview.fontFamily);
+  }
+  if (typeof preview.fontWeight === 'number' && Number.isFinite(preview.fontWeight)) {
+    style.fontWeight = Math.min(1000, Math.max(1, Math.round(preview.fontWeight)));
+  }
+  if (preview.fontStyle === 'normal' || preview.fontStyle === 'italic' || preview.fontStyle === 'oblique') {
+    style.fontStyle = preview.fontStyle;
+  }
+
+  if (Object.keys(style).length === 0) {
+    return undefined;
+  }
+
+  style.fontSize = '0.95rem';
+  style.lineHeight = 1.1;
+  return style;
 }
 
 function renderBlock(
@@ -45,6 +82,31 @@ function renderBlock(
       );
     case 'divider':
       return <hr key={`${panelId}-divider-${index}`} className="plugin-panel-divider" />;
+    case 'scroll': {
+      const maxHeight =
+        typeof block.maxHeight === 'number' && Number.isFinite(block.maxHeight)
+          ? Math.min(520, Math.max(80, Math.floor(block.maxHeight)))
+          : 260;
+
+      return (
+        <div
+          key={`${panelId}-scroll-${index}`}
+          className="plugin-panel-scroll"
+          style={{ maxHeight }}
+        >
+          {block.blocks.map((child, childIndex) =>
+            renderBlock(
+              panelId,
+              child,
+              childIndex,
+              formValues,
+              onAction,
+              onFormValueChange
+            )
+          )}
+        </div>
+      );
+    }
     case 'callout':
       return (
         <div
@@ -112,24 +174,34 @@ function renderBlock(
     case 'actions':
       return (
         <div key={`${panelId}-actions-${index}`} className="plugin-panel-actions">
-          {block.actions.map((action) => (
-            <button
-              key={`${panelId}-action-${action.id}`}
-              type="button"
-              className={`btn btn-xs ${
-                action.variant === 'primary'
-                  ? 'btn-primary'
-                  : action.variant === 'outline'
-                    ? 'btn-outline'
-                    : action.variant === 'ghost'
-                      ? 'btn-ghost'
-                      : 'btn-neutral'
-              } ${isSceneOutlinePanel ? 'font-bold uppercase w-full justify-start' : ''}`}
-              onClick={() => onAction(panelId, action.id)}
-            >
-              {action.label}
-            </button>
-          ))}
+          {block.actions.map((action) => {
+            const previewStyle = actionPreviewStyle(action);
+
+            return (
+              <button
+                key={`${panelId}-action-${action.id}`}
+                type="button"
+                className={`btn btn-xs ${
+                  action.variant === 'primary'
+                    ? 'btn-primary'
+                    : action.variant === 'outline'
+                      ? 'btn-outline'
+                      : action.variant === 'ghost'
+                        ? 'btn-ghost'
+                        : 'btn-neutral'
+                } ${isSceneOutlinePanel ? 'font-bold uppercase w-full justify-start' : ''}`}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                onClick={() => onAction(panelId, action.id)}
+                style={previewStyle}
+              >
+                <span className="plugin-panel-action-label" style={previewStyle}>
+                  {action.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
       );
     case 'input': {

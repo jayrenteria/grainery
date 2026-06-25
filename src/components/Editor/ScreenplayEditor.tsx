@@ -31,6 +31,10 @@ import {
   FindReplaceExtension,
   getFindReplaceState,
   PluginAnnotationsExtension,
+  InactiveSelectionExtension,
+  FontFamily,
+  TextSize,
+  BlockAlignment,
 } from '../../extensions';
 import {
   DEFAULT_ELEMENT_BY_MODE,
@@ -170,6 +174,9 @@ export function ScreenplayEditor({
       Italic,
       Underline,
       Strike,
+      FontFamily,
+      TextSize,
+      BlockAlignment,
       SceneHeading,
       Action,
       Character,
@@ -188,6 +195,7 @@ export function ScreenplayEditor({
       NumberedItem,
       FindReplaceExtension,
       PluginAnnotationsExtension,
+      InactiveSelectionExtension,
       ScreenplayKeymap.configure({
         documentMode,
         resolveElementLoop,

@@ -19,6 +19,7 @@ export const OPTIONAL_PERMISSIONS: OptionalPermission[] = [
   'network:https',
   'ui:mount',
   'editor:annotations',
+  'system:fonts',
 ];
 
 export const PERMISSION_DESCRIPTIONS: Record<OptionalPermission, string> = {
@@ -27,6 +28,7 @@ export const PERMISSION_DESCRIPTIONS: Record<OptionalPermission, string> = {
   'network:https': 'Make HTTPS requests to hosts declared in the plugin allowlist.',
   'ui:mount': 'Render host-controlled toolbar controls or side panels.',
   'editor:annotations': 'Show host-rendered inline annotations in the editor.',
+  'system:fonts': 'List installed font family names and variants.',
 };
 
 export function isOptionalPermission(value: string): value is OptionalPermission {

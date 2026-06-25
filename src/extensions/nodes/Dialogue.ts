@@ -16,7 +16,7 @@ export const Dialogue = Node.create<DialogueOptions>({
   name: 'dialogue',
   group: 'block',
   content: 'text*',
-  marks: 'bold italic underline',
+  marks: 'bold italic underline fontFamily textSize',
   defining: true,
 
   addOptions() {

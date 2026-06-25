@@ -18,7 +18,7 @@ export const SoundEffect = Node.create<SoundEffectOptions>({
   name: 'soundEffect',
   group: 'block',
   content: 'text*',
-  marks: 'bold italic underline',
+  marks: 'bold italic underline fontFamily textSize',
   defining: true,
 
   addOptions() {

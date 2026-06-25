@@ -10,6 +10,7 @@ use tauri::{Emitter, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 #[cfg(desktop)]
 use tauri_plugin_window_state::{StateFlags, DEFAULT_FILENAME};
 
+mod fonts;
 mod pdf;
 mod plugins;
 

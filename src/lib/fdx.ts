@@ -105,6 +105,94 @@ function getNodeText(node: JSONContent): string {
   return '';
 }
 
+function paragraphAlignment(node: JSONContent): string {
+  const textAlign = node.attrs?.textAlign;
+  if (textAlign === 'center') return 'Center';
+  if (textAlign === 'right') return 'Right';
+  return 'Left';
+}
+
+function maxTextSize(node: JSONContent): number {
+  let max = 12;
+  for (const mark of node.marks ?? []) {
+    if (mark.type === 'textSize') {
+      const size = Number(mark.attrs?.sizePt);
+      if (Number.isFinite(size)) {
+        max = Math.max(max, Math.min(72, Math.max(6, size)));
+      }
+    }
+  }
+
+  for (const child of node.content ?? []) {
+    max = Math.max(max, maxTextSize(child));
+  }
+
+  return max;
+}
+
+function paragraphSpacingAttrs(node: JSONContent): string {
+  const size = maxTextSize(node);
+  if (size <= 12) {
+    return '';
+  }
+
+  const spaceBefore = Math.round((size - 12) * 0.75 * 10) / 10;
+  return ` SpaceBefore="${spaceBefore}" LineSpacing="1.2"`;
+}
+
+function textStyleAttrs(marks: JSONContent['marks'] = []): string {
+  const style = new Set<string>();
+  let font: string | null = null;
+  let size: string | null = null;
+
+  for (const mark of marks ?? []) {
+    if (mark.type === 'bold') style.add('Bold');
+    if (mark.type === 'italic') style.add('Italic');
+    if (mark.type === 'underline') style.add('Underline');
+    if (mark.type === 'strike') style.add('Strikeout');
+    if (mark.type === 'fontFamily') {
+      if (typeof mark.attrs?.fontFamily === 'string') {
+        font = mark.attrs.fontFamily;
+      }
+      if (typeof mark.attrs?.fontStyle === 'string' && mark.attrs.fontStyle !== 'normal') {
+        style.add(mark.attrs.fontStyle === 'oblique' ? 'Italic' : capitalize(mark.attrs.fontStyle));
+      }
+      const fontWeight = Number(mark.attrs?.fontWeight);
+      if (Number.isFinite(fontWeight) && fontWeight >= 600) {
+        style.add('Bold');
+      }
+    }
+    if (mark.type === 'textSize' && mark.attrs?.sizePt !== null && mark.attrs?.sizePt !== undefined) {
+      size = String(mark.attrs.sizePt);
+    }
+  }
+
+  const attrs: string[] = [];
+  if (font) attrs.push(`Font="${escapeXml(font)}"`);
+  if (size) attrs.push(`Size="${escapeXml(size)}"`);
+  if (style.size > 0) attrs.push(`Style="${escapeXml(Array.from(style).join('+'))}"`);
+  return attrs.length > 0 ? ` ${attrs.join(' ')}` : '';
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function renderFdxTextNodes(node: JSONContent, options: { uppercase?: boolean } = {}): string {
+  if (typeof node.text === 'string') {
+    const text = options.uppercase ? node.text.toUpperCase() : node.text;
+    return `<Text${textStyleAttrs(node.marks)}>${escapeXml(text)}</Text>`;
+  }
+
+  return (node.content ?? [])
+    .map((child) => renderFdxTextNodes(child, options))
+    .join('\n      ');
+}
+
+function paragraphOpen(node: JSONContent, type: string): string {
+  return `<Paragraph Type="${type}" id="${generateUUID()}" Alignment="${paragraphAlignment(node)}"${paragraphSpacingAttrs(node)}>`;
+}
+
 function formatTitlePage(tp: TitlePageData): string {
   const fields: string[] = [];
 
@@ -143,46 +231,42 @@ function nodeToFdx(node: JSONContent): string | null {
 
   switch (node.type) {
     case 'sceneHeading': {
-      const heading = text.toUpperCase();
-      return `    <Paragraph Type="Scene Heading" id="${generateUUID()}">
+      return `    ${paragraphOpen(node, 'Scene Heading')}
       <SceneProperties Length="1" Page="1" Title=""/>
-      <Text Style="Bold+AllCaps">${escapeXml(heading)}</Text>
+      ${renderFdxTextNodes(node, { uppercase: true })}
     </Paragraph>`;
     }
 
     case 'action': {
       if (!text.trim()) return null;
-      return `    <Paragraph Type="Action" id="${generateUUID()}">
-      <Text>${escapeXml(text)}</Text>
+      return `    ${paragraphOpen(node, 'Action')}
+      ${renderFdxTextNodes(node)}
     </Paragraph>`;
     }
 
     case 'character': {
-      const name = text.toUpperCase();
+      const styledName = renderFdxTextNodes(node, { uppercase: true });
       const extension = node.attrs?.extension;
-      const fullName = extension ? `${name} (${extension})` : name;
-      return `    <Paragraph Type="Character" id="${generateUUID()}">
-      <Text>${escapeXml(fullName)}</Text>
+      return `    ${paragraphOpen(node, 'Character')}
+      ${styledName}${extension ? `<Text> (${escapeXml(String(extension))})</Text>` : ''}
     </Paragraph>`;
     }
 
     case 'parenthetical': {
-      const parenText = text.startsWith('(') ? text : `(${text})`;
-      return `    <Paragraph Type="Parenthetical" id="${generateUUID()}">
-      <Text>${escapeXml(parenText)}</Text>
+      return `    ${paragraphOpen(node, 'Parenthetical')}
+      <Text>(</Text>${renderFdxTextNodes(node)}<Text>)</Text>
     </Paragraph>`;
     }
 
     case 'dialogue': {
-      return `    <Paragraph Type="Dialogue" id="${generateUUID()}">
-      <Text>${escapeXml(text)}</Text>
+      return `    ${paragraphOpen(node, 'Dialogue')}
+      ${renderFdxTextNodes(node)}
     </Paragraph>`;
     }
 
     case 'transition': {
-      const transitionText = text.toUpperCase();
-      return `    <Paragraph Type="Transition" id="${generateUUID()}">
-      <Text Style="AllCaps">${escapeXml(transitionText)}</Text>
+      return `    ${paragraphOpen(node, 'Transition')}
+      ${renderFdxTextNodes(node, { uppercase: true })}
     </Paragraph>`;
     }
 
@@ -194,8 +278,8 @@ function nodeToFdx(node: JSONContent): string | null {
 
     default:
       if (text.trim()) {
-        return `    <Paragraph Type="Action" id="${generateUUID()}">
-      <Text>${escapeXml(text)}</Text>
+        return `    ${paragraphOpen(node, 'Action')}
+      ${renderFdxTextNodes(node)}
     </Paragraph>`;
       }
       return null;

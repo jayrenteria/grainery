@@ -639,7 +639,8 @@ export class PluginManager {
   async evaluateUIState(
     controlIds: string[],
     panelIds: string[],
-    context: UIControlStateContext
+    context: UIControlStateContext,
+    panelFormValues: Record<string, Record<string, string>> = {}
   ): Promise<{ controls: Record<string, UIControlState>; panels: Record<string, UIPanelContent> }> {
     const controls: Record<string, UIControlState> = {};
     const panels: Record<string, UIPanelContent> = {};
@@ -679,10 +680,17 @@ export class PluginManager {
 
       try {
         const localPanelIds = pluginToPanelIds.get(pluginId) ?? [];
+        const localPanelFormValues = Object.fromEntries(
+          localPanelIds.map((localPanelId) => [
+            localPanelId,
+            panelFormValues[composeId(pluginId, localPanelId)] ?? {},
+          ])
+        );
 
         const result = (await this.invokeWorker(pluginId, 'ui-evaluate', '__batch__', {
           controlIds: localControlIds,
           panelIds: localPanelIds,
+          panelFormValues: localPanelFormValues,
           context,
         })) as UIEvaluateResponse;
 

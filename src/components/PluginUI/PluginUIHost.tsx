@@ -151,6 +151,7 @@ export function PluginUIHost({
   const [panelFormValuesMap, setPanelFormValuesMap] = useState<Record<string, Record<string, string>>>({});
   const [panelFormDefaultsMap, setPanelFormDefaultsMap] = useState<Record<string, Record<string, string>>>({});
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
+  const panelFormValuesKey = useMemo(() => JSON.stringify(panelFormValuesMap), [panelFormValuesMap]);
 
   const context = useMemo<UIControlStateContext>(
     () => {
@@ -220,7 +221,12 @@ export function PluginUIHost({
 
     const evaluate = async () => {
       try {
-        const evaluated = await pluginManager.evaluateUIState(allControlIds, allPanelIds, context);
+        const evaluated = await pluginManager.evaluateUIState(
+          allControlIds,
+          allPanelIds,
+          context,
+          panelFormValuesMap
+        );
         if (!cancelled) {
           const nextPanelContentMap: Record<string, UIPanelContent> = {};
           for (const panel of panels) {
@@ -274,7 +280,7 @@ export function PluginUIHost({
     return () => {
       cancelled = true;
     };
-  }, [allControlIds, allPanelIds, context, panels, pluginManager, pluginStateVersion]);
+  }, [allControlIds, allPanelIds, context, panels, panelFormValuesKey, pluginManager, pluginStateVersion]);
 
   useEffect(() => {
     if (!activePanelId) {

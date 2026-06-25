@@ -16,7 +16,7 @@ export const Parenthetical = Node.create<ParentheticalOptions>({
   name: 'parenthetical',
   group: 'block',
   content: 'text*',
-  marks: '',
+  marks: 'fontFamily textSize',
   defining: true,
 
   addOptions() {
