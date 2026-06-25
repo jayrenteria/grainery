@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "com.grainery.system-font-styles",
   "name": "System Font Styles",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "Applies installed system font variants, common sizes, and block alignment to selected text.",
   "engine": {
     "grainery": ">=0.1.0",
@@ -36,7 +36,7 @@
         "mount": "bottom-bar",
         "kind": "button",
         "label": "Fonts",
-        "icon": "settings",
+        "icon": "template",
         "priority": 30,
         "tooltip": "Open system font styles panel",
         "action": {
@@ -50,7 +50,7 @@
       {
         "id": "system-font-styles-panel",
         "title": "System Font Styles",
-        "icon": "settings",
+        "icon": "template",
         "defaultWidth": 340,
         "minWidth": 280,
         "maxWidth": 460,

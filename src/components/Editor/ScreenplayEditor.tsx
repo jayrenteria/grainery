@@ -31,6 +31,7 @@ import {
   FindReplaceExtension,
   getFindReplaceState,
   PluginAnnotationsExtension,
+  InactiveSelectionExtension,
   FontFamily,
   TextSize,
   BlockAlignment,
@@ -194,6 +195,7 @@ export function ScreenplayEditor({
       NumberedItem,
       FindReplaceExtension,
       PluginAnnotationsExtension,
+      InactiveSelectionExtension,
       ScreenplayKeymap.configure({
         documentMode,
         resolveElementLoop,

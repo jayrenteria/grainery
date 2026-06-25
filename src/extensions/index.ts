@@ -17,3 +17,7 @@ export {
   pluginAnnotationsPluginKey,
   getPluginAnnotationsState,
 } from './PluginAnnotationsExtension';
+export {
+  InactiveSelectionExtension,
+  inactiveSelectionPluginKey,
+} from './InactiveSelectionExtension';

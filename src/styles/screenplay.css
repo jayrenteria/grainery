@@ -331,6 +331,10 @@
   @apply bg-primary/30;
 }
 
+.inactive-editor-selection {
+  @apply bg-primary/30 rounded-[2px];
+}
+
 /* Element type indicator */
 .element-type-indicator {
   @apply fixed bottom-4 z-[100];
