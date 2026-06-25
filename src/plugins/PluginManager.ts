@@ -1329,6 +1329,7 @@ export class PluginManager {
         }
 
         const id = composeId(pluginId, message.control.id);
+        const existingControl = this.uiControls.find((item) => item.id === id);
         this.uiControls = this.uiControls
           .filter((item) => item.id !== id)
           .concat([
@@ -1338,7 +1339,7 @@ export class PluginManager {
               mount: message.control.mount,
               kind: message.control.kind,
               label: message.control.label,
-              icon: message.control.icon,
+              icon: existingControl?.icon ?? message.control.icon,
               priority: message.control.priority,
               tooltip: message.control.tooltip,
               group: message.control.group,
@@ -1369,6 +1370,7 @@ export class PluginManager {
         }
 
         const id = composeId(pluginId, message.panel.id);
+        const existingPanel = this.uiPanels.find((item) => item.id === id);
         this.uiPanels = this.uiPanels
           .filter((item) => item.id !== id)
           .concat([
@@ -1376,13 +1378,13 @@ export class PluginManager {
               id,
               pluginId,
               title: message.panel.title,
-              icon: message.panel.icon,
-              defaultWidth: message.panel.defaultWidth,
-              minWidth: message.panel.minWidth,
-              maxWidth: message.panel.maxWidth,
-              priority: message.panel.priority,
-              content: message.panel.content,
-              when: message.panel.when,
+              icon: existingPanel?.icon ?? message.panel.icon,
+              defaultWidth: message.panel.defaultWidth ?? existingPanel?.defaultWidth,
+              minWidth: message.panel.minWidth ?? existingPanel?.minWidth,
+              maxWidth: message.panel.maxWidth ?? existingPanel?.maxWidth,
+              priority: message.panel.priority ?? existingPanel?.priority,
+              content: message.panel.content ?? existingPanel?.content,
+              when: message.panel.when ?? existingPanel?.when,
             },
           ]);
         this.notifyListeners();
