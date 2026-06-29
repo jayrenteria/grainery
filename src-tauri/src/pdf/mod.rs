@@ -1,9 +1,11 @@
 use crate::fonts;
+use owned_ttf_parser::{AsFaceRef, OwnedFace};
 use printpdf::*;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufWriter;
+use std::path::Path;
 
 // Screenplay formatting constants (in points, 72 points = 1 inch)
 const PAGE_WIDTH: f32 = 612.0; // 8.5 inches
@@ -90,27 +92,88 @@ struct StyledSegment {
     style: TextStyle,
 }
 
+#[derive(Debug)]
+struct ExternalFontMetrics {
+    face: OwnedFace,
+    fallback_advance_units: f32,
+    line_height_units: f32,
+}
+
+impl ExternalFontMetrics {
+    fn from_path(path: &Path) -> Option<Self> {
+        let data = std::fs::read(path).ok()?;
+        let face = OwnedFace::from_vec(data, 0).ok()?;
+        let face_ref = face.as_face_ref();
+        let units_per_em = face_ref.units_per_em() as f32;
+        let fallback_advance_units = face_ref
+            .glyph_index(' ')
+            .and_then(|glyph| face_ref.glyph_hor_advance(glyph))
+            .map(f32::from)
+            .unwrap_or(units_per_em * 0.5);
+        let line_height_units = (f32::from(face_ref.height())
+            + f32::from(face_ref.line_gap()).max(0.0))
+        .max(units_per_em);
+
+        Some(Self {
+            face,
+            fallback_advance_units,
+            line_height_units,
+        })
+    }
+
+    fn glyph_width_pt(&self, c: char, size: f32) -> f32 {
+        let face = self.face.as_face_ref();
+        let units_per_em = face.units_per_em() as f32;
+        if units_per_em <= 0.0 {
+            return self.fallback_advance_units * size / 1000.0;
+        }
+
+        let advance_units = face
+            .glyph_index(c)
+            .and_then(|glyph| face.glyph_hor_advance(glyph))
+            .map(f32::from)
+            .unwrap_or(self.fallback_advance_units);
+
+        advance_units * size / units_per_em
+    }
+
+    fn line_height_pt(&self, size: f32) -> f32 {
+        let units_per_em = self.face.as_face_ref().units_per_em() as f32;
+        if units_per_em <= 0.0 {
+            return size;
+        }
+
+        self.line_height_units * size / units_per_em
+    }
+}
+
 // Helvetica AFM glyph widths (per 1000 units of font size) for ASCII 32..=126
 const HELVETICA_WIDTHS: [u16; 95] = [
-    278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, // ' '..'/'
+    278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278,
+    278, // ' '..'/'
     556, 556, 556, 556, 556, 556, 556, 556, 556, 556, // '0'..'9'
     278, 278, 584, 584, 584, 556, 1015, // ':'..'@'
-    667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, // 'A'..'P'
+    667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
+    667, // 'A'..'P'
     778, 722, 667, 611, 722, 667, 944, 667, 667, 611, // 'Q'..'Z'
     278, 278, 278, 469, 556, 333, // '['..'`'
-    556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, // 'a'..'p'
+    556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
+    556, // 'a'..'p'
     556, 333, 500, 278, 556, 500, 722, 500, 500, 500, // 'q'..'z'
     334, 260, 334, 584, // '{'..'~'
 ];
 
 const HELVETICA_BOLD_WIDTHS: [u16; 95] = [
-    278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, // ' '..'/'
+    278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278,
+    278, // ' '..'/'
     556, 556, 556, 556, 556, 556, 556, 556, 556, 556, // '0'..'9'
     333, 333, 584, 584, 584, 611, 975, // ':'..'@'
-    722, 722, 722, 722, 667, 611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, // 'A'..'P'
+    722, 722, 722, 722, 667, 611, 778, 722, 278, 556, 722, 611, 833, 722, 778,
+    667, // 'A'..'P'
     778, 722, 667, 611, 722, 667, 944, 667, 667, 611, // 'Q'..'Z'
     333, 278, 333, 584, 556, 333, // '['..'`'
-    556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278, 889, 611, 611, 611, // 'a'..'p'
+    556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278, 889, 611, 611,
+    611, // 'a'..'p'
     611, 389, 556, 333, 611, 556, 778, 556, 556, 500, // 'q'..'z'
     389, 280, 389, 584, // '{'..'~'
 ];
@@ -220,6 +283,7 @@ pub struct PdfGenerator {
     italic_font: IndirectFontRef,
     bold_italic_font: IndirectFontRef,
     external_fonts: HashMap<String, IndirectFontRef>,
+    external_font_metrics: HashMap<String, Option<ExternalFontMetrics>>,
     is_sans: bool,
     char_width: f32,
     y_position: f32,
@@ -279,6 +343,7 @@ impl PdfGenerator {
             italic_font,
             bold_italic_font,
             external_fonts: HashMap::new(),
+            external_font_metrics: HashMap::new(),
             is_sans: is_freewrite,
             char_width,
             y_position: PAGE_HEIGHT - MARGIN_TOP,
@@ -287,27 +352,55 @@ impl PdfGenerator {
         })
     }
 
-    fn font_for(&mut self, style: &TextStyle) -> IndirectFontRef {
-        if let Some(font_family) = &style.font_family {
-            let requested_weight = style
-                .font_weight
-                .or_else(|| if style.bold { Some(700) } else { Some(400) });
-            let requested_style = style
-                .font_style
-                .as_deref()
-                .or_else(|| if style.italic { Some("italic") } else { Some("normal") });
-            let cache_key = format!(
-                "{}:{}:{}",
-                font_family.to_lowercase(),
-                requested_weight.unwrap_or(400),
-                requested_style.unwrap_or("normal")
-            );
+    fn external_font_request(style: &TextStyle) -> Option<(&str, u16, &str)> {
+        let font_family = style.font_family.as_deref()?;
+        let requested_weight = style
+            .font_weight
+            .or_else(|| if style.bold { Some(700) } else { Some(400) })
+            .unwrap_or(400);
+        let requested_style = style
+            .font_style
+            .as_deref()
+            .or_else(|| {
+                if style.italic {
+                    Some("italic")
+                } else {
+                    Some("normal")
+                }
+            })
+            .unwrap_or("normal");
 
+        Some((font_family, requested_weight, requested_style))
+    }
+
+    fn external_font_cache_key(
+        font_family: &str,
+        requested_weight: u16,
+        requested_style: &str,
+    ) -> String {
+        format!(
+            "{}:{}:{}",
+            font_family.to_lowercase(),
+            requested_weight,
+            requested_style
+        )
+    }
+
+    fn font_for(&mut self, style: &TextStyle) -> IndirectFontRef {
+        if let Some((font_family, requested_weight, requested_style)) =
+            Self::external_font_request(style)
+        {
+            let cache_key =
+                Self::external_font_cache_key(font_family, requested_weight, requested_style);
             if let Some(font) = self.external_fonts.get(&cache_key) {
                 return font.clone();
             }
 
-            if let Some(path) = fonts::resolve_system_font(font_family, requested_weight, requested_style) {
+            if let Some(path) = fonts::resolve_system_font(
+                font_family,
+                Some(requested_weight),
+                Some(requested_style),
+            ) {
                 if let Ok(file) = File::open(path) {
                     if let Ok(font) = self.doc.add_external_font(file) {
                         self.external_fonts.insert(cache_key, font.clone());
@@ -325,20 +418,43 @@ impl PdfGenerator {
         }
     }
 
+    fn external_font_metrics_for(&mut self, style: &TextStyle) -> Option<&ExternalFontMetrics> {
+        let (font_family, requested_weight, requested_style) = Self::external_font_request(style)?;
+        let cache_key =
+            Self::external_font_cache_key(font_family, requested_weight, requested_style);
+
+        if !self.external_font_metrics.contains_key(&cache_key) {
+            let metrics = fonts::resolve_system_font(
+                font_family,
+                Some(requested_weight),
+                Some(requested_style),
+            )
+            .and_then(|path| ExternalFontMetrics::from_path(&path));
+            self.external_font_metrics
+                .insert(cache_key.clone(), metrics);
+        }
+
+        self.external_font_metrics
+            .get(&cache_key)
+            .and_then(|metrics| metrics.as_ref())
+    }
+
     fn style_size(style: &TextStyle, fallback: f32) -> f32 {
         style.size_pt.unwrap_or(fallback).clamp(6.0, 72.0)
     }
 
-    fn glyph_width_pt(&self, c: char, style: &TextStyle, fallback_size: f32) -> f32 {
+    fn glyph_width_pt(&mut self, c: char, style: &TextStyle, fallback_size: f32) -> f32 {
         let size = Self::style_size(style, fallback_size);
-        if self.is_sans || style.font_family.is_some() {
+        if let Some(metrics) = self.external_font_metrics_for(style) {
+            metrics.glyph_width_pt(c, size)
+        } else if self.is_sans || style.font_family.is_some() {
             helvetica_width_units(c, style.bold) as f32 * size / 1000.0
         } else {
             size * 0.6 // Courier is monospaced at 0.6em
         }
     }
 
-    fn segment_width_pt(&self, segment: &StyledSegment, fallback_size: f32) -> f32 {
+    fn segment_width_pt(&mut self, segment: &StyledSegment, fallback_size: f32) -> f32 {
         segment
             .text
             .chars()
@@ -346,7 +462,7 @@ impl PdfGenerator {
             .sum()
     }
 
-    fn line_width_pt(&self, segments: &[StyledSegment], fallback_size: f32) -> f32 {
+    fn line_width_pt(&mut self, segments: &[StyledSegment], fallback_size: f32) -> f32 {
         segments
             .iter()
             .map(|segment| self.segment_width_pt(segment, fallback_size))
@@ -360,34 +476,80 @@ impl PdfGenerator {
             .fold(fallback_size, f32::max)
     }
 
-    fn styled_line_advance(segments: &[StyledSegment], fallback_size: f32, fallback_line_height: f32) -> f32 {
-        let max_size = Self::line_max_size(segments, fallback_size);
-        if max_size <= fallback_size {
+    fn generic_styled_segment_advance(
+        segment: &StyledSegment,
+        fallback_size: f32,
+        fallback_line_height: f32,
+    ) -> f32 {
+        let size = Self::style_size(&segment.style, fallback_size);
+        if size <= fallback_size {
             fallback_line_height
         } else {
-            fallback_line_height.max(max_size * 1.2)
+            fallback_line_height.max(size * 1.2)
         }
     }
 
-    fn styled_line_baseline_adjust(segments: &[StyledSegment], fallback_size: f32) -> f32 {
+    fn styled_segment_advance(
+        &mut self,
+        segment: &StyledSegment,
+        fallback_size: f32,
+        fallback_line_height: f32,
+    ) -> f32 {
+        let generic =
+            Self::generic_styled_segment_advance(segment, fallback_size, fallback_line_height);
+        let size = Self::style_size(&segment.style, fallback_size);
+
+        if let Some(metrics) = self.external_font_metrics_for(&segment.style) {
+            generic.max(metrics.line_height_pt(size))
+        } else {
+            generic
+        }
+    }
+
+    fn styled_line_advance(
+        &mut self,
+        segments: &[StyledSegment],
+        fallback_size: f32,
+        fallback_line_height: f32,
+    ) -> f32 {
+        if segments.is_empty() {
+            return fallback_line_height;
+        }
+
+        segments
+            .iter()
+            .map(|segment| {
+                self.styled_segment_advance(segment, fallback_size, fallback_line_height)
+            })
+            .fold(fallback_line_height, f32::max)
+    }
+
+    fn styled_line_baseline_adjust(
+        segments: &[StyledSegment],
+        fallback_size: f32,
+        fallback_line_height: f32,
+        line_advance: f32,
+    ) -> f32 {
         let max_size = Self::line_max_size(segments, fallback_size);
-        (max_size - fallback_size).max(0.0) * 0.75
+        let generic_adjust = (max_size - fallback_size).max(0.0) * 0.75;
+        let metric_adjust = (line_advance - fallback_line_height).max(0.0) * 0.5;
+        generic_adjust.max(metric_adjust)
     }
 
     fn styled_lines_height(
+        &mut self,
         lines: &[Vec<StyledSegment>],
         fallback_size: f32,
         fallback_line_height: f32,
     ) -> f32 {
         lines
             .iter()
-            .map(|line| Self::styled_line_advance(line, fallback_size, fallback_line_height))
+            .map(|line| self.styled_line_advance(line, fallback_size, fallback_line_height))
             .sum()
     }
 
     fn node_alignment(node: &DocumentNode) -> Option<&str> {
-        node
-            .attrs
+        node.attrs
             .as_ref()
             .and_then(|attrs| attrs.get("textAlign"))
             .and_then(|value| value.as_str())
@@ -497,7 +659,11 @@ impl PdfGenerator {
         String::new()
     }
 
-    fn collect_styled_chars(node: &DocumentNode, base: TextStyle, out: &mut Vec<(char, TextStyle)>) {
+    fn collect_styled_chars(
+        node: &DocumentNode,
+        base: TextStyle,
+        out: &mut Vec<(char, TextStyle)>,
+    ) {
         if let Some(text) = &node.text {
             let mut style = base;
             if let Some(marks) = &node.marks {
@@ -584,10 +750,7 @@ impl PdfGenerator {
         if uppercase {
             chars = chars
                 .into_iter()
-                .flat_map(|(c, style)| {
-                    c.to_uppercase()
-                        .map(move |upper| (upper, style.clone()))
-                })
+                .flat_map(|(c, style)| c.to_uppercase().map(move |upper| (upper, style.clone())))
                 .collect();
         }
 
@@ -637,34 +800,40 @@ impl PdfGenerator {
         line_height: f32,
         default_alignment: &str,
     ) {
-        let space_needed = Self::styled_lines_height(lines, size, line_height);
+        let space_needed = self.styled_lines_height(lines, size, line_height);
         if self.y_position - space_needed < MARGIN_BOTTOM {
             self.new_page();
         }
 
         for line in lines {
             let line_width = self.line_width_pt(line, size);
-            let x = self.aligned_x_with_default(node, base_x, max_width, line_width, default_alignment);
+            let x =
+                self.aligned_x_with_default(node, base_x, max_width, line_width, default_alignment);
             self.write_styled_line(line, x, size, line_height);
         }
     }
 
-    fn write_styled_line(&mut self, segments: &[StyledSegment], x: f32, size: f32, line_height: f32) {
-        let line_advance = Self::styled_line_advance(segments, size, line_height);
+    fn write_styled_line(
+        &mut self,
+        segments: &[StyledSegment],
+        x: f32,
+        size: f32,
+        line_height: f32,
+    ) {
+        let line_advance = self.styled_line_advance(segments, size, line_height);
         if self.y_position - line_advance < MARGIN_BOTTOM {
             self.new_page();
         }
 
-        let y = self.y_position - Self::styled_line_baseline_adjust(segments, size);
-        let runs = segments
-            .iter()
-            .map(|segment| {
-                let font = self.font_for(&segment.style);
-                let segment_size = Self::style_size(&segment.style, size);
-                let width = self.segment_width_pt(segment, size);
-                (segment, font, segment_size, width)
-            })
-            .collect::<Vec<_>>();
+        let y = self.y_position
+            - Self::styled_line_baseline_adjust(segments, size, line_height, line_advance);
+        let mut runs = Vec::new();
+        for segment in segments {
+            let font = self.font_for(&segment.style);
+            let segment_size = Self::style_size(&segment.style, size);
+            let width = self.segment_width_pt(segment, size);
+            runs.push((segment, font, segment_size, width));
+        }
         let layer = self
             .doc
             .get_page(self.current_page)
@@ -845,7 +1014,13 @@ impl PdfGenerator {
             .get_page(self.current_page)
             .get_layer(self.current_layer);
 
-        layer.use_text(text, size, Mm::from(Pt(x)), Mm::from(Pt(self.y_position)), font);
+        layer.use_text(
+            text,
+            size,
+            Mm::from(Pt(x)),
+            Mm::from(Pt(self.y_position)),
+            font,
+        );
     }
 
     fn render_freewrite_node(&mut self, node: &DocumentNode, list_number: i32) {
@@ -906,8 +1081,8 @@ impl PdfGenerator {
                 } else {
                     format!("{}.", list_number)
                 };
-                let marker_width = marker.chars().count() as f32 * FW_BODY_SIZE
-                    * HELVETICA_CHAR_WIDTH_RATIO;
+                let marker_width =
+                    marker.chars().count() as f32 * FW_BODY_SIZE * HELVETICA_CHAR_WIDTH_RATIO;
                 let marker_x =
                     (FW_MARGIN_LEFT + FW_LIST_INDENT - 6.0 - marker_width).max(FW_MARGIN_LEFT);
                 self.put_freewrite_text(&marker, marker_x, FW_BODY_SIZE, false);
@@ -954,12 +1129,8 @@ impl PdfGenerator {
         match node.node_type.as_str() {
             "comicPage" => {
                 self.check_page_break(2);
-                let lines = Self::styled_lines(
-                    node,
-                    TextStyle::default(),
-                    true,
-                    content_max_chars.max(1),
-                );
+                let lines =
+                    Self::styled_lines(node, TextStyle::default(), true, content_max_chars.max(1));
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -973,12 +1144,8 @@ impl PdfGenerator {
             "comicPanel" => {
                 self.write_blank_line();
                 self.check_page_break(2);
-                let lines = Self::styled_lines(
-                    node,
-                    TextStyle::default(),
-                    true,
-                    content_max_chars.max(1),
-                );
+                let lines =
+                    Self::styled_lines(node, TextStyle::default(), true, content_max_chars.max(1));
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -1224,7 +1391,10 @@ mod tests {
     }
 
     fn generate(content_nodes: &[String], mode: &str, filename: &str) -> Vec<u8> {
-        let content = format!(r#"{{"type":"doc","content":[{}]}}"#, content_nodes.join(","));
+        let content = format!(
+            r#"{{"type":"doc","content":[{}]}}"#,
+            content_nodes.join(",")
+        );
         let path = std::env::temp_dir().join(filename);
         let path_str = path.to_string_lossy().to_string();
 
@@ -1262,42 +1432,72 @@ mod tests {
 
         let bytes = generate(&nodes, "freewrite", "grainery-freewrite-test.pdf");
         let raw = String::from_utf8_lossy(&bytes);
-        assert!(raw.contains("Helvetica"), "free write PDFs should use Helvetica");
-        assert!(raw.contains("Helvetica-Bold"), "bold marks should use Helvetica-Bold");
-        assert!(raw.contains("Helvetica-Oblique"), "italic marks should use Helvetica-Oblique");
-        assert!(!raw.contains("Courier"), "free write PDFs should not use Courier");
+        assert!(
+            raw.contains("Helvetica"),
+            "free write PDFs should use Helvetica"
+        );
+        assert!(
+            raw.contains("Helvetica-Bold"),
+            "bold marks should use Helvetica-Bold"
+        );
+        assert!(
+            raw.contains("Helvetica-Oblique"),
+            "italic marks should use Helvetica-Oblique"
+        );
+        assert!(
+            !raw.contains("Courier"),
+            "free write PDFs should not use Courier"
+        );
     }
 
     #[test]
     fn renders_inline_marks_in_screenplay_pdf() {
         let nodes = vec![
             text_node("sceneHeading", "INT. OFFICE - DAY"),
-            rich_node("action", &[
-                ("The room is ", &[]),
-                ("very", &["bold"]),
-                (" quiet. A phone ", &[]),
-                ("buzzes", &["italic"]),
-                (" on the ", &[]),
-                ("desk", &["underline"]),
-                (".", &[]),
-            ]),
+            rich_node(
+                "action",
+                &[
+                    ("The room is ", &[]),
+                    ("very", &["bold"]),
+                    (" quiet. A phone ", &[]),
+                    ("buzzes", &["italic"]),
+                    (" on the ", &[]),
+                    ("desk", &["underline"]),
+                    (".", &[]),
+                ],
+            ),
             text_node("character", "JANE"),
-            rich_node("dialogue", &[
-                ("I ", &[]),
-                ("really", &["bold", "italic"]),
-                (" need to take this.", &[]),
-            ]),
+            rich_node(
+                "dialogue",
+                &[
+                    ("I ", &[]),
+                    ("really", &["bold", "italic"]),
+                    (" need to take this.", &[]),
+                ],
+            ),
         ];
 
         let bytes = generate(&nodes, "screenplay", "grainery-screenplay-marks-test.pdf");
         let raw = String::from_utf8_lossy(&bytes);
-        assert!(raw.contains("Courier"), "screenplay PDFs should use Courier");
-        assert!(raw.contains("Courier-Bold"), "bold marks should use Courier-Bold");
-        assert!(raw.contains("Courier-Oblique"), "italic marks should use Courier-Oblique");
+        assert!(
+            raw.contains("Courier"),
+            "screenplay PDFs should use Courier"
+        );
+        assert!(
+            raw.contains("Courier-Bold"),
+            "bold marks should use Courier-Bold"
+        );
+        assert!(
+            raw.contains("Courier-Oblique"),
+            "italic marks should use Courier-Oblique"
+        );
         assert!(
             raw.contains("Courier-BoldOblique"),
             "bold+italic marks should use Courier-BoldOblique"
         );
-        assert!(!raw.contains("Helvetica"), "screenplay PDFs should not use Helvetica");
+        assert!(
+            !raw.contains("Helvetica"),
+            "screenplay PDFs should not use Helvetica"
+        );
     }
 }
