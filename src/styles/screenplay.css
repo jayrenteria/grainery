@@ -12,6 +12,12 @@
   --page-margin-right: 1in;
   --page-content-height: calc(var(--page-height) - var(--page-margin-top) - var(--page-margin-bottom));
   --page-gap: 40px;
+  --screenplay-selection-background: color-mix(in oklch, var(--color-primary) 30%, transparent);
+}
+
+:root[data-theme='lofi'] {
+  --screenplay-selection-background: rgb(107 114 128 / 0.85);
+  --screenplay-selection-color: rgb(255 255 255);
 }
 
 /* Paginated Editor Container */
@@ -328,11 +334,14 @@
 
 /* Selection styling */
 .screenplay-editor ::selection {
-  @apply bg-primary/30;
+  color: var(--screenplay-selection-color, inherit);
+  background-color: var(--screenplay-selection-background);
 }
 
 .inactive-editor-selection {
-  @apply bg-primary/30 rounded-[2px];
+  color: var(--screenplay-selection-color, inherit);
+  background-color: var(--screenplay-selection-background);
+  @apply rounded-[2px];
 }
 
 /* Element type indicator */
