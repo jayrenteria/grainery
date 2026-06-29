@@ -15,9 +15,17 @@
   --screenplay-selection-background: color-mix(in oklch, var(--color-primary) 30%, transparent);
 }
 
+:root[data-theme='lofi'],
+:root[data-theme='black'] {
+  --screenplay-selection-color: rgb(255 255 255);
+}
+
 :root[data-theme='lofi'] {
   --screenplay-selection-background: rgb(107 114 128 / 0.85);
-  --screenplay-selection-color: rgb(255 255 255);
+}
+
+:root[data-theme='black'] {
+  --screenplay-selection-background: rgb(75 85 99 / 0.9);
 }
 
 /* Paginated Editor Container */
