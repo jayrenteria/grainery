@@ -276,6 +276,22 @@
 }
 
 /* Empty block placeholders */
+.scene-heading.is-empty::before,
+.action.is-empty::before,
+.character.is-empty::before,
+.dialogue.is-empty::before,
+.parenthetical.is-empty::before,
+.transition.is-empty::before,
+.comic-page.is-empty::before,
+.comic-panel.is-empty::before,
+.caption.is-empty::before,
+.sound-effect.is-empty::before,
+.note-title.is-empty::before,
+.note-heading.is-empty::before {
+  float: left;
+  height: 0;
+}
+
 .scene-heading.is-empty::before {
   content: 'INT./EXT. LOCATION - TIME';
   @apply text-base-content/40;
