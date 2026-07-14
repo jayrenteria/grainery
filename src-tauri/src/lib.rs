@@ -111,6 +111,18 @@ fn file_exists(path: String) -> bool {
 }
 
 #[tauri::command]
+fn get_update_target() -> Option<&'static str> {
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("GRAINERY_DISTRIBUTION").as_deref()
+        == Some(std::ffi::OsStr::new("linux-system"))
+    {
+        return Some("linux-system-x86_64");
+    }
+
+    None
+}
+
+#[tauri::command]
 fn consume_pending_open_files(state: tauri::State<'_, PendingOpenFiles>) -> Vec<String> {
     state.take_paths()
 }
@@ -356,6 +368,7 @@ pub fn run() {
             save_screenplay,
             load_screenplay,
             file_exists,
+            get_update_target,
             consume_pending_open_files,
             exit_app,
             set_titlebar_theme_color,

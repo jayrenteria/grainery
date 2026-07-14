@@ -1,5 +1,6 @@
 import { relaunch } from '@tauri-apps/plugin-process';
 import { check, type DownloadEvent, type Update } from '@tauri-apps/plugin-updater';
+import { invoke } from '@tauri-apps/api/core';
 
 const STARTUP_UPDATE_CHECK_STORAGE_KEY = 'grainery-last-startup-update-check';
 const STARTUP_UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -69,7 +70,11 @@ async function fetchGitHubReleaseBody(version: string): Promise<string | null> {
 }
 
 export async function checkForAppUpdate(): Promise<AvailableAppUpdate | null> {
-  const update = await check({ timeout: UPDATE_CHECK_TIMEOUT_MS });
+  const target = await invoke<string | null>('get_update_target');
+  const update = await check({
+    timeout: UPDATE_CHECK_TIMEOUT_MS,
+    ...(target ? { target } : {}),
+  });
 
   if (!update) {
     return null;

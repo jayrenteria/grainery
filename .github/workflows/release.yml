@@ -82,11 +82,43 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           version="$(node -p "require('./package.json').version")"
           archive="Grainery_${version}_linux-x86_64.tar.gz"
+          updater="Grainery_${version}_linux-system-x86_64.updater.tar.gz"
           mkdir -p release-archive/Grainery
-          cp src-tauri/target/release/Grainery release-archive/Grainery/
+          cp src-tauri/target/release/Grainery release-archive/Grainery/grainery-bin
+          cp scripts/linux-system-launcher.sh release-archive/Grainery/Grainery
+          chmod +x release-archive/Grainery/Grainery release-archive/Grainery/grainery-bin
           cp LICENSE release-archive/Grainery/
           tar -C release-archive -czf "$archive" Grainery
-          gh release upload "app-v${version}" "$archive" --clobber
+
+          mkdir -p updater-payload
+          cp src-tauri/target/release/Grainery updater-payload/Grainery.AppImage
+          tar -C updater-payload -czf "$updater" Grainery.AppImage
+          npm run tauri signer sign -- "$updater"
+
+          gh release upload "app-v${version}" "$archive" "$updater" "$updater.sig" --clobber
+
+  finalize-linux-system-updater:
+    needs: publish-tauri
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Add system-linked Linux target to updater manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#app-v}"
+          updater="Grainery_${version}_linux-system-x86_64.updater.tar.gz"
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern latest.json --pattern "$updater.sig"
+          signature="$(cat "$updater.sig")"
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${updater}"
+          jq --arg signature "$signature" --arg url "$url" \
+            '.platforms["linux-system-x86_64"] = { signature: $signature, url: $url }' \
+            latest.json > latest.with-linux-system.json
+          mv latest.with-linux-system.json latest.json
+          gh release upload "$GITHUB_REF_NAME" latest.json --repo "$GITHUB_REPOSITORY" --clobber
