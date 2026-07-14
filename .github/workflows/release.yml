@@ -72,3 +72,21 @@ jobs:
           updaterJsonPreferNsis: true
           tauriScript: npm run tauri
           args: ${{ matrix.args }}
+
+      # AppImages bundle Ubuntu's GTK/WebKit libraries. Those libraries can be
+      # incompatible with the host EGL stack on rolling distributions (for
+      # example Arch/Omarchy), causing WebKitWebProcess to abort with
+      # EGL_BAD_PARAMETER. Also publish the dynamically linked binary so those
+      # systems can use their native WebKitGTK installation instead.
+      - name: Publish system-linked Linux archive
+        if: matrix.platform == 'ubuntu-22.04'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          archive="Grainery_${version}_linux-x86_64.tar.gz"
+          mkdir -p release-archive/Grainery
+          cp src-tauri/target/release/Grainery release-archive/Grainery/
+          cp LICENSE release-archive/Grainery/
+          tar -C release-archive -czf "$archive" Grainery
+          gh release upload "app-v${version}" "$archive" --clobber
