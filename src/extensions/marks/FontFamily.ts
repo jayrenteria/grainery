@@ -3,6 +3,7 @@ import {
   normalizeFontFamily,
   normalizeFontStyle,
   normalizeFontWeight,
+  toCssFontFamily,
   type FontStyleValue,
 } from '../../lib/textStyles';
 
@@ -37,10 +38,6 @@ function stripCssQuotes(value: string): string {
   }
 
   return trimmed;
-}
-
-function toCssFontFamily(fontFamily: string): string {
-  return JSON.stringify(fontFamily);
 }
 
 export const FontFamily = Mark.create<FontFamilyOptions>({
