@@ -1,6 +1,6 @@
 [package]
 name = "grainery"
-version = "1.5.4"
+version = "1.5.6"
 description = "A Tauri App"
 authors = ["you"]
 license = "MIT"
