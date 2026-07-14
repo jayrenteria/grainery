@@ -1,0 +1,3 @@
+[submodule "examples/plugins/system-font-styles"]
+	path = examples/plugins/system-font-styles
+	url = https://github.com/aindaco1/system-font-styles.git
