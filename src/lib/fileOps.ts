@@ -20,7 +20,7 @@ export async function updateWindowTitle(filename: string | null, isDirty: boolea
 const FILE_EXTENSION = 'gwx';
 const FDX_EXTENSION = 'fdx';
 const APP_NAME = 'Grainery';
-const APP_VERSION = '1.5.4';
+const APP_VERSION = '1.5.5';
 
 export function createNewDocument(documentMode: ScreenplayDocument['documentMode'] = 'screenplay'): ScreenplayDocument {
   return {
