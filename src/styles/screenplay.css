@@ -292,6 +292,12 @@
   height: 0;
 }
 
+.character.is-empty::before,
+.parenthetical.is-empty::before,
+.transition.is-empty::before {
+  width: 100%;
+}
+
 .scene-heading.is-empty::before {
   content: 'INT./EXT. LOCATION - TIME';
   @apply text-base-content/40;
