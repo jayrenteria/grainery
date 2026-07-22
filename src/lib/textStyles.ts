@@ -3,6 +3,8 @@ export const MIN_FONT_WEIGHT = 1;
 export const MAX_FONT_WEIGHT = 1000;
 export const MIN_TEXT_SIZE_PT = 6;
 export const MAX_TEXT_SIZE_PT = 72;
+export const SYSTEM_FONT_FALLBACK_STACK =
+  '"Helvetica Neue", Helvetica, Arial, "Liberation Sans", ui-sans-serif, system-ui, sans-serif';
 
 export type FontStyleValue = 'normal' | 'italic' | 'oblique';
 export type TextAlignment = 'left' | 'center' | 'right';
@@ -18,6 +20,11 @@ export function normalizeFontFamily(value: unknown): string | null {
   }
 
   return normalized.slice(0, MAX_FONT_FAMILY_LENGTH);
+}
+
+export function toCssFontFamily(fontFamily: unknown): string | null {
+  const normalized = normalizeFontFamily(fontFamily);
+  return normalized ? `${JSON.stringify(normalized)}, ${SYSTEM_FONT_FALLBACK_STACK}` : null;
 }
 
 export function normalizeFontWeight(value: unknown): number | null {
