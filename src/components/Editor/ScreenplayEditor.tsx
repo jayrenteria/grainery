@@ -63,6 +63,7 @@ interface ScreenplayEditorProps {
   elementLoopPreferences?: ElementLoopPreferences;
   onEditorReady?: (editor: Editor | null) => void;
   showKeymapHint?: boolean;
+  keepKeymapHintVisible?: boolean;
   documentMode?: DocumentMode;
 }
 
@@ -128,6 +129,7 @@ export function ScreenplayEditor({
   elementLoopPreferences,
   onEditorReady,
   showKeymapHint = true,
+  keepKeymapHintVisible = false,
   documentMode = 'screenplay',
 }: ScreenplayEditorProps) {
   const [currentElement, setCurrentElement] = useState<ScreenplayElementType | null>(
@@ -300,6 +302,7 @@ export function ScreenplayEditor({
           isCurrentEmpty={isCurrentElementEmpty}
           resolveElementLoop={resolveElementLoop}
           elementLoopPreferences={elementLoopPreferences}
+          keepVisible={keepKeymapHintVisible}
         />
       )}
       <EditorStats editor={editor} showPageCount={documentMode !== 'freewrite'} />
