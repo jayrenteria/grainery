@@ -22,6 +22,7 @@ interface KeymapHintProps {
   isCurrentEmpty: boolean;
   resolveElementLoop?: (context: ElementLoopContext) => ScreenplayElementType | null;
   elementLoopPreferences?: ElementLoopPreferences;
+  keepVisible?: boolean;
 }
 
 interface KeyHint {
@@ -175,8 +176,9 @@ export function KeymapHint(props: KeymapHintProps) {
 
   return (
     <div
-      className={`keymap-hint${isVisible ? ' keymap-hint-visible' : ''}`}
-      aria-hidden={!isVisible}
+      className={`keymap-hint${isVisible || props.keepVisible ? ' keymap-hint-visible' : ''}`}
+      aria-hidden={!isVisible && !props.keepVisible}
+      data-tour="keymap-hint"
     >
       {hints.map((hint) => (
         <span className="keymap-hint-item" key={`${hint.key}-${hint.label}`}>

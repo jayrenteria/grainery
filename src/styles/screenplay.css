@@ -458,6 +458,149 @@
   @apply leading-none;
 }
 
+/* First-run editor tours */
+.product-tour {
+  @apply fixed inset-0 z-[600];
+  background: color-mix(in oklch, black 68%, transparent);
+}
+
+.product-tour.has-target {
+  background: transparent;
+}
+
+.product-tour-highlight {
+  @apply fixed z-0 rounded-md border-2 border-primary pointer-events-none;
+  box-shadow: 0 0 0 9999px color-mix(in oklch, black 68%, transparent);
+}
+
+.product-tour-card {
+  @apply fixed left-1/2 top-1/2 z-10 flex max-h-[85vh] w-[min(390px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-lg border p-5 shadow-2xl;
+  border-color: color-mix(in oklch, var(--color-base-content) 14%, transparent);
+  background: var(--color-base-100);
+  color: var(--color-base-content);
+}
+
+.product-tour.has-target .product-tour-card {
+  translate: none;
+}
+
+.product-tour-card.is-elements-step {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.product-tour-card-top {
+  @apply flex items-center justify-between gap-4;
+}
+
+.product-tour-card-top > span {
+  @apply text-[11px] uppercase tracking-[0.14em];
+  color: color-mix(in oklch, var(--color-base-content) 48%, transparent);
+}
+
+.product-tour-close {
+  @apply flex h-7 w-7 items-center justify-center rounded-md border-0 bg-transparent p-0 text-xl leading-none shadow-none;
+  color: color-mix(in oklch, var(--color-base-content) 58%, transparent);
+}
+
+.product-tour-close:hover,
+.product-tour-close:focus-visible {
+  background: color-mix(in oklch, var(--color-base-content) 7%, transparent);
+  color: var(--color-base-content);
+}
+
+.product-tour-progress {
+  @apply mt-3 flex gap-1.5;
+}
+
+.product-tour-progress span {
+  @apply h-1 flex-1 rounded-full bg-base-300;
+}
+
+.product-tour-progress span.is-active {
+  @apply bg-primary;
+}
+
+.product-tour-card h2 {
+  @apply mb-0 mt-5 text-xl font-medium leading-tight;
+  font-family: Courier, monospace;
+}
+
+.product-tour-card > p {
+  @apply mb-0 mt-2 text-sm leading-6;
+  color: color-mix(in oklch, var(--color-base-content) 68%, transparent);
+}
+
+.product-tour-elements {
+  @apply mt-4 grid gap-2;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.product-tour-element {
+  @apply rounded-md border px-3 py-2;
+  border-color: color-mix(in oklch, var(--color-base-content) 9%, transparent);
+  background: color-mix(in oklch, var(--color-base-content) 3%, var(--color-base-100));
+}
+
+.product-tour-element > span {
+  @apply block text-sm font-medium;
+  font-family: Courier, monospace;
+}
+
+.product-tour-element small {
+  @apply mt-0.5 block text-xs leading-5;
+  color: color-mix(in oklch, var(--color-base-content) 54%, transparent);
+}
+
+.product-tour-actions {
+  @apply mt-6 flex items-center justify-between gap-4;
+  position: sticky;
+  bottom: -1.25rem;
+  z-index: 1;
+  padding-bottom: 0.25rem;
+  padding-top: 1rem;
+  background: var(--color-base-100);
+}
+
+.product-tour-actions > span {
+  @apply text-xs;
+  color: color-mix(in oklch, var(--color-base-content) 45%, transparent);
+}
+
+.product-tour-actions > div {
+  @apply flex items-center gap-2;
+}
+
+.product-tour-primary,
+.product-tour-secondary {
+  @apply h-9 rounded-md border px-4 text-sm shadow-none;
+}
+
+.product-tour-primary {
+  @apply border-primary bg-primary text-primary-content;
+}
+
+.product-tour-primary:hover,
+.product-tour-primary:focus-visible {
+  background: color-mix(in oklch, var(--color-primary) 88%, black);
+}
+
+.product-tour-secondary {
+  border-color: color-mix(in oklch, var(--color-base-content) 14%, transparent);
+  background: transparent;
+  color: var(--color-base-content);
+}
+
+.product-tour-secondary:hover,
+.product-tour-secondary:focus-visible {
+  background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+}
+
+@media (max-width: 520px) {
+  .product-tour-elements {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Editor stats (word + page count) */
 .editor-stats {
   @apply fixed bottom-4 z-[100];

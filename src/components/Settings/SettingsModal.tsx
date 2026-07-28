@@ -37,6 +37,7 @@ interface SettingsModalProps {
   onAutoSaveIntervalChange: (intervalMs: number) => void;
   elementLoopPreferences: ElementLoopPreferences;
   onElementLoopPreferencesChange: (preferences: ElementLoopPreferences) => void;
+  onStartTour: () => void;
 }
 
 type SettingsTab = 'theme' | 'editor' | 'smart-loop' | 'title-page' | 'plugins';
@@ -169,6 +170,7 @@ export function SettingsModal({
   onAutoSaveIntervalChange,
   elementLoopPreferences,
   onElementLoopPreferencesChange,
+  onStartTour,
 }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<SettingsTab>('theme');
@@ -505,6 +507,20 @@ export function SettingsModal({
                       </span>
                     </label>
                   )}
+                </div>
+
+                <div className="settings-editor-group">
+                  <p className="settings-section-label">Tours</p>
+
+                  <div className="settings-editor-option settings-editor-option-select">
+                    <span className="settings-editor-option-copy">
+                      <span>{DOCUMENT_MODE_LABELS[documentMode]} tour</span>
+                      <small>Review the editor controls and element types for this document.</small>
+                    </span>
+                    <button type="button" className="settings-inline-button" onClick={onStartTour}>
+                      Start tour
+                    </button>
+                  </div>
                 </div>
 
               </div>

@@ -10,6 +10,7 @@ import { RecentDocumentsPanel, ScreenplayEditor } from './components/Editor';
 import { SettingsModal } from './components/Settings';
 import { StartScreen } from './components/StartScreen';
 import { UpdateDialog, type UpdateDialogStatus } from './components/Updates';
+import { ProductTour } from './components/Tour/ProductTour';
 import { ThemeProvider } from './contexts/ThemeContext';
 import {
   createNewDocument,
@@ -72,6 +73,7 @@ const KEYMAP_HINTS_STORAGE_KEY = 'grainery-keymap-hints-enabled';
 const RECENT_DOCUMENTS_PANEL_STORAGE_KEY = 'grainery-recent-documents-panel-enabled';
 const AUTO_SAVE_PREFERENCES_STORAGE_KEY = 'grainery-autosave-preferences';
 const ELEMENT_LOOP_PREFERENCES_STORAGE_KEY = 'grainery-element-loop-preferences-v1';
+const TOUR_COMPLETED_STORAGE_KEY_PREFIX = 'grainery-tour-completed-v1-';
 
 interface PreparedDocument {
   doc: ScreenplayDocument;
@@ -187,6 +189,14 @@ function storeElementLoopPreferences(preferences: ElementLoopPreferences): void 
   localStorage.setItem(ELEMENT_LOOP_PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
 }
 
+function hasCompletedTour(documentMode: DocumentMode): boolean {
+  return localStorage.getItem(`${TOUR_COMPLETED_STORAGE_KEY_PREFIX}${documentMode}`) === 'true';
+}
+
+function markTourCompleted(documentMode: DocumentMode): void {
+  localStorage.setItem(`${TOUR_COMPLETED_STORAGE_KEY_PREFIX}${documentMode}`, 'true');
+}
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -215,6 +225,7 @@ function App() {
   const [updateProgress, setUpdateProgress] = useState<UpdateDownloadProgress | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [isRecentDocumentsPanelOpen, setIsRecentDocumentsPanelOpen] = useState(false);
+  const [activeTourMode, setActiveTourMode] = useState<DocumentMode | null>(null);
 
   const editorRef = useRef<Editor | null>(null);
   const editorContentRef = useRef<JSONContent>(document.document);
@@ -517,6 +528,12 @@ function App() {
     setRecentFiles(getRecentFiles());
   }, []);
 
+  const startTourIfNeeded = useCallback((documentMode: DocumentMode) => {
+    if (!hasCompletedTour(documentMode)) {
+      setActiveTourMode(documentMode);
+    }
+  }, []);
+
   const prepareDocumentForEditor = useCallback(
     async (doc: ScreenplayDocument): Promise<PreparedDocument> => {
       const transformed = await runTransformHook('post-open', doc.document);
@@ -540,12 +557,13 @@ function App() {
       setIsDirty(false);
       setIsRecentDocumentsPanelOpen(false);
       setView('editor');
+      startTourIfNeeded(doc.documentMode);
       setStartScreenError(null);
       refreshRecentFiles();
       await updateWindowTitle(doc.meta.filename);
       showDocumentCompatibilityWarning(report);
     },
-    [refreshRecentFiles, showDocumentCompatibilityWarning]
+    [refreshRecentFiles, showDocumentCompatibilityWarning, startTourIfNeeded]
   );
 
   const openPathIntoEditor = useCallback(
@@ -631,9 +649,10 @@ function App() {
     setIsDirty(false);
     setIsRecentDocumentsPanelOpen(false);
     setView('editor');
+    startTourIfNeeded(documentMode);
     setStartScreenError(null);
     await updateWindowTitle(null);
-  }, [isDirty, view]);
+  }, [isDirty, startTourIfNeeded, view]);
 
   const handleOpen = useCallback(async () => {
     if (view === 'editor' && isDirty) {
@@ -1024,6 +1043,19 @@ function App() {
       editorRef.current?.commands.focus();
     }
   }, []);
+
+  const handleStartTour = useCallback(() => {
+    setShowSettings(false);
+    setActiveTourMode(document.documentMode);
+  }, [document.documentMode]);
+
+  const handleCloseTour = useCallback(() => {
+    if (activeTourMode) {
+      markTourCompleted(activeTourMode);
+    }
+    setActiveTourMode(null);
+    editorRef.current?.commands.focus();
+  }, [activeTourMode]);
 
   const handleKeymapHintsEnabledChange = useCallback((enabled: boolean) => {
     setKeymapHintsEnabled(enabled);
@@ -1528,7 +1560,8 @@ function App() {
               onEditorReady={(editor) => {
                 editorRef.current = editor;
               }}
-              showKeymapHint={keymapHintsEnabled}
+              showKeymapHint={keymapHintsEnabled || activeTourMode !== null}
+              keepKeymapHintVisible={activeTourMode !== null}
             />
 
             <PluginUIHost
@@ -1570,7 +1603,12 @@ function App() {
             onAutoSaveIntervalChange={handleAutoSaveIntervalChange}
             elementLoopPreferences={elementLoopPreferences}
             onElementLoopPreferencesChange={handleElementLoopPreferencesChange}
+            onStartTour={handleStartTour}
           />
+        )}
+
+        {activeTourMode && view === 'editor' && (
+          <ProductTour documentMode={activeTourMode} onClose={handleCloseTour} />
         )}
 
         {isUpdateDialogOpen && (
