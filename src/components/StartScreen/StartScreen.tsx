@@ -1,4 +1,5 @@
 import type { DocumentMode, RecentFileEntry } from '../../lib/types';
+import { SettingsButton } from '../Settings';
 
 const DOCUMENT_MODE_LABELS: Record<DocumentMode, string> = {
   screenplay: 'Screenplay',
@@ -16,6 +17,7 @@ interface StartScreenProps {
   onOpenFile: () => void;
   onImportFdx: () => void;
   onOpenRecent: (path: string) => void;
+  onOpenSettings: () => void;
 }
 
 function formatRelativeTime(isoTimestamp: string): string {
@@ -74,9 +76,16 @@ export function StartScreen({
   onOpenFile,
   onImportFdx,
   onOpenRecent,
+  onOpenSettings,
 }: StartScreenProps) {
   return (
     <div className="start-screen">
+      <SettingsButton
+        className="start-screen-settings"
+        onClick={onOpenSettings}
+        tourTarget="start-settings"
+      />
+
       <main className="start-screen-shell" aria-labelledby="start-screen-title">
         <div className="start-screen-header">
           <h1 id="start-screen-title">

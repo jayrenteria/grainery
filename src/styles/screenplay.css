@@ -1617,6 +1617,41 @@
   );
 }
 
+.settings-icon-button {
+  @apply flex h-9 w-9 items-center justify-center rounded-md border-0 bg-transparent p-2 shadow-none transition-colors;
+  color: color-mix(in oklch, var(--color-base-content) 46%, transparent);
+}
+
+.settings-icon-button svg {
+  @apply h-full w-full fill-none stroke-current;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.settings-icon-button:hover,
+.settings-icon-button:focus-visible {
+  background: color-mix(in oklch, var(--color-base-content) 7%, transparent);
+  color: var(--color-base-content);
+  outline: none;
+}
+
+.settings-icon-button:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 28%, transparent);
+}
+
+.start-screen-settings {
+  @apply absolute right-8 top-7 z-20;
+}
+
+.editor-settings {
+  @apply fixed right-6 top-4 z-[100];
+}
+
+.start-screen-tour-card {
+  width: min(390px, calc(100vw - 32px));
+}
+
 .start-screen-shell {
   @apply relative z-10 flex w-full max-w-[540px] flex-col;
 }
@@ -1815,6 +1850,10 @@
 
   .start-screen-shell {
     max-width: none;
+  }
+
+  .start-screen-settings {
+    @apply right-4 top-4;
   }
 
   .start-screen-new {

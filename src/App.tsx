@@ -7,10 +7,11 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask as askDialog, message as messageDialog } from '@tauri-apps/plugin-dialog';
 
 import { RecentDocumentsPanel, ScreenplayEditor } from './components/Editor';
-import { SettingsModal } from './components/Settings';
+import { SettingsButton, SettingsModal } from './components/Settings';
 import { StartScreen } from './components/StartScreen';
 import { UpdateDialog, type UpdateDialogStatus } from './components/Updates';
 import { ProductTour } from './components/Tour/ProductTour';
+import { StartScreenTour } from './components/Tour/StartScreenTour';
 import { ThemeProvider } from './contexts/ThemeContext';
 import {
   createNewDocument,
@@ -74,6 +75,7 @@ const RECENT_DOCUMENTS_PANEL_STORAGE_KEY = 'grainery-recent-documents-panel-enab
 const AUTO_SAVE_PREFERENCES_STORAGE_KEY = 'grainery-autosave-preferences';
 const ELEMENT_LOOP_PREFERENCES_STORAGE_KEY = 'grainery-element-loop-preferences-v1';
 const TOUR_COMPLETED_STORAGE_KEY_PREFIX = 'grainery-tour-completed-v1-';
+const START_SCREEN_TOUR_STORAGE_KEY = 'grainery-tour-completed-v1-start-screen';
 
 interface PreparedDocument {
   doc: ScreenplayDocument;
@@ -226,6 +228,7 @@ function App() {
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [isRecentDocumentsPanelOpen, setIsRecentDocumentsPanelOpen] = useState(false);
   const [activeTourMode, setActiveTourMode] = useState<DocumentMode | null>(null);
+  const [isStartScreenTourOpen, setIsStartScreenTourOpen] = useState(false);
 
   const editorRef = useRef<Editor | null>(null);
   const editorContentRef = useRef<JSONContent>(document.document);
@@ -1057,6 +1060,11 @@ function App() {
     editorRef.current?.commands.focus();
   }, [activeTourMode]);
 
+  const handleCloseStartScreenTour = useCallback(() => {
+    localStorage.setItem(START_SCREEN_TOUR_STORAGE_KEY, 'true');
+    setIsStartScreenTourOpen(false);
+  }, []);
+
   const handleKeymapHintsEnabledChange = useCallback((enabled: boolean) => {
     setKeymapHintsEnabled(enabled);
     localStorage.setItem(KEYMAP_HINTS_STORAGE_KEY, String(enabled));
@@ -1317,6 +1325,16 @@ function App() {
   }, [view]);
 
   useEffect(() => {
+    if (
+      view === 'start' &&
+      !isResolvingInitialOpen &&
+      localStorage.getItem(START_SCREEN_TOUR_STORAGE_KEY) !== 'true'
+    ) {
+      setIsStartScreenTourOpen(true);
+    }
+  }, [isResolvingInitialOpen, view]);
+
+  useEffect(() => {
     isDirtyRef.current = isDirty;
   }, [isDirty]);
 
@@ -1523,6 +1541,7 @@ function App() {
             onOpenRecent={(path) => {
               void handleOpenRecent(path);
             }}
+            onOpenSettings={() => setShowSettings(true)}
           />
           )
         ) : (
@@ -1562,6 +1581,11 @@ function App() {
               }}
               showKeymapHint={keymapHintsEnabled || activeTourMode !== null}
               keepKeymapHintVisible={activeTourMode !== null}
+            />
+
+            <SettingsButton
+              className="editor-settings"
+              onClick={() => setShowSettings(true)}
             />
 
             <PluginUIHost
@@ -1609,6 +1633,10 @@ function App() {
 
         {activeTourMode && view === 'editor' && (
           <ProductTour documentMode={activeTourMode} onClose={handleCloseTour} />
+        )}
+
+        {isStartScreenTourOpen && view === 'start' && !showSettings && (
+          <StartScreenTour onClose={handleCloseStartScreenTour} />
         )}
 
         {isUpdateDialogOpen && (
