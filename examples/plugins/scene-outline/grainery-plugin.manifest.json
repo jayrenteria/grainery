@@ -1,22 +1,32 @@
 {
   "schemaVersion": 1,
   "id": "com.grainery.scene-outline",
-  "name": "Scene Outline",
-  "version": "1.2.0",
-  "description": "Adds a side panel scene outline with jump navigation.",
+  "name": "Scene Manager",
+  "version": "1.3.0",
+  "description": "Numbers scenes and adds an always-visible scene map with jump navigation.",
   "engine": {
-    "grainery": ">=0.1.0",
+    "grainery": ">=1.5.9",
     "pluginApi": "^1.2.0"
   },
   "entry": "dist/main.js",
-  "permissions": [],
+  "permissions": [
+    "document:read",
+    "document:write"
+  ],
   "optionalPermissions": [
     "ui:mount"
   ],
   "networkAllowlist": [],
+  "permissionRationales": {
+    "ui:mount": "Shows the scene map, scene numbers, and Scene Manager panel."
+  },
   "activationEvents": [
+    "onStartup",
     "onUIControl:toggle-scene-outline",
-    "onUIPanel:scene-outline-panel"
+    "onUIPanel:scene-outline-panel",
+    "onTransform:post-open",
+    "onTransform:pre-save",
+    "onTransform:pre-export"
   ],
   "contributes": {
     "commands": [],
@@ -26,6 +36,14 @@
     "importers": [],
     "statusBadges": [],
     "inlineAnnotationProviders": [],
+    "editorCompletionProviders": [],
+    "editorLandmarkProviders": [
+      {
+        "id": "scene-landmarks",
+        "title": "Scene map and numbers",
+        "priority": 100
+      }
+    ],
     "uiControls": [
       {
         "id": "toggle-scene-outline",
@@ -45,7 +63,7 @@
     "uiPanels": [
       {
         "id": "scene-outline-panel",
-        "title": "Scene Outline",
+        "title": "Scene Manager",
         "icon": "scene-heading",
         "defaultWidth": 320,
         "minWidth": 260,
@@ -54,7 +72,23 @@
         "when": "plugin.enabled"
       }
     ],
-    "transforms": []
+    "transforms": [
+      {
+        "id": "renumber-scenes-post-open",
+        "hook": "post-open",
+        "priority": 100
+      },
+      {
+        "id": "renumber-scenes-pre-save",
+        "hook": "pre-save",
+        "priority": 100
+      },
+      {
+        "id": "renumber-scenes-pre-export",
+        "hook": "pre-export",
+        "priority": 100
+      }
+    ]
   },
   "signature": {
     "keyId": "main-2026",

@@ -107,11 +107,17 @@ function nodeToFountain(node: JSONContent): string | null {
       // We uppercase them for consistency
       const heading = text.toUpperCase();
       // If it doesn't start with a standard prefix, force it with a leading period
+      const rawSceneNumber = node.attrs?.sceneNumber;
+      const normalizedSceneNumber =
+        typeof rawSceneNumber === 'string' || typeof rawSceneNumber === 'number'
+          ? String(rawSceneNumber).replace(/#/g, '').trim()
+          : '';
+      const sceneNumber = normalizedSceneNumber ? ` #${normalizedSceneNumber}#` : '';
       if (/^(INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[\.\s]/i.test(heading)) {
-        return `\n${heading}`;
+        return `\n${heading}${sceneNumber}`;
       }
       // Force scene heading with period prefix
-      return `\n.${heading}`;
+      return `\n.${heading}${sceneNumber}`;
     }
 
     case 'action': {

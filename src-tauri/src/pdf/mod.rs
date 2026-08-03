@@ -555,6 +555,51 @@ impl PdfGenerator {
             .and_then(|value| value.as_str())
     }
 
+    fn scene_number(node: &DocumentNode) -> Option<String> {
+        let value = node
+            .attrs
+            .as_ref()
+            .and_then(|attrs| attrs.get("sceneNumber"))?;
+        let number = if let Some(text) = value.as_str() {
+            text.trim().to_string()
+        } else if value.is_number() {
+            value.to_string()
+        } else {
+            String::new()
+        };
+
+        if number.is_empty() {
+            None
+        } else {
+            Some(number)
+        }
+    }
+
+    fn write_scene_numbers(&self, number: &str, y: f32) {
+        let layer = self
+            .doc
+            .get_page(self.current_page)
+            .get_layer(self.current_layer);
+        let estimated_width = number.chars().count() as f32 * self.char_width;
+        let left_x = (MARGIN_LEFT - 18.0 - estimated_width).max(12.0);
+        let right_x = (PAGE_WIDTH - MARGIN_RIGHT + 18.0).min(PAGE_WIDTH - estimated_width - 12.0);
+
+        layer.use_text(
+            number,
+            FONT_SIZE,
+            Mm::from(Pt(left_x)),
+            Mm::from(Pt(y)),
+            &self.font,
+        );
+        layer.use_text(
+            number,
+            FONT_SIZE,
+            Mm::from(Pt(right_x)),
+            Mm::from(Pt(y)),
+            &self.font,
+        );
+    }
+
     fn aligned_x_with_default(
         &self,
         node: &DocumentNode,
@@ -1120,7 +1165,10 @@ impl PdfGenerator {
 
     fn render_node(&mut self, node: &DocumentNode, _document_mode: &str) {
         let text = Self::get_node_text(node);
-        if text.trim().is_empty() && node.node_type != "pageBreak" {
+        if text.trim().is_empty()
+            && node.node_type != "pageBreak"
+            && node.node_type != "sceneHeading"
+        {
             return;
         }
         let content_width = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
@@ -1193,6 +1241,25 @@ impl PdfGenerator {
                     true,
                     content_max_chars.max(1),
                 );
+                let space_needed = self.styled_lines_height(&lines, FONT_SIZE, LINE_HEIGHT);
+                if self.y_position - space_needed < MARGIN_BOTTOM {
+                    self.new_page();
+                }
+                if let Some(number) = Self::scene_number(node) {
+                    let baseline_adjust = lines
+                        .first()
+                        .map(|line| {
+                            let line_advance = self.styled_line_advance(line, FONT_SIZE, LINE_HEIGHT);
+                            Self::styled_line_baseline_adjust(
+                                line,
+                                FONT_SIZE,
+                                LINE_HEIGHT,
+                                line_advance,
+                            )
+                        })
+                        .unwrap_or(0.0);
+                    self.write_scene_numbers(&number, self.y_position - baseline_adjust);
+                }
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -1370,6 +1437,13 @@ mod tests {
         )
     }
 
+    fn numbered_scene_node(text: &str, number: i32) -> String {
+        format!(
+            r#"{{"type":"sceneHeading","attrs":{{"sceneNumber":{}}},"content":[{{"type":"text","text":"{}"}}]}}"#,
+            number, text
+        )
+    }
+
     fn rich_node(node_type: &str, spans: &[(&str, &[&str])]) -> String {
         let content = spans
             .iter()
@@ -1499,5 +1573,18 @@ mod tests {
             !raw.contains("Helvetica"),
             "screenplay PDFs should not use Helvetica"
         );
+    }
+    #[test]
+    fn renders_numbered_scene_headings_in_screenplay_pdf() {
+        let node_json = numbered_scene_node("INT. OFFICE - DAY", 12);
+        let parsed: DocumentNode = serde_json::from_str(&node_json).unwrap();
+        assert_eq!(PdfGenerator::scene_number(&parsed), Some("12".to_string()));
+
+        let bytes = generate(
+            &[node_json],
+            "screenplay",
+            "grainery-screenplay-scene-numbers-test.pdf",
+        );
+        assert!(bytes.starts_with(b"%PDF"));
     }
 }
