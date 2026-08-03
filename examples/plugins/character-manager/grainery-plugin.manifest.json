@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "id": "com.grainery.character-manager",
+  "name": "Character Manager",
+  "version": "1.0.0",
+  "description": "Completes existing character names and safely renames character cues.",
+  "engine": {
+    "grainery": ">=1.5.9",
+    "pluginApi": "^1.2.0"
+  },
+  "entry": "dist/main.js",
+  "permissions": [
+    "document:read",
+    "document:write",
+    "editor:commands"
+  ],
+  "optionalPermissions": [
+    "ui:mount"
+  ],
+  "permissionRationales": {
+    "ui:mount": "Shows character suggestions and the Character Manager panel."
+  },
+  "networkAllowlist": [],
+  "activationEvents": [
+    "onStartup",
+    "onUIControl:toggle-character-manager",
+    "onUIPanel:character-manager-panel"
+  ],
+  "contributes": {
+    "commands": [],
+    "menus": [],
+    "keybindings": [],
+    "exporters": [],
+    "importers": [],
+    "statusBadges": [],
+    "inlineAnnotationProviders": [],
+    "editorCompletionProviders": [
+      {
+        "id": "existing-characters",
+        "title": "Existing characters",
+        "priority": 100
+      }
+    ],
+    "editorLandmarkProviders": [],
+    "uiControls": [
+      {
+        "id": "toggle-character-manager",
+        "mount": "bottom-bar",
+        "kind": "button",
+        "label": "Characters",
+        "icon": "character",
+        "priority": 15,
+        "tooltip": "Open Character Manager",
+        "action": {
+          "type": "panel:toggle",
+          "panelId": "character-manager-panel"
+        },
+        "when": "plugin.enabled"
+      }
+    ],
+    "uiPanels": [
+      {
+        "id": "character-manager-panel",
+        "title": "Character Manager",
+        "icon": "character",
+        "defaultWidth": 360,
+        "minWidth": 300,
+        "maxWidth": 460,
+        "priority": 15,
+        "when": "plugin.enabled"
+      }
+    ],
+    "transforms": []
+  },
+  "signature": {
+    "keyId": "main-2026",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "sig": "PLACEHOLDER"
+  }
+}

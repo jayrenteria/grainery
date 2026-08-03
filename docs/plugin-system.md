@@ -140,6 +140,8 @@ During `setup`, plugin calls SDK registration methods:
 - `registerImporter`
 - `registerStatusBadge`
 - `registerInlineAnnotationProvider`
+- `registerEditorCompletionProvider`
+- `registerEditorLandmarkProvider`
 - `registerUIControl`
 - `registerUIPanel`
 
@@ -299,6 +301,27 @@ Behavior:
 - annotations are rendered with host-owned style tokens (`note`, `note-active`)
 - annotations disappear immediately when plugin is disabled/uninstalled
 - no arbitrary plugin DOM injection is involved
+
+## 9) Editor completions
+
+Plugins can offer context-sensitive, host-rendered completion choices with
+`registerEditorCompletionProvider`. The host owns the popup, keyboard behavior,
+replacement range, and final editor transaction. Providers only return labels and
+replacement text.
+
+Completion providers require `document:read`, `editor:commands`, and granted
+`ui:mount`. Results are validated, length-limited, globally capped, and discarded
+when the document or selection changes while a worker request is pending.
+
+## 10) Editor landmarks
+
+Plugins can add host-rendered navigation ticks and optional gutter labels with
+`registerEditorLandmarkProvider`. A landmark references a validated document node
+range and may expose a tooltip, jump target, and left/right gutter label. Grainery
+owns the rail, tooltip, click navigation, and editor decorations.
+
+Landmarks require `document:read` and granted `ui:mount`. Provider results are
+validated and capped, and plugins cannot provide HTML or arbitrary DOM.
 
 ## Permission and Security Model
 
@@ -469,6 +492,8 @@ Available API surface:
 - `registerImporter`
 - `registerStatusBadge`
 - `registerInlineAnnotationProvider`
+- `registerEditorCompletionProvider`
+- `registerEditorLandmarkProvider`
 - `registerUIControl`
 - `registerUIPanel`
 - manifest `menus`

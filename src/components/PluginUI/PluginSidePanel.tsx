@@ -62,9 +62,6 @@ function renderBlock(
   onAction: (panelId: string, actionId: string) => void,
   onFormValueChange: (panelId: string, fieldId: string, value: string) => void
 ) {
-  const isSceneOutlinePanel =
-    panelId.endsWith(':scene-outline-panel') || panelId === 'scene-outline-panel';
-
   switch (block.type) {
     case 'heading': {
       const HeadingTag = block.level === 4 ? 'h4' : block.level === 3 ? 'h3' : 'h2';
@@ -173,7 +170,10 @@ function renderBlock(
       );
     case 'actions':
       return (
-        <div key={`${panelId}-actions-${index}`} className="plugin-panel-actions">
+        <div
+          key={`${panelId}-actions-${index}`}
+          className={`plugin-panel-actions plugin-panel-actions-${block.layout ?? 'wrap'}`}
+        >
           {block.actions.map((action) => {
             const previewStyle = actionPreviewStyle(action);
 
@@ -189,7 +189,7 @@ function renderBlock(
                       : action.variant === 'ghost'
                         ? 'btn-ghost'
                         : 'btn-neutral'
-                } ${isSceneOutlinePanel ? 'font-bold uppercase w-full justify-start' : ''}`}
+                } ${action.fullWidth || block.layout === 'stack' ? 'w-full justify-start' : ''}`}
                 onMouseDown={(event) => {
                   event.preventDefault();
                 }}

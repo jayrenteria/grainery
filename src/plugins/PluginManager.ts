@@ -8,6 +8,8 @@ import { evaluateWhenClause } from './when';
 import {
   assertContributedId,
   assertValidLocalId,
+  normalizeEditorCompletionsWithLimit,
+  normalizeEditorLandmarksWithLimit,
   normalizeInlineAnnotationsWithLimit,
   validatePanelContent,
   validateUiAction,
@@ -18,6 +20,9 @@ import type {
   ContributedTransform,
   DocumentTransformContext,
   DocumentTransformHook,
+  EditorCompletionContext,
+  EditorCompletionItem,
+  EditorLandmark,
   ElementLoopContext,
   ElementLoopProvider,
   HostToWorkerMessage,
@@ -41,7 +46,11 @@ import type {
   RegisteredUIControl,
   RegisteredUIPanel,
   RegisteredInlineAnnotationProvider,
+  RegisteredEditorCompletionProvider,
+  RegisteredEditorLandmarkProvider,
   RenderedInlineAnnotation,
+  RenderedEditorCompletion,
+  RenderedEditorLandmark,
   RenderedStatusBadge,
   UIControlAction,
   UIControlState,
@@ -91,6 +100,8 @@ interface ManifestContributionIndex {
   importers: Set<string>;
   statusBadges: Set<string>;
   inlineAnnotationProviders: Set<string>;
+  editorCompletionProviders: Set<string>;
+  editorLandmarkProviders: Set<string>;
   uiControls: Set<string>;
   uiPanels: Set<string>;
   transforms: Set<string>;
@@ -126,6 +137,8 @@ export class PluginManager {
   private importers: RegisteredImporter[] = [];
   private statusBadges: RegisteredStatusBadge[] = [];
   private inlineAnnotationProviders: RegisteredInlineAnnotationProvider[] = [];
+  private editorCompletionProviders: RegisteredEditorCompletionProvider[] = [];
+  private editorLandmarkProviders: RegisteredEditorLandmarkProvider[] = [];
   private uiControls: RegisteredUIControl[] = [];
   private uiPanels: RegisteredUIPanel[] = [];
   private activationStates = new Map<string, ActivationState>();
@@ -164,6 +177,8 @@ export class PluginManager {
       importers: [...this.importers],
       statusBadges: [...this.statusBadges],
       inlineAnnotationProviders: [...this.inlineAnnotationProviders],
+      editorCompletionProviders: [...this.editorCompletionProviders],
+      editorLandmarkProviders: [...this.editorLandmarkProviders],
       uiControls: [...this.uiControls],
       uiPanels: [...this.uiPanels],
     };
@@ -210,6 +225,31 @@ export class PluginManager {
 
   getStatusBadges(): RegisteredStatusBadge[] {
     return [...this.statusBadges];
+  }
+
+  getEditorCompletionProviders(): RegisteredEditorCompletionProvider[] {
+    return this.editorCompletionProviders.filter((provider) => {
+      const plugin = this.getPluginById(provider.pluginId);
+      return Boolean(
+        plugin
+        && plugin.enabled
+        && hasPluginPermission(plugin, 'document:read')
+        && hasPluginPermission(plugin, 'editor:commands')
+        && hasPluginPermission(plugin, 'ui:mount')
+      );
+    });
+  }
+
+  getEditorLandmarkProviders(): RegisteredEditorLandmarkProvider[] {
+    return this.editorLandmarkProviders.filter((provider) => {
+      const plugin = this.getPluginById(provider.pluginId);
+      return Boolean(
+        plugin
+        && plugin.enabled
+        && hasPluginPermission(plugin, 'document:read')
+        && hasPluginPermission(plugin, 'ui:mount')
+      );
+    });
   }
 
   getUIControls(mount?: RegisteredUIControl['mount']): RegisteredUIControl[] {
@@ -272,6 +312,8 @@ export class PluginManager {
     this.importers = [];
     this.statusBadges = [];
     this.inlineAnnotationProviders = [];
+    this.editorCompletionProviders = [];
+    this.editorLandmarkProviders = [];
     this.uiControls = [];
     this.uiPanels = [];
     this.activationStates.clear();
@@ -636,17 +678,71 @@ export class PluginManager {
     return rendered;
   }
 
+  async evaluateEditorCompletions(
+    context: EditorCompletionContext
+  ): Promise<RenderedEditorCompletion[]> {
+    const providers = [...this.getEditorCompletionProviders()].sort(
+      (a, b) => (b.priority ?? 0) - (a.priority ?? 0)
+    );
+    const maxPosition = Math.max(1, getDocumentContentSize(context.document));
+    const replaceFrom = Math.min(Math.max(Math.floor(context.replaceFrom), 1), maxPosition);
+    const replaceTo = Math.min(
+      Math.max(Math.floor(context.replaceTo), replaceFrom),
+      maxPosition
+    );
+
+    const jobs = providers.map(async (provider) => {
+      try {
+        await this.ensureActivated(provider.pluginId, 'onStartup');
+        const response = await this.invokeWorker(
+          provider.pluginId,
+          'editor-completions',
+          getLocalId(provider.id),
+          context
+        );
+        const candidate = Array.isArray(response) ? (response as EditorCompletionItem[]) : [];
+        const priority = provider.priority ?? 0;
+
+        return normalizeEditorCompletionsWithLimit(candidate).map((item) => ({
+          ...item,
+          id: composeId(provider.pluginId, `${getLocalId(provider.id)}.${item.id}`),
+          pluginId: provider.pluginId,
+          providerId: provider.id,
+          replaceFrom,
+          replaceTo,
+          priority,
+        } satisfies RenderedEditorCompletion));
+      } catch (error) {
+        console.error(`[PluginManager] Editor completion provider failed: ${provider.id}`, error);
+        return [] as RenderedEditorCompletion[];
+      }
+    });
+
+    const settled = await Promise.allSettled(jobs);
+    return settled
+      .flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
+      .sort((a, b) => b.priority - a.priority || a.label.localeCompare(b.label))
+      .slice(0, 8);
+  }
+
   async evaluateUIState(
     controlIds: string[],
     panelIds: string[],
+    landmarkProviderIds: string[],
     context: UIControlStateContext,
     panelFormValues: Record<string, Record<string, string>> = {}
-  ): Promise<{ controls: Record<string, UIControlState>; panels: Record<string, UIPanelContent> }> {
+  ): Promise<{
+    controls: Record<string, UIControlState>;
+    panels: Record<string, UIPanelContent>;
+    landmarks: RenderedEditorLandmark[];
+  }> {
     const controls: Record<string, UIControlState> = {};
     const panels: Record<string, UIPanelContent> = {};
+    const landmarks: RenderedEditorLandmark[] = [];
 
     const pluginToControlIds = new Map<string, string[]>();
     const pluginToPanelIds = new Map<string, string[]>();
+    const pluginToLandmarkProviderIds = new Map<string, string[]>();
 
     for (const controlId of controlIds) {
       const [pluginId, localId] = splitCompositeId(controlId);
@@ -672,7 +768,33 @@ export class PluginManager {
       pluginToPanelIds.set(pluginId, next);
     }
 
-    for (const [pluginId, localControlIds] of pluginToControlIds.entries()) {
+    for (const providerId of landmarkProviderIds) {
+      const [pluginId, localId] = splitCompositeId(providerId);
+      if (!pluginId || !localId) continue;
+
+      const plugin = this.getPluginById(pluginId);
+      if (
+        !plugin
+        || !hasPluginPermission(plugin, 'document:read')
+        || !hasPluginPermission(plugin, 'ui:mount')
+      ) {
+        continue;
+      }
+
+      const next = pluginToLandmarkProviderIds.get(pluginId) ?? [];
+      next.push(localId);
+      pluginToLandmarkProviderIds.set(pluginId, next);
+    }
+
+    const pluginIds = new Set([
+      ...pluginToControlIds.keys(),
+      ...pluginToPanelIds.keys(),
+      ...pluginToLandmarkProviderIds.keys(),
+    ]);
+    const maxPosition = Math.max(1, getDocumentContentSize(context.document));
+
+    for (const pluginId of pluginIds) {
+      const localControlIds = pluginToControlIds.get(pluginId) ?? [];
       const session = this.sessions.get(pluginId);
       if (!session || !session.ready) {
         continue;
@@ -680,6 +802,7 @@ export class PluginManager {
 
       try {
         const localPanelIds = pluginToPanelIds.get(pluginId) ?? [];
+        const localLandmarkProviderIds = pluginToLandmarkProviderIds.get(pluginId) ?? [];
         const localPanelFormValues = Object.fromEntries(
           localPanelIds.map((localPanelId) => [
             localPanelId,
@@ -690,6 +813,7 @@ export class PluginManager {
         const result = (await this.invokeWorker(pluginId, 'ui-evaluate', '__batch__', {
           controlIds: localControlIds,
           panelIds: localPanelIds,
+          landmarkProviderIds: localLandmarkProviderIds,
           panelFormValues: localPanelFormValues,
           context,
         })) as UIEvaluateResponse;
@@ -708,9 +832,40 @@ export class PluginManager {
           const globalId = composeId(pluginId, localPanelId);
           const panel = this.uiPanels.find((candidate) => candidate.id === globalId);
           if (result.panels?.[localPanelId]) {
-            panels[globalId] = result.panels[localPanelId];
+            try {
+              validatePanelContent(
+                result.panels[localPanelId],
+                `UI panel '${globalId}' evaluated content`
+              );
+              panels[globalId] = result.panels[localPanelId];
+            } catch (error) {
+              console.error(`[PluginManager] Rejected invalid UI panel content: ${globalId}`, error);
+            }
           } else if (panel?.content) {
             panels[globalId] = panel.content;
+          }
+        }
+
+
+        for (const localProviderId of localLandmarkProviderIds) {
+          const globalProviderId = composeId(pluginId, localProviderId);
+          const provider = this.editorLandmarkProviders.find(
+            (candidate) => candidate.id === globalProviderId
+          );
+          const candidate = Array.isArray(result.landmarks?.[localProviderId])
+            ? (result.landmarks[localProviderId] as EditorLandmark[])
+            : [];
+          const priority = provider?.priority ?? 0;
+
+          for (const item of normalizeEditorLandmarksWithLimit(candidate, maxPosition)) {
+            landmarks.push({
+              ...item,
+              id: composeId(pluginId, `${localProviderId}.${item.id}`),
+              pluginId,
+              providerId: globalProviderId,
+              priority,
+              ratio: maxPosition <= 1 ? 0 : (item.position - 1) / (maxPosition - 1),
+            });
           }
         }
       } catch (error) {
@@ -729,7 +884,8 @@ export class PluginManager {
       }
     }
 
-    return { controls, panels };
+    landmarks.sort((a, b) => b.priority - a.priority || a.position - b.position);
+    return { controls, panels, landmarks };
   }
 
   async triggerUIControl(
@@ -820,6 +976,12 @@ export class PluginManager {
       importers: new Set(contributes.importers.map((item) => item.id)),
       statusBadges: new Set(contributes.statusBadges.map((item) => item.id)),
       inlineAnnotationProviders: new Set(contributes.inlineAnnotationProviders.map((item) => item.id)),
+      editorCompletionProviders: new Set(
+        contributes.editorCompletionProviders.map((item) => item.id)
+      ),
+      editorLandmarkProviders: new Set(
+        contributes.editorLandmarkProviders.map((item) => item.id)
+      ),
       uiControls: new Set(contributes.uiControls.map((item) => item.id)),
       uiPanels: new Set(contributes.uiPanels.map((item) => item.id)),
       transforms: new Set(contributes.transforms.map((item) => item.id)),
@@ -920,6 +1082,26 @@ export class PluginManager {
     for (const provider of contributes.inlineAnnotationProviders) {
       assertValidLocalId(provider.id, 'Inline annotation provider');
       this.inlineAnnotationProviders.push({
+        id: composeId(plugin.id, provider.id),
+        pluginId: plugin.id,
+        title: provider.title,
+        priority: provider.priority,
+      });
+    }
+
+    for (const provider of contributes.editorCompletionProviders) {
+      assertValidLocalId(provider.id, 'Editor completion provider');
+      this.editorCompletionProviders.push({
+        id: composeId(plugin.id, provider.id),
+        pluginId: plugin.id,
+        title: provider.title,
+        priority: provider.priority,
+      });
+    }
+
+    for (const provider of contributes.editorLandmarkProviders) {
+      assertValidLocalId(provider.id, 'Editor landmark provider');
+      this.editorLandmarkProviders.push({
         id: composeId(plugin.id, provider.id),
         pluginId: plugin.id,
         title: provider.title,
@@ -1112,6 +1294,7 @@ export class PluginManager {
           session.ready = true;
         }
         this.activationStates.set(pluginId, 'active');
+        this.notifyListeners();
         return;
       }
 
@@ -1307,6 +1490,56 @@ export class PluginManager {
               priority: message.provider.priority,
             },
           ]);
+        this.notifyListeners();
+        return;
+      }
+
+      case 'worker:register-editor-completion-provider': {
+        try {
+          const contributions = this.getContributionIndex(pluginId);
+          assertValidLocalId(message.provider.id, 'Editor completion provider');
+          assertContributedId(
+            message.provider.id,
+            contributions.editorCompletionProviders,
+            'Editor completion provider'
+          );
+        } catch (error) {
+          await this.handleWorkerCrash(
+            pluginId,
+            error instanceof Error ? error.message : String(error)
+          );
+          return;
+        }
+
+        const id = composeId(pluginId, message.provider.id);
+        this.editorCompletionProviders = this.editorCompletionProviders
+          .filter((item) => item.id !== id)
+          .concat([{ id, pluginId, title: message.provider.title, priority: message.provider.priority }]);
+        this.notifyListeners();
+        return;
+      }
+
+      case 'worker:register-editor-landmark-provider': {
+        try {
+          const contributions = this.getContributionIndex(pluginId);
+          assertValidLocalId(message.provider.id, 'Editor landmark provider');
+          assertContributedId(
+            message.provider.id,
+            contributions.editorLandmarkProviders,
+            'Editor landmark provider'
+          );
+        } catch (error) {
+          await this.handleWorkerCrash(
+            pluginId,
+            error instanceof Error ? error.message : String(error)
+          );
+          return;
+        }
+
+        const id = composeId(pluginId, message.provider.id);
+        this.editorLandmarkProviders = this.editorLandmarkProviders
+          .filter((item) => item.id !== id)
+          .concat([{ id, pluginId, title: message.provider.title, priority: message.provider.priority }]);
         this.notifyListeners();
         return;
       }
@@ -1544,6 +1777,8 @@ export class PluginManager {
       | 'importer'
       | 'status'
       | 'inline-annotations'
+      | 'editor-completions'
+      | 'editor-landmarks'
       | 'ui-control'
       | 'ui-panel-action'
       | 'ui-evaluate',
@@ -1702,6 +1937,16 @@ export class PluginManager {
           (item) => item.id !== id
         );
         return;
+      case 'editor-completion-provider':
+        this.editorCompletionProviders = this.editorCompletionProviders.filter(
+          (item) => item.id !== id
+        );
+        return;
+      case 'editor-landmark-provider':
+        this.editorLandmarkProviders = this.editorLandmarkProviders.filter(
+          (item) => item.id !== id
+        );
+        return;
       case 'ui-control':
         this.uiControls = this.uiControls.filter((item) => item.id !== id);
         return;
@@ -1760,6 +2005,8 @@ export class PluginManager {
       importers: new Set(),
       statusBadges: new Set(),
       inlineAnnotationProviders: new Set(),
+      editorCompletionProviders: new Set(),
+      editorLandmarkProviders: new Set(),
       uiControls: new Set(),
       uiPanels: new Set(),
       transforms: new Set(),
@@ -1785,6 +2032,8 @@ function normalizeManifestContributions(contributes: PluginContributions | undef
       importers: [],
       statusBadges: [],
       inlineAnnotationProviders: [],
+      editorCompletionProviders: [],
+      editorLandmarkProviders: [],
       menus: [],
       keybindings: [],
       uiControls: [],
@@ -1820,6 +2069,12 @@ function normalizeManifestContributions(contributes: PluginContributions | undef
     statusBadges: Array.isArray(contributes.statusBadges) ? contributes.statusBadges : [],
     inlineAnnotationProviders: Array.isArray(contributes.inlineAnnotationProviders)
       ? contributes.inlineAnnotationProviders
+      : [],
+    editorCompletionProviders: Array.isArray(contributes.editorCompletionProviders)
+      ? contributes.editorCompletionProviders
+      : [],
+    editorLandmarkProviders: Array.isArray(contributes.editorLandmarkProviders)
+      ? contributes.editorLandmarkProviders
       : [],
     uiControls: Array.isArray(contributes.uiControls) ? contributes.uiControls : [],
     uiPanels: Array.isArray(contributes.uiPanels) ? contributes.uiPanels : [],

@@ -88,6 +88,10 @@ const CONTRIBUTION_KEYS = [
   'uiPanels',
   'transforms',
 ];
+const OPTIONAL_CONTRIBUTION_KEYS = [
+  'editorCompletionProviders',
+  'editorLandmarkProviders',
+];
 
 const IGNORED_PACKAGE_ENTRIES = new Set(['.DS_Store']);
 const IGNORED_PACKAGE_DIRS = new Set(['.git', 'node_modules']);
@@ -219,6 +223,8 @@ function createEmptyContributions() {
     importers: [],
     statusBadges: [],
     inlineAnnotationProviders: [],
+    editorCompletionProviders: [],
+    editorLandmarkProviders: [],
     uiControls: [],
     uiPanels: [],
     transforms: [],
@@ -231,7 +237,12 @@ function validateContributes(contributes, errors) {
     return createEmptyContributions();
   }
 
-  validateNoUnknownKeys(contributes, new Set(CONTRIBUTION_KEYS), errors, 'contributes');
+  validateNoUnknownKeys(
+    contributes,
+    new Set([...CONTRIBUTION_KEYS, ...OPTIONAL_CONTRIBUTION_KEYS]),
+    errors,
+    'contributes'
+  );
 
   const normalized = createEmptyContributions();
   for (const key of CONTRIBUTION_KEYS) {
@@ -241,6 +252,13 @@ function validateContributes(contributes, errors) {
     normalized[key] = ensureArray(contributes, errors, key);
   }
   normalized.configuration = contributes.configuration;
+  for (const key of OPTIONAL_CONTRIBUTION_KEYS) {
+    if (contributes[key] === undefined) {
+      normalized[key] = [];
+    } else {
+      normalized[key] = ensureArray(contributes, errors, key);
+    }
+  }
 
   validateContributedIdUniqueness(normalized.commands, errors, 'contributes.commands');
   validateContributedIdUniqueness(normalized.menus, errors, 'contributes.menus');
@@ -249,6 +267,8 @@ function validateContributes(contributes, errors) {
   validateContributedIdUniqueness(normalized.importers, errors, 'contributes.importers');
   validateContributedIdUniqueness(normalized.statusBadges, errors, 'contributes.statusBadges');
   validateContributedIdUniqueness(normalized.inlineAnnotationProviders, errors, 'contributes.inlineAnnotationProviders');
+  validateContributedIdUniqueness(normalized.editorCompletionProviders, errors, 'contributes.editorCompletionProviders');
+  validateContributedIdUniqueness(normalized.editorLandmarkProviders, errors, 'contributes.editorLandmarkProviders');
   validateContributedIdUniqueness(normalized.uiControls, errors, 'contributes.uiControls');
   validateContributedIdUniqueness(normalized.uiPanels, errors, 'contributes.uiPanels');
   validateContributedIdUniqueness(normalized.transforms, errors, 'contributes.transforms');
@@ -395,6 +415,26 @@ function validateContributes(contributes, errors) {
     }
     if (!isValidLocalId(item.id)) {
       pushError(errors, `Invalid contributes.inlineAnnotationProviders id: ${String(item.id)}`);
+    }
+  }
+
+  for (const item of normalized.editorCompletionProviders) {
+    if (!item || typeof item !== 'object') {
+      pushError(errors, 'contributes.editorCompletionProviders entries must be objects');
+      continue;
+    }
+    if (!isValidLocalId(item.id)) {
+      pushError(errors, `Invalid contributes.editorCompletionProviders id: ${String(item.id)}`);
+    }
+  }
+
+  for (const item of normalized.editorLandmarkProviders) {
+    if (!item || typeof item !== 'object') {
+      pushError(errors, 'contributes.editorLandmarkProviders entries must be objects');
+      continue;
+    }
+    if (!isValidLocalId(item.id)) {
+      pushError(errors, `Invalid contributes.editorLandmarkProviders id: ${String(item.id)}`);
     }
   }
 

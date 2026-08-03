@@ -48,6 +48,8 @@
     "importers": [],
     "statusBadges": [],
     "inlineAnnotationProviders": [],
+    "editorCompletionProviders": [],
+    "editorLandmarkProviders": [],
     "uiControls": [],
     "uiPanels": [],
     "transforms": []

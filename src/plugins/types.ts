@@ -120,6 +120,18 @@ export interface ContributedInlineAnnotationProvider {
   priority?: number;
 }
 
+export interface ContributedEditorCompletionProvider {
+  id: string;
+  title?: string;
+  priority?: number;
+}
+
+export interface ContributedEditorLandmarkProvider {
+  id: string;
+  title?: string;
+  priority?: number;
+}
+
 export interface ContributedUIControl {
   id: string;
   mount: UIControlMount;
@@ -161,6 +173,8 @@ export interface PluginContributions {
   importers: ContributedImporter[];
   statusBadges: ContributedStatusBadge[];
   inlineAnnotationProviders: ContributedInlineAnnotationProvider[];
+  editorCompletionProviders: ContributedEditorCompletionProvider[];
+  editorLandmarkProviders: ContributedEditorLandmarkProvider[];
   uiControls: ContributedUIControl[];
   uiPanels: ContributedUIPanel[];
   transforms: ContributedTransform[];
@@ -472,6 +486,102 @@ export interface RenderedInlineAnnotation {
   priority: number;
 }
 
+export interface EditorCompletionContext {
+  document: JSONContent;
+  screenplay?: ScreenplayDocument;
+  documentMode: DocumentMode;
+  currentElementType: ScreenplayElementType | null;
+  currentBlockIndex: number;
+  currentBlockText: string;
+  query: string;
+  replaceFrom: number;
+  replaceTo: number;
+  selectionFrom: number;
+  selectionTo: number;
+  cursorAtBlockEnd: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface EditorCompletionItem {
+  id: string;
+  label: string;
+  insertText: string;
+  detail?: string;
+}
+
+export interface EditorCompletionProvider {
+  id: string;
+  title?: string;
+  priority?: number;
+  handler: (
+    context: EditorCompletionContext
+  ) => EditorCompletionItem[] | void | Promise<EditorCompletionItem[] | void>;
+}
+
+export interface RegisteredEditorCompletionProvider {
+  id: string;
+  pluginId: string;
+  title?: string;
+  priority?: number;
+}
+
+export interface RenderedEditorCompletion extends EditorCompletionItem {
+  id: string;
+  pluginId: string;
+  providerId: string;
+  replaceFrom: number;
+  replaceTo: number;
+  priority: number;
+}
+
+export interface EditorLandmarkContext {
+  document: JSONContent;
+  screenplay?: ScreenplayDocument;
+  documentMode: DocumentMode;
+  currentElementType: ScreenplayElementType | null;
+  selectionFrom: number;
+  selectionTo: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface EditorLandmark {
+  id: string;
+  position: number;
+  from?: number;
+  to?: number;
+  label: string;
+  shortLabel?: string;
+  gutterLabel?: string;
+  active?: boolean;
+}
+
+export interface EditorLandmarkProvider {
+  id: string;
+  title?: string;
+  priority?: number;
+  handler: (
+    context: EditorLandmarkContext
+  ) => EditorLandmark[] | void | Promise<EditorLandmark[] | void>;
+}
+
+export interface RegisteredEditorLandmarkProvider {
+  id: string;
+  pluginId: string;
+  title?: string;
+  priority?: number;
+}
+
+export interface RenderedEditorLandmark extends EditorLandmark {
+  id: string;
+  pluginId: string;
+  providerId: string;
+  position: number;
+  from?: number;
+  to?: number;
+  priority: number;
+  ratio: number;
+}
+
 export type UIControlMount = 'top-bar' | 'bottom-bar' | 'editor-floating';
 export type UIControlKind = 'button' | 'toggle' | 'segmented';
 
@@ -560,13 +670,19 @@ export interface UIPanelActionItem {
     fontWeight?: number;
     fontStyle?: 'normal' | 'italic' | 'oblique';
   };
+  fullWidth?: boolean;
 }
 
 export type UIPanelBlock =
   | { type: 'heading'; text: string; level?: 2 | 3 | 4 }
   | { type: 'text'; text: string }
   | { type: 'divider' }
-  | { type: 'scroll'; maxHeight?: number; blocks: UIPanelBlock[] }
+  | {
+      type: 'scroll';
+      maxHeight?: number;
+      scrollToActionId?: string;
+      blocks: UIPanelBlock[];
+    }
   | { type: 'callout'; tone?: 'info' | 'success' | 'warning' | 'danger'; title?: string; text: string }
   | { type: 'badgeList'; items: Array<{ label: string; value?: string; tone?: 'neutral' | 'info' | 'success' | 'warning' | 'danger' }> }
   | { type: 'progress'; label: string; value: number; max?: number; tone?: 'neutral' | 'primary' | 'success' | 'warning' | 'danger' }
@@ -589,7 +705,7 @@ export type UIPanelBlock =
       rows?: number;
       maxLength?: number;
     }
-  | { type: 'actions'; actions: UIPanelActionItem[] };
+  | { type: 'actions'; layout?: 'wrap' | 'stack'; actions: UIPanelActionItem[] };
 
 export interface UIPanelContent {
   blocks: UIPanelBlock[];
@@ -669,6 +785,7 @@ export interface EvaluatedUIPanel extends RegisteredUIPanel {
 export interface UIEvaluateResponse {
   controls: Record<string, UIControlState>;
   panels: Record<string, UIPanelContent>;
+  landmarks: Record<string, EditorLandmark[]>;
 }
 
 export interface ProposedPluginApi {}
@@ -707,6 +824,8 @@ export interface PluginApi {
   registerImporter(importer: Importer): Disposable;
   registerStatusBadge(badge: StatusBadge): Disposable;
   registerInlineAnnotationProvider(provider: InlineAnnotationProvider): Disposable;
+  registerEditorCompletionProvider(provider: EditorCompletionProvider): Disposable;
+  registerEditorLandmarkProvider(provider: EditorLandmarkProvider): Disposable;
   registerUIControl(control: UIControlDefinition): Disposable;
   registerUIPanel(panel: UIPanelDefinition): Disposable;
   getDocument(): Promise<JSONContent>;
@@ -741,6 +860,8 @@ export interface HostInvokeMessage {
     | 'importer'
     | 'status'
     | 'inline-annotations'
+    | 'editor-completions'
+    | 'editor-landmarks'
     | 'ui-control'
     | 'ui-panel-action'
     | 'ui-evaluate';
@@ -819,6 +940,18 @@ export interface WorkerRegisterInlineAnnotationProviderMessage {
   provider: Omit<InlineAnnotationProvider, 'handler'>;
 }
 
+export interface WorkerRegisterEditorCompletionProviderMessage {
+  type: 'worker:register-editor-completion-provider';
+  pluginId: string;
+  provider: Omit<EditorCompletionProvider, 'handler'>;
+}
+
+export interface WorkerRegisterEditorLandmarkProviderMessage {
+  type: 'worker:register-editor-landmark-provider';
+  pluginId: string;
+  provider: Omit<EditorLandmarkProvider, 'handler'>;
+}
+
 export interface WorkerRegisterUIControlMessage {
   type: 'worker:register-ui-control';
   pluginId: string;
@@ -839,6 +972,8 @@ export type WorkerRegistrationKind =
   | 'importer'
   | 'status-badge'
   | 'inline-annotation-provider'
+  | 'editor-completion-provider'
+  | 'editor-landmark-provider'
   | 'ui-control'
   | 'ui-panel';
 
@@ -890,6 +1025,8 @@ export type WorkerToHostMessage =
   | WorkerRegisterImporterMessage
   | WorkerRegisterStatusBadgeMessage
   | WorkerRegisterInlineAnnotationProviderMessage
+  | WorkerRegisterEditorCompletionProviderMessage
+  | WorkerRegisterEditorLandmarkProviderMessage
   | WorkerRegisterUIControlMessage
   | WorkerRegisterUIPanelMessage
   | WorkerDisposeRegistrationMessage
@@ -908,6 +1045,8 @@ export interface PluginStateSnapshot {
   importers: RegisteredImporter[];
   statusBadges: RegisteredStatusBadge[];
   inlineAnnotationProviders: RegisteredInlineAnnotationProvider[];
+  editorCompletionProviders: RegisteredEditorCompletionProvider[];
+  editorLandmarkProviders: RegisteredEditorLandmarkProvider[];
   uiControls: RegisteredUIControl[];
   uiPanels: RegisteredUIPanel[];
 }

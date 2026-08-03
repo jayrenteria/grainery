@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { JSONContent } from '@tiptap/react';
 import { PluginToolbar } from './PluginToolbar';
 import { PluginSidePanel } from './PluginSidePanel';
+import { PluginLandmarkRail } from './PluginLandmarkRail';
 import type {
   EvaluatedUIControl,
   EvaluatedUIPanel,
@@ -11,6 +12,7 @@ import type {
   UIControlStateContext,
   UIPanelBlock,
   UIPanelContent,
+  RenderedEditorLandmark,
 } from '../../plugins';
 import type { DocumentMode, ScreenplayElementType } from '../../lib/types';
 import { createWhenContext, evaluateWhenClause } from '../../plugins/when';
@@ -30,9 +32,11 @@ interface PluginUIHostProps {
   pluginManager: PluginManager;
   pluginStateVersion: number;
   editorVersion: number;
+  documentId: string;
   document: JSONContent;
   documentMode: DocumentMode;
   editorAdapter: EditorAdapter;
+  onLandmarksChange?: (landmarks: RenderedEditorLandmark[]) => void;
 }
 
 function defaultPanelContent(): UIPanelContent {
@@ -41,6 +45,7 @@ function defaultPanelContent(): UIPanelContent {
 
 const DEFAULT_INPUT_MAX_LENGTH = 200;
 const DEFAULT_TEXTAREA_MAX_LENGTH = 4000;
+const UI_EVALUATION_DEBOUNCE_MS = 80;
 
 interface PanelFormField {
   fieldId: string;
@@ -130,9 +135,11 @@ export function PluginUIHost({
   pluginManager,
   pluginStateVersion,
   editorVersion,
+  documentId,
   document,
   documentMode,
   editorAdapter,
+  onLandmarksChange,
 }: PluginUIHostProps) {
   const allTopControls = useMemo(() => pluginManager.getUIControls('top-bar'), [pluginManager, pluginStateVersion]);
   const allBottomControls = useMemo(
@@ -144,6 +151,10 @@ export function PluginUIHost({
     [pluginManager, pluginStateVersion]
   );
   const allPanels = useMemo(() => pluginManager.getUIPanels(), [pluginManager, pluginStateVersion]);
+  const allLandmarkProviders = useMemo(
+    () => pluginManager.getEditorLandmarkProviders(),
+    [pluginManager, pluginStateVersion]
+  );
   const installedPlugins = useMemo(() => pluginManager.getInstalledPlugins(), [pluginManager, pluginStateVersion]);
 
   const [controlStateMap, setControlStateMap] = useState<Record<string, UIControlState>>({});
@@ -151,6 +162,7 @@ export function PluginUIHost({
   const [panelFormValuesMap, setPanelFormValuesMap] = useState<Record<string, Record<string, string>>>({});
   const [panelFormDefaultsMap, setPanelFormDefaultsMap] = useState<Record<string, Record<string, string>>>({});
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
+  const [landmarks, setLandmarks] = useState<RenderedEditorLandmark[]>([]);
   const panelFormValuesKey = useMemo(() => JSON.stringify(panelFormValuesMap), [panelFormValuesMap]);
 
   const context = useMemo<UIControlStateContext>(
@@ -164,9 +176,10 @@ export function PluginUIHost({
         isCurrentEmpty: editorAdapter.isCurrentElementEmpty(),
         selectionFrom: selection.from,
         selectionTo: selection.to,
+        metadata: { documentId },
       };
     },
-    [document, documentMode, editorAdapter, editorVersion]
+    [document, documentId, documentMode, editorAdapter, editorVersion]
   );
 
   const pluginEnabledMap = useMemo(() => {
@@ -214,16 +227,25 @@ export function PluginUIHost({
     () => [...topControls, ...bottomControls, ...floatingControls].map((control) => control.id),
     [topControls, bottomControls, floatingControls]
   );
-  const allPanelIds = useMemo(() => panels.map((panel) => panel.id), [panels]);
+  const allPanelIds = useMemo(
+    () => (activePanelId && panels.some((panel) => panel.id === activePanelId) ? [activePanelId] : []),
+    [activePanelId, panels]
+  );
+  const allLandmarkProviderIds = useMemo(
+    () => allLandmarkProviders.map((provider) => provider.id),
+    [allLandmarkProviders]
+  );
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
     const evaluate = async () => {
       try {
         const evaluated = await pluginManager.evaluateUIState(
           allControlIds,
           allPanelIds,
+          allLandmarkProviderIds,
           context,
           panelFormValuesMap
         );
@@ -236,6 +258,8 @@ export function PluginUIHost({
 
           setControlStateMap(evaluated.controls);
           setPanelContentMap(nextPanelContentMap);
+          setLandmarks(evaluated.landmarks);
+          onLandmarksChange?.(evaluated.landmarks);
           setPanelFormValuesMap((prevValues) => {
             const nextValues: Record<string, Record<string, string>> = {};
             setPanelFormDefaultsMap((prevDefaults) => {
@@ -264,23 +288,43 @@ export function PluginUIHost({
           setPanelContentMap({});
           setPanelFormValuesMap({});
           setPanelFormDefaultsMap({});
+          setLandmarks([]);
+          onLandmarksChange?.([]);
         }
       }
     };
 
-    if (allControlIds.length > 0 || allPanelIds.length > 0) {
-      void evaluate();
+    if (allControlIds.length > 0 || allPanelIds.length > 0 || allLandmarkProviderIds.length > 0) {
+      timer = setTimeout(() => {
+        timer = null;
+        void evaluate();
+      }, UI_EVALUATION_DEBOUNCE_MS);
     } else {
       setControlStateMap({});
       setPanelContentMap({});
       setPanelFormValuesMap({});
       setPanelFormDefaultsMap({});
+      setLandmarks([]);
+      onLandmarksChange?.([]);
     }
 
     return () => {
       cancelled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
     };
-  }, [allControlIds, allPanelIds, context, panels, panelFormValuesKey, pluginManager, pluginStateVersion]);
+  }, [
+    allControlIds,
+    allLandmarkProviderIds,
+    allPanelIds,
+    context,
+    onLandmarksChange,
+    panels,
+    panelFormValuesKey,
+    pluginManager,
+    pluginStateVersion,
+  ]);
 
   useEffect(() => {
     if (!activePanelId) {
@@ -450,6 +494,10 @@ export function PluginUIHost({
         mount="editor-floating"
         controls={evaluatedFloatingControls}
         onTrigger={handleTriggerControl}
+      />
+      <PluginLandmarkRail
+        landmarks={landmarks}
+        onJump={(position) => editorAdapter.jumpToPosition(position, 100)}
       />
       <PluginSidePanel
         panel={evaluatedPanel}

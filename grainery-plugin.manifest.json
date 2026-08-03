@@ -285,6 +285,32 @@
             }
           }
         },
+        "editorCompletionProviders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "title": { "type": "string", "minLength": 1 },
+              "priority": { "type": "number" }
+            }
+          }
+        },
+        "editorLandmarkProviders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+              "title": { "type": "string", "minLength": 1 },
+              "priority": { "type": "number" }
+            }
+          }
+        },
         "uiControls": {
           "type": "array",
           "items": {

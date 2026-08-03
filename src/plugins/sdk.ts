@@ -9,6 +9,8 @@ export type {
   ContributedExporter,
   ContributedImporter,
   ContributedInlineAnnotationProvider,
+  ContributedEditorCompletionProvider,
+  ContributedEditorLandmarkProvider,
   ContributedKeybinding,
   ContributedStatusBadge,
   ContributedTransform,
@@ -19,6 +21,12 @@ export type {
   DocumentTransform,
   DocumentTransformContext,
   DocumentTransformHook,
+  EditorCompletionContext,
+  EditorCompletionItem,
+  EditorCompletionProvider,
+  EditorLandmark,
+  EditorLandmarkContext,
+  EditorLandmarkProvider,
   ElementLoopContext,
   ElementLoopEvent,
   ElementLoopProvider,
@@ -50,6 +58,8 @@ export type {
   RegisteredExporter,
   RegisteredImporter,
   RegisteredInlineAnnotationProvider,
+  RegisteredEditorCompletionProvider,
+  RegisteredEditorLandmarkProvider,
   RegisteredCommandMenu,
   RegisteredKeybinding,
   RegisteredPluginConfiguration,
@@ -58,6 +68,8 @@ export type {
   RegisteredUIControl,
   RegisteredUIPanel,
   RenderedInlineAnnotation,
+  RenderedEditorCompletion,
+  RenderedEditorLandmark,
   RenderedStatusBadge,
   ScreenplayMutationApi,
   StatusBadge,
@@ -99,6 +111,8 @@ import type {
   GraineryPlugin as GraineryPluginType,
   Importer,
   InlineAnnotationProvider,
+  EditorCompletionProvider,
+  EditorLandmarkProvider,
   PluginCommand,
   PluginManifest,
   StatusBadge,
@@ -139,6 +153,14 @@ export function defineStatusBadge<T extends StatusBadge>(badge: T): T {
 }
 
 export function defineInlineAnnotationProvider<T extends InlineAnnotationProvider>(provider: T): T {
+  return provider;
+}
+
+export function defineEditorCompletionProvider<T extends EditorCompletionProvider>(provider: T): T {
+  return provider;
+}
+
+export function defineEditorLandmarkProvider<T extends EditorLandmarkProvider>(provider: T): T {
   return provider;
 }
 

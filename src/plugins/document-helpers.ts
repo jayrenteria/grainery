@@ -308,7 +308,35 @@ export class ScreenplayDocument {
     const index = this.findBlockIndex(ref);
     if (index >= 0) {
       const block = this.ensureContent()[index];
-      block.content = text ? [{ type: 'text', text }] : [];
+      const marks = findFirstTextMarks(block);
+      block.content = text
+        ? [
+            {
+              type: 'text',
+              text,
+              ...(marks ? { marks } : {}),
+            },
+          ]
+        : [];
+    }
+    return this;
+  }
+
+  updateBlockAttrs(ref: ScreenplayBlockRef, patch: Record<string, unknown>): this {
+    const index = this.findBlockIndex(ref);
+    if (index >= 0) {
+      const block = this.ensureContent()[index];
+      const nextAttrs = { ...(block.attrs ?? {}) };
+
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === undefined || value === null) {
+          delete nextAttrs[key];
+        } else {
+          nextAttrs[key] = cloneJson(value);
+        }
+      }
+
+      block.attrs = Object.keys(nextAttrs).length > 0 ? nextAttrs : undefined;
     }
     return this;
   }
@@ -414,6 +442,27 @@ function readNodeText(node: JSONContent | undefined): string {
 
   const children = Array.isArray(node.content) ? node.content : [];
   return children.map(readNodeText).join('');
+}
+
+function findFirstTextMarks(node: JSONContent | undefined): JSONContent['marks'] | undefined {
+  if (!node) {
+    return undefined;
+  }
+
+  if (typeof node.text === 'string') {
+    return Array.isArray(node.marks) && node.marks.length > 0
+      ? cloneJson(node.marks)
+      : undefined;
+  }
+
+  for (const child of Array.isArray(node.content) ? node.content : []) {
+    const marks = findFirstTextMarks(child);
+    if (marks) {
+      return marks;
+    }
+  }
+
+  return undefined;
 }
 
 function getNodeSize(node: JSONContent | undefined): number {

@@ -11,3 +11,7 @@ import type { GraineryPlugin } from '@grainery/plugin-sdk';
 ```
 
 Runtime helpers such as `definePlugin` are available for bundled plugin projects.
+
+The SDK also exposes host-rendered editor completion and landmark providers. Their
+outputs are plain data; Grainery owns validation, rendering, keyboard behavior, and
+editor mutations.

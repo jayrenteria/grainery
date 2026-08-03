@@ -18,6 +18,11 @@ export {
   getPluginAnnotationsState,
 } from './PluginAnnotationsExtension';
 export {
+  PluginLandmarksExtension,
+  pluginLandmarksPluginKey,
+  getPluginLandmarksState,
+} from './PluginLandmarksExtension';
+export {
   InactiveSelectionExtension,
   inactiveSelectionPluginKey,
 } from './InactiveSelectionExtension';

@@ -1,4 +1,6 @@
 import type {
+  EditorCompletionItem,
+  EditorLandmark,
   InlineAnnotation,
   UIPanelBlock,
   UIPanelContent,
@@ -10,6 +12,9 @@ import type {
 export const MAX_PANEL_BLOCKS = 256;
 export const MAX_ACTIONS_PER_BLOCK = 64;
 export const MAX_ANNOTATIONS_PER_PROVIDER = 500;
+export const MAX_COMPLETIONS_PER_PROVIDER = 12;
+export const MAX_LANDMARKS_PER_PROVIDER = 1_000;
+export const MAX_PANEL_NESTING_DEPTH = 8;
 
 const LOCAL_ID_RE = /^[a-zA-Z0-9._-]+$/;
 const UI_CONTROL_MOUNTS = new Set(['top-bar', 'bottom-bar', 'editor-floating']);
@@ -109,12 +114,27 @@ export function validatePanelContent(content: UIPanelContent, scope: string): vo
     throw new Error(`${scope} exceeds max block count (${MAX_PANEL_BLOCKS})`);
   }
 
+  const counter = { value: 0 };
   for (const block of content.blocks) {
-    validatePanelBlock(block, scope);
+    validatePanelBlock(block, scope, 0, counter);
   }
 }
 
-function validatePanelBlock(block: UIPanelBlock, scope: string): void {
+function validatePanelBlock(
+  block: UIPanelBlock,
+  scope: string,
+  depth: number,
+  counter: { value: number }
+): void {
+  if (depth > MAX_PANEL_NESTING_DEPTH) {
+    throw new Error(`${scope} exceeds max nesting depth (${MAX_PANEL_NESTING_DEPTH})`);
+  }
+
+  counter.value += 1;
+  if (counter.value > MAX_PANEL_BLOCKS) {
+    throw new Error(`${scope} exceeds max total block count (${MAX_PANEL_BLOCKS})`);
+  }
+
   if (!block || typeof block !== 'object') {
     throw new Error(`${scope} contains an invalid panel block`);
   }
@@ -146,6 +166,18 @@ function validatePanelBlock(block: UIPanelBlock, scope: string): void {
     }
   }
 
+  if (block.type === 'scroll') {
+    if (!Array.isArray(block.blocks)) {
+      throw new Error(`${scope} scroll block must include blocks[]`);
+    }
+    if (block.scrollToActionId !== undefined) {
+      assertValidLocalId(block.scrollToActionId, `${scope} scroll target`);
+    }
+    for (const child of block.blocks) {
+      validatePanelBlock(child, scope, depth + 1, counter);
+    }
+  }
+
   if (block.type === 'actions') {
     if (!Array.isArray(block.actions)) {
       throw new Error(`${scope} actions block must include actions[]`);
@@ -155,10 +187,17 @@ function validatePanelBlock(block: UIPanelBlock, scope: string): void {
       throw new Error(`${scope} actions block exceeds max actions (${MAX_ACTIONS_PER_BLOCK})`);
     }
 
+    if (block.layout !== undefined && block.layout !== 'wrap' && block.layout !== 'stack') {
+      throw new Error(`${scope} actions block has unsupported layout '${String(block.layout)}'`);
+    }
+
     for (const action of block.actions) {
       assertValidLocalId(action.id, `${scope} action`);
       if (typeof action.label !== 'string' || action.label.trim().length === 0) {
         throw new Error(`${scope} action '${action.id}' must have a label`);
+      }
+      if (action.fullWidth !== undefined && typeof action.fullWidth !== 'boolean') {
+        throw new Error(`${scope} action '${action.id}' fullWidth must be boolean`);
       }
     }
   }
@@ -224,6 +263,109 @@ export function normalizeInlineAnnotationsWithLimit(
     }
 
     normalized.push(annotation);
+    if (normalized.length >= limit) {
+      break;
+    }
+  }
+
+  return normalized;
+}
+
+export function normalizeEditorCompletionsWithLimit(
+  items: EditorCompletionItem[],
+  limit = MAX_COMPLETIONS_PER_PROVIDER
+): EditorCompletionItem[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  const normalized: EditorCompletionItem[] = [];
+  const seen = new Set<string>();
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string') {
+      continue;
+    }
+
+    const id = item.id.trim();
+    const label = typeof item.label === 'string' ? item.label.replace(/\u0000/g, '').trim() : '';
+    const insertText =
+      typeof item.insertText === 'string' ? item.insertText.replace(/\u0000/g, '') : '';
+    if (!isValidLocalId(id) || !label || !insertText || seen.has(id)) {
+      continue;
+    }
+
+    seen.add(id);
+    normalized.push({
+      id,
+      label: label.slice(0, 200),
+      insertText: insertText.slice(0, 200),
+      detail:
+        typeof item.detail === 'string'
+          ? item.detail.replace(/\u0000/g, '').trim().slice(0, 200) || undefined
+          : undefined,
+    });
+
+    if (normalized.length >= limit) {
+      break;
+    }
+  }
+
+  return normalized;
+}
+
+export function normalizeEditorLandmarksWithLimit(
+  items: EditorLandmark[],
+  maxPosition: number,
+  limit = MAX_LANDMARKS_PER_PROVIDER
+): EditorLandmark[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  const normalized: EditorLandmark[] = [];
+  const seen = new Set<string>();
+  const safeMax = Math.max(1, Math.floor(maxPosition));
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string') {
+      continue;
+    }
+
+    const id = item.id.trim();
+    const rawPosition = Number(item.position);
+    const label = typeof item.label === 'string' ? item.label.replace(/\u0000/g, '').trim() : '';
+    if (!isValidLocalId(id) || !Number.isFinite(rawPosition) || !label || seen.has(id)) {
+      continue;
+    }
+
+    const position = Math.min(Math.max(Math.floor(rawPosition), 1), safeMax);
+    const rawFrom = Number(item.from);
+    const rawTo = Number(item.to);
+    const from = Number.isFinite(rawFrom)
+      ? Math.min(Math.max(Math.floor(rawFrom), 0), safeMax)
+      : undefined;
+    const to = Number.isFinite(rawTo)
+      ? Math.min(Math.max(Math.floor(rawTo), 0), safeMax)
+      : undefined;
+
+    seen.add(id);
+    normalized.push({
+      id,
+      position,
+      ...(from !== undefined && to !== undefined && to > from ? { from, to } : {}),
+      label: label.slice(0, 300),
+      shortLabel:
+        typeof item.shortLabel === 'string'
+          ? item.shortLabel.replace(/\u0000/g, '').trim().slice(0, 32) || undefined
+          : undefined,
+      gutterLabel:
+        typeof item.gutterLabel === 'string'
+          ? item.gutterLabel.replace(/\u0000/g, '').trim().slice(0, 16) || undefined
+          : undefined,
+      active: Boolean(item.active),
+    });
+
     if (normalized.length >= limit) {
       break;
     }
