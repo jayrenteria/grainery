@@ -29,6 +29,8 @@ interface SettingsModalProps {
   pluginStateVersion: number;
   keymapHintsEnabled: boolean;
   onKeymapHintsEnabledChange: (enabled: boolean) => void;
+  keymapHintsAlwaysVisible: boolean;
+  onKeymapHintsAlwaysVisibleChange: (alwaysVisible: boolean) => void;
   recentDocumentsPanelEnabled: boolean;
   onRecentDocumentsPanelEnabledChange: (enabled: boolean) => void;
   autoSaveEnabled: boolean;
@@ -162,6 +164,8 @@ export function SettingsModal({
   pluginStateVersion,
   keymapHintsEnabled,
   onKeymapHintsEnabledChange,
+  keymapHintsAlwaysVisible,
+  onKeymapHintsAlwaysVisibleChange,
   recentDocumentsPanelEnabled,
   onRecentDocumentsPanelEnabledChange,
   autoSaveEnabled,
@@ -446,6 +450,23 @@ export function SettingsModal({
                         className="toggle toggle-sm"
                         checked={keymapHintsEnabled}
                         onChange={(event) => onKeymapHintsEnabledChange(event.target.checked)}
+                      />
+                    </span>
+                  </label>
+
+                  <label className="settings-editor-option">
+                    <span className="settings-editor-option-copy">
+                      <span>Keep keyboard hints visible</span>
+                      <small>Prevent keyboard hints from fading after a few seconds.</small>
+                    </span>
+                    <span className="settings-editor-option-control">
+                      <span aria-hidden="true">{keymapHintsAlwaysVisible ? 'On' : 'Off'}</span>
+                      <input
+                        type="checkbox"
+                        className="toggle toggle-sm"
+                        checked={keymapHintsAlwaysVisible}
+                        disabled={!keymapHintsEnabled}
+                        onChange={(event) => onKeymapHintsAlwaysVisibleChange(event.target.checked)}
                       />
                     </span>
                   </label>

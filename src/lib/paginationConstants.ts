@@ -20,8 +20,8 @@ export const CHAR_WIDTH_PT = 7.2; // Approximate width of Courier character at 1
 export const CHARACTER_INDENT_PT = 144; // 2 inches from margin
 export const DIALOGUE_INDENT_PT = 72; // 1 inch from margin
 export const DIALOGUE_WIDTH_PT = 252; // 3.5 inches
-export const PARENTHETICAL_INDENT_PT = 108; // 1.5 inches from margin
-export const PARENTHETICAL_WIDTH_PT = 144; // 2 inches
+export const PARENTHETICAL_INDENT_PT = 72; // 1 inch from margin
+export const PARENTHETICAL_WIDTH_PT = 216; // 3 inches
 
 // Derived values
 export const CONTENT_WIDTH_PT = PAGE_WIDTH_PT - MARGIN_LEFT_PT - MARGIN_RIGHT_PT; // 432pt = 6 inches

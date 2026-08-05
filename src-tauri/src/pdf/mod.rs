@@ -21,8 +21,8 @@ const LINE_HEIGHT: f32 = 12.0; // Single-spaced Courier
 const CHARACTER_INDENT: f32 = 144.0; // 2 inches from margin
 const DIALOGUE_INDENT: f32 = 72.0; // 1 inch from margin
 const DIALOGUE_WIDTH: f32 = 252.0; // 3.5 inches
-const PARENTHETICAL_INDENT: f32 = 108.0; // 1.5 inches from margin
-const PARENTHETICAL_WIDTH: f32 = 144.0; // 2 inches
+const PARENTHETICAL_INDENT: f32 = 72.0; // 1 inch from margin
+const PARENTHETICAL_WIDTH: f32 = 216.0; // 3 inches
 
 // Font metrics for line wrapping / centering estimates
 const COURIER_CHAR_WIDTH: f32 = 7.2; // Courier at 12pt
