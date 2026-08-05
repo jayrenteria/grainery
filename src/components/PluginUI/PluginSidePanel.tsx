@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 import { PluginIcon } from '../../plugins/ui/icons';
 import type { EvaluatedUIPanel, UIPanelActionItem, UIPanelBlock } from '../../plugins';
 
@@ -54,6 +54,14 @@ function actionPreviewStyle(action: UIPanelActionItem): CSSProperties | undefine
   return style;
 }
 
+function getScrollTargetKey(blocks: UIPanelBlock[]): string {
+  return blocks
+    .flatMap((block) => block.type === 'scroll'
+      ? [block.scrollToActionId ?? '', getScrollTargetKey(block.blocks)]
+      : [])
+    .join(':');
+}
+
 function renderBlock(
   panelId: string,
   block: UIPanelBlock,
@@ -89,6 +97,7 @@ function renderBlock(
         <div
           key={`${panelId}-scroll-${index}`}
           className="plugin-panel-scroll"
+          data-plugin-scroll-target={block.scrollToActionId}
           style={{ maxHeight }}
         >
           {block.blocks.map((child, childIndex) =>
@@ -181,6 +190,7 @@ function renderBlock(
               <button
                 key={`${panelId}-action-${action.id}`}
                 type="button"
+                data-plugin-action-id={action.id}
                 className={`btn btn-xs ${
                   action.variant === 'primary'
                     ? 'btn-primary'
@@ -280,6 +290,35 @@ export function PluginSidePanel({
   onAction,
   onFormValueChange,
 }: PluginSidePanelProps) {
+  const panelRef = useRef<HTMLElement>(null);
+  const scrollTargetKey = panel ? getScrollTargetKey(panel.content.blocks) : '';
+
+  useEffect(() => {
+    const host = panelRef.current;
+    if (!host) {
+      return;
+    }
+
+    for (const container of host.querySelectorAll<HTMLElement>('[data-plugin-scroll-target]')) {
+      const actionId = container.dataset.pluginScrollTarget;
+      const target = actionId
+        ? container.querySelector<HTMLElement>(`[data-plugin-action-id="${actionId}"]`)
+        : null;
+      if (!target) {
+        continue;
+      }
+
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const centeredTop =
+        container.scrollTop
+        + targetRect.top
+        - containerRect.top
+        - (container.clientHeight - targetRect.height) / 2;
+      container.scrollTo({ top: Math.max(0, centeredTop), behavior: 'auto' });
+    }
+  }, [panel?.id, scrollTargetKey]);
+
   if (!panel) {
     return null;
   }
@@ -287,7 +326,12 @@ export function PluginSidePanel({
   const width = panel.defaultWidth ?? 280;
 
   return (
-    <aside className="plugin-side-panel" style={{ width }} aria-label={`${panel.title} panel`}>
+    <aside
+      ref={panelRef}
+      className="plugin-side-panel"
+      style={{ width }}
+      aria-label={`${panel.title} panel`}
+    >
       <header className="plugin-side-panel-header">
         <div className="plugin-side-panel-title-wrap">
           <PluginIcon icon={panel.icon ?? 'panel'} className="h-4 w-4" />

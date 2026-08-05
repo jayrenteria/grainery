@@ -60,7 +60,7 @@ What each example demonstrates:
 
 - `wordcount`: element loop rule, command, status badge, pre-save transform, exporter.
 - `element-toolbar`: declarative UI control + side panel + editor action dispatch.
-- `scene-outline`: automatic scene numbering, panel outline, right-side landmark rail, and click-to-jump navigation.
+- `scene-outline`: side panel scene list with click-to-jump navigation.
 - `character-manager`: current-document character completion and cue-only mass rename.
 - `review-notes`: reviewer-attributed notes with panel form fields, document plugin data, and inline highlights.
 
@@ -370,9 +370,10 @@ host-owned replacement range. Return an empty list when the context does not app
 
 Use `registerEditorLandmarkProvider` for persistent navigation points. Build panel
 rows and landmark ticks from the same document index so labels, order, and jump
-positions stay consistent. See `examples/plugins/scene-outline/src/main.ts` for that
-shared-index pattern and `examples/plugins/character-manager/src/main.ts` for a
-completion provider.
+positions stay consistent. Plugins contributing completions or landmarks must include
+`onStartup` in `activationEvents` so their providers are available whenever the editor
+needs them. See `examples/plugins/character-manager/src/main.ts` for a completion
+provider.
 
 ## 12. Step-by-step walkthrough: `review-notes`
 

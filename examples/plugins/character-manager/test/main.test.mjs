@@ -3,7 +3,12 @@ import test from 'node:test';
 import plugin from '../dist/main.js';
 
 function createScreenplay(names) {
-  const blocks = names.map((text, index) => ({ index, text }));
+  let position = 1;
+  const blocks = names.map((text, index) => {
+    const block = { index, text, from: position, to: position + text.length + 2 };
+    position = block.to;
+    return block;
+  });
   return {
     characters() {
       return blocks;
@@ -14,10 +19,11 @@ function createScreenplay(names) {
   };
 }
 
-function createPanelHarness(mutationDocument) {
+function createPanelHarness(mutationDocument, onAnnotationProvider = () => {}) {
   let panel = null;
   plugin.setup({
     registerEditorCompletionProvider() {},
+    registerInlineAnnotationProvider: onAnnotationProvider,
     registerUIControl() {},
     registerUIPanel(definition) {
       panel = definition;
@@ -87,4 +93,21 @@ test('resets selection, preview, and success when the document ID changes', asyn
   assert.ok(
     !reset.blocks.some((block) => block.type === 'callout' && block.title === 'Confirm mass rename')
   );
+});
+
+test('highlights only cues matching the selected character', async () => {
+  const screenplay = createScreenplay(['ALICE', 'BOB', 'ALICE']);
+  let annotationProvider = null;
+  const panel = createPanelHarness(screenplay, (definition) => {
+    annotationProvider = definition;
+  });
+  const context = panelContext('highlight-document', screenplay);
+
+  await panel.onAction({ ...context, actionId: 'source-0' });
+
+  assert.ok(annotationProvider, 'Character Manager annotation provider should register');
+  assert.deepEqual(annotationProvider.handler(context), [
+    { id: 'selected-character-0', from: 1, to: 6, kind: 'note-active' },
+    { id: 'selected-character-2', from: 13, to: 18, kind: 'note-active' },
+  ]);
 });

@@ -311,7 +311,8 @@ replacement text.
 
 Completion providers require `document:read`, `editor:commands`, and granted
 `ui:mount`. Results are validated, length-limited, globally capped, and discarded
-when the document or selection changes while a worker request is pending.
+when the document or selection changes while a worker request is pending. Their
+manifests must include `onStartup` in `activationEvents`.
 
 ## 10) Editor landmarks
 
@@ -321,7 +322,8 @@ range and may expose a tooltip, jump target, and left/right gutter label. Graine
 owns the rail, tooltip, click navigation, and editor decorations.
 
 Landmarks require `document:read` and granted `ui:mount`. Provider results are
-validated and capped, and plugins cannot provide HTML or arbitrary DOM.
+validated and capped, and plugins cannot provide HTML or arbitrary DOM. Their
+manifests must include `onStartup` in `activationEvents`.
 
 ## Permission and Security Model
 

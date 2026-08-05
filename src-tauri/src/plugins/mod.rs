@@ -666,6 +666,19 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         }
     }
 
+    if (!manifest.contributes.editor_completion_providers.is_empty()
+        || !manifest.contributes.editor_landmark_providers.is_empty())
+        && !manifest
+            .activation_events
+            .iter()
+            .any(|event| event == "onStartup")
+    {
+        return Err(
+            "Editor completion and landmark providers require activationEvents to include onStartup"
+                .to_string(),
+        );
+    }
+
     for command in &manifest.contributes.commands {
         if !validate_local_contribution_id(&command.id) {
             return Err(format!("Invalid command contribution id '{}'", command.id));

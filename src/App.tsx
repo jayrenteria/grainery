@@ -1251,6 +1251,7 @@ function App() {
           selectionFrom: selection.from,
           selectionTo: selection.to,
           metadata: {
+            documentId: document.meta.id,
             filename: document.meta.filename,
           },
         });
