@@ -76,6 +76,7 @@ const DEFAULT_AUTO_SAVE_INTERVAL_MS = 30_000;
 const AUTO_SAVE_INTERVAL_OPTIONS_MS = [15_000, 30_000, 60_000, 300_000] as const;
 const INLINE_ANNOTATION_REFRESH_DEBOUNCE_MS = 120;
 const KEYMAP_HINTS_STORAGE_KEY = 'grainery-keymap-hints-enabled';
+const KEYMAP_HINTS_ALWAYS_VISIBLE_STORAGE_KEY = 'grainery-keymap-hints-always-visible';
 const RECENT_DOCUMENTS_PANEL_STORAGE_KEY = 'grainery-recent-documents-panel-enabled';
 const AUTO_SAVE_PREFERENCES_STORAGE_KEY = 'grainery-autosave-preferences';
 const ELEMENT_LOOP_PREFERENCES_STORAGE_KEY = 'grainery-element-loop-preferences-v1';
@@ -138,6 +139,10 @@ function setEditorNodeType(editor: Editor, type: ScreenplayElementType): void {
 
 function getStoredKeymapHintsEnabled(): boolean {
   return localStorage.getItem(KEYMAP_HINTS_STORAGE_KEY) !== 'false';
+}
+
+function getStoredKeymapHintsAlwaysVisible(): boolean {
+  return localStorage.getItem(KEYMAP_HINTS_ALWAYS_VISIBLE_STORAGE_KEY) === 'true';
 }
 
 function getStoredRecentDocumentsPanelEnabled(): boolean {
@@ -222,6 +227,9 @@ function App() {
   const [editorLandmarks, setEditorLandmarks] = useState<RenderedEditorLandmark[]>([]);
   const [isResolvingInitialOpen, setIsResolvingInitialOpen] = useState(true);
   const [keymapHintsEnabled, setKeymapHintsEnabled] = useState(getStoredKeymapHintsEnabled);
+  const [keymapHintsAlwaysVisible, setKeymapHintsAlwaysVisible] = useState(
+    getStoredKeymapHintsAlwaysVisible
+  );
   const [recentDocumentsPanelEnabled, setRecentDocumentsPanelEnabled] = useState(
     getStoredRecentDocumentsPanelEnabled
   );
@@ -1085,6 +1093,11 @@ function App() {
     localStorage.setItem(KEYMAP_HINTS_STORAGE_KEY, String(enabled));
   }, []);
 
+  const handleKeymapHintsAlwaysVisibleChange = useCallback((alwaysVisible: boolean) => {
+    setKeymapHintsAlwaysVisible(alwaysVisible);
+    localStorage.setItem(KEYMAP_HINTS_ALWAYS_VISIBLE_STORAGE_KEY, String(alwaysVisible));
+  }, []);
+
   const handleRecentDocumentsPanelEnabledChange = useCallback((enabled: boolean) => {
     setRecentDocumentsPanelEnabled(enabled);
     localStorage.setItem(RECENT_DOCUMENTS_PANEL_STORAGE_KEY, String(enabled));
@@ -1251,6 +1264,7 @@ function App() {
           selectionFrom: selection.from,
           selectionTo: selection.to,
           metadata: {
+            documentId: document.meta.id,
             filename: document.meta.filename,
           },
         });
@@ -1600,7 +1614,7 @@ function App() {
                 editorRef.current = editor;
               }}
               showKeymapHint={keymapHintsEnabled || activeTourMode !== null}
-              keepKeymapHintVisible={activeTourMode !== null}
+              keepKeymapHintVisible={keymapHintsAlwaysVisible || activeTourMode !== null}
               resolveEditorCompletions={resolveEditorCompletions}
             />
 
@@ -1643,6 +1657,8 @@ function App() {
             pluginStateVersion={pluginStateVersion}
             keymapHintsEnabled={keymapHintsEnabled}
             onKeymapHintsEnabledChange={handleKeymapHintsEnabledChange}
+            keymapHintsAlwaysVisible={keymapHintsAlwaysVisible}
+            onKeymapHintsAlwaysVisibleChange={handleKeymapHintsAlwaysVisibleChange}
             recentDocumentsPanelEnabled={recentDocumentsPanelEnabled}
             onRecentDocumentsPanelEnabledChange={handleRecentDocumentsPanelEnabledChange}
             autoSaveEnabled={autoSavePreferences.enabled}

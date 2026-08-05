@@ -581,6 +581,13 @@ export function validatePluginManifest(manifest, options = {}) {
   }
 
   const contributes = validateContributes(manifest.contributes, errors);
+  if (
+    (contributes.editorCompletionProviders.length > 0
+      || contributes.editorLandmarkProviders.length > 0)
+    && !activationEvents.includes('onStartup')
+  ) {
+    pushError(errors, 'Editor completion and landmark providers require activationEvents to include onStartup');
+  }
 
   for (const event of activationEvents) {
     if (event === 'onStartup' || typeof event !== 'string') {

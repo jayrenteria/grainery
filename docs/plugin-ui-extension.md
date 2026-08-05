@@ -112,7 +112,8 @@ Permission gate:
 - requires `document:read`, `editor:commands`, and optional `ui:mount`
 
 Each returned item has a stable `id`, `label`, and `insertText`; `detail` is optional.
-The host validates and caps results and ignores stale responses.
+The host validates and caps results and ignores stale responses. Plugins contributing
+completion providers must include `onStartup` in `activationEvents`.
 
 ## Editor landmarks
 
@@ -127,7 +128,8 @@ Permission gate:
 Each landmark has a stable `id`, `position`, and `label`. Optional fields include
 `from`, `to`, `shortLabel`, `gutterLabel`, and `active`; a gutter label is rendered
 on both sides of its matching editor node. Ranges and labels are validated and
-capped before rendering.
+capped before rendering. Plugins contributing landmark providers must include
+`onStartup` in `activationEvents`.
 
 ## `when` expressions
 

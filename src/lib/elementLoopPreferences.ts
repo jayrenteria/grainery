@@ -133,6 +133,15 @@ const DEFAULT_CONTEXT_TRANSITIONS: Record<DocumentMode, ElementLoopContextTransi
       nextType: 'dialogue',
     },
     {
+      id: 'screenplay-after-dialogue-empty-action-shift-tab',
+      label: 'After Dialogue, Shift Tab from empty Action creates',
+      event: 'shift-tab',
+      previousTypes: ['dialogue'],
+      currentTypes: ['action'],
+      isCurrentEmpty: true,
+      nextType: 'parenthetical',
+    },
+    {
       id: 'screenplay-dialogue-block-shift-tab',
       label: 'Dialogue block, Shift Tab creates',
       event: 'shift-tab',

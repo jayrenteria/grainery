@@ -1,12 +1,13 @@
 {
   "name": "grainery",
   "private": true,
-  "version": "1.6.0",
+  "version": "1.6.2",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test": "node --test test/*.test.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "plugin:create": "node scripts/grainery-plugin.mjs create",

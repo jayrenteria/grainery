@@ -3,9 +3,9 @@
   "id": "com.grainery.character-manager",
   "name": "Character Manager",
   "version": "1.0.0",
-  "description": "Completes existing character names and safely renames character cues.",
+  "description": "Completes, highlights, and safely renames existing character cues.",
   "engine": {
-    "grainery": ">=1.5.9",
+    "grainery": ">=1.6.2",
     "pluginApi": "^1.2.0"
   },
   "entry": "dist/main.js",
@@ -15,10 +15,12 @@
     "editor:commands"
   ],
   "optionalPermissions": [
-    "ui:mount"
+    "ui:mount",
+    "editor:annotations"
   ],
   "permissionRationales": {
-    "ui:mount": "Shows character suggestions and the Character Manager panel."
+    "ui:mount": "Shows character suggestions and the Character Manager panel.",
+    "editor:annotations": "Highlights every cue for the character selected in the Character Manager."
   },
   "networkAllowlist": [],
   "activationEvents": [
@@ -33,7 +35,13 @@
     "exporters": [],
     "importers": [],
     "statusBadges": [],
-    "inlineAnnotationProviders": [],
+    "inlineAnnotationProviders": [
+      {
+        "id": "selected-character-cues",
+        "title": "Selected Character Cues",
+        "priority": 20
+      }
+    ],
     "editorCompletionProviders": [
       {
         "id": "existing-characters",

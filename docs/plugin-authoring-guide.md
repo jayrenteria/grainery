@@ -60,7 +60,7 @@ What each example demonstrates:
 
 - `wordcount`: element loop rule, command, status badge, pre-save transform, exporter.
 - `element-toolbar`: declarative UI control + side panel + editor action dispatch.
-- `scene-outline`: automatic scene numbering, panel outline, right-side landmark rail, and click-to-jump navigation.
+- `scene-outline`: side panel scene list with click-to-jump navigation.
 - `character-manager`: current-document character completion and cue-only mass rename.
 - `review-notes`: reviewer-attributed notes with panel form fields, document plugin data, and inline highlights.
 
@@ -176,7 +176,12 @@ Permission sets:
 - Core permissions: `document:read`, `document:write`, `editor:commands`, `export:register`
 - Optional permissions: `fs:pick-read`, `fs:pick-write`, `network:https`, `ui:mount`, `editor:annotations`, `system:fonts`
 
-Use `permissionRationales` for every optional permission you expect users to grant. Grainery shows this text in permission prompts and Settings next to the permission description, current allow/deny state, plugin name/id/version, and trust status.
+Use `permissionRationales` for every optional permission you expect users to grant. Keep the wording
+short and conversational. Grainery shows it in Settings beside a plain-language description of the
+access, while permission prompts use host-written copy that does not expose internal permission ids.
+
+On a fresh install, Grainery prompts for each optional permission. Plugin updates preserve existing
+choices and prompt only when the new version introduces an additional optional permission.
 
 Example:
 
@@ -370,9 +375,10 @@ host-owned replacement range. Return an empty list when the context does not app
 
 Use `registerEditorLandmarkProvider` for persistent navigation points. Build panel
 rows and landmark ticks from the same document index so labels, order, and jump
-positions stay consistent. See `examples/plugins/scene-outline/src/main.ts` for that
-shared-index pattern and `examples/plugins/character-manager/src/main.ts` for a
-completion provider.
+positions stay consistent. Plugins contributing completions or landmarks must include
+`onStartup` in `activationEvents` so their providers are available whenever the editor
+needs them. See `examples/plugins/character-manager/src/main.ts` for a completion
+provider.
 
 ## 12. Step-by-step walkthrough: `review-notes`
 

@@ -942,6 +942,7 @@ export class PluginManager {
       formValues,
     })) as UIPanelActionResult;
 
+    this.notifyListeners();
     const normalizedAction = normalizeUiAction(panel.pluginId, response?.action ?? null);
     return {
       ...(response ?? {}),

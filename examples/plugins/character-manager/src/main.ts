@@ -269,6 +269,28 @@ const plugin: GraineryPlugin = {
       },
     });
 
+    api.registerInlineAnnotationProvider({
+      id: 'selected-character-cues',
+      title: 'Selected Character Cues',
+      priority: 20,
+      handler(context) {
+        syncDocumentState(context);
+        if (!managerState.selectedSource) {
+          return [];
+        }
+
+        return matchingCharacterBlocks(
+          screenplayFrom(api, context),
+          managerState.selectedSource
+        ).map((block) => ({
+          id: `selected-character-${block.index}`,
+          from: block.from,
+          to: block.from + block.text.length,
+          kind: 'note-active',
+        }));
+      },
+    });
+
     api.registerUIControl({
       id: 'toggle-character-manager',
       mount: 'bottom-bar',

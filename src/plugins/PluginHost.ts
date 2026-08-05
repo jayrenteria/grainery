@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { JSONContent } from '@tiptap/react';
-import { hasPluginPermission, PERMISSION_DESCRIPTIONS } from './permissions';
+import { buildPluginPermissionPrompt, hasPluginPermission } from './permissions';
 import type {
   HostOperation,
   InstalledPlugin,
@@ -124,25 +124,8 @@ export class PluginHost {
       return true;
     }
 
-    const rationale = plugin.manifest.permissionRationales?.[permission];
-    const message = [
-      `${plugin.name} ${plugin.version}`,
-      plugin.id,
-      '',
-      `Requests: ${permission}`,
-      PERMISSION_DESCRIPTIONS[permission],
-      '',
-      `Current state: ${existing?.granted ? 'Allowed' : 'Denied'}`,
-      rationale ? `Author rationale: ${rationale}` : 'Author rationale: Not provided.',
-      '',
-      plugin.trust === 'verified'
-        ? 'Trust: verified registry install.'
-        : 'Trust: unverified sideload install.',
-      '',
-      'Allow this permission?',
-    ].join('\n');
-
-    const allowed = window.confirm(message);
+    const prompt = buildPluginPermissionPrompt(plugin, permission);
+    const allowed = window.confirm(`${prompt.title}\n\n${prompt.message}`);
 
     const nextGrants = this.withUpdatedGrant(plugin.grantedPermissions, permission, allowed);
 

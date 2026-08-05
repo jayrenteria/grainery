@@ -311,7 +311,8 @@ replacement text.
 
 Completion providers require `document:read`, `editor:commands`, and granted
 `ui:mount`. Results are validated, length-limited, globally capped, and discarded
-when the document or selection changes while a worker request is pending.
+when the document or selection changes while a worker request is pending. Their
+manifests must include `onStartup` in `activationEvents`.
 
 ## 10) Editor landmarks
 
@@ -321,7 +322,8 @@ range and may expose a tooltip, jump target, and left/right gutter label. Graine
 owns the rail, tooltip, click navigation, and editor decorations.
 
 Landmarks require `document:read` and granted `ui:mount`. Provider results are
-validated and capped, and plugins cannot provide HTML or arbitrary DOM.
+validated and capped, and plugins cannot provide HTML or arbitrary DOM. Their
+manifests must include `onStartup` in `activationEvents`.
 
 ## Permission and Security Model
 
@@ -382,13 +384,14 @@ Enforcements:
 
 ### Permission UX
 
-Optional permissions are deny-by-default. When a worker requests an optional permission at runtime, the frontend prompt includes:
+Optional permissions are deny-by-default. Permission prompts use plain-language titles and explain
+what the plugin will be able to do. Internal permission ids, plugin ids, versions, and raw allow/deny
+state are intentionally omitted. Plugins installed outside Grainery's verified catalog include a
+short source warning, and every prompt tells the user where to change the choice later.
 
-- plugin name, id, and version;
-- permission id and host-authored description;
-- current allow/deny state;
-- author-provided `permissionRationales[permission]` text when present;
-- install trust state.
+Fresh installs prompt for each declared optional permission immediately after installation. Updates
+prompt only for newly introduced optional permissions; previously recorded allow/deny choices are
+preserved. Choosing **Don’t Allow** leaves the capability unavailable and editable later in Settings.
 
 Denied runtime permission requests and denied host operations are persisted as diagnostics.
 
