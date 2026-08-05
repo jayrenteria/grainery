@@ -53,6 +53,7 @@ You can also use one of these existing examples:
 - `examples/plugins/wordcount/`
 - `examples/plugins/element-toolbar/`
 - `examples/plugins/scene-outline/`
+- `examples/plugins/character-manager/`
 - `examples/plugins/review-notes/`
 
 What each example demonstrates:
@@ -60,6 +61,7 @@ What each example demonstrates:
 - `wordcount`: element loop rule, command, status badge, pre-save transform, exporter.
 - `element-toolbar`: declarative UI control + side panel + editor action dispatch.
 - `scene-outline`: side panel scene list with click-to-jump navigation.
+- `character-manager`: current-document character completion and cue-only mass rename.
 - `review-notes`: reviewer-attributed notes with panel form fields, document plugin data, and inline highlights.
 
 Validate and package any example from the repo root:
@@ -314,6 +316,7 @@ Recommended order:
 3. Add transforms/exporters/importers.
 4. Add UI controls/panels (`registerUIControl`, `registerUIPanel`) only if needed.
 5. Add inline annotations (`registerInlineAnnotationProvider`) if your plugin needs range highlights.
+6. Add completions or landmarks only when editor-local interaction is central to the feature.
 
 Why: this keeps your plugin testable and minimizes permission scope.
 
@@ -363,6 +366,19 @@ Panel form fields:
 - `input` and `textarea` blocks are host-rendered.
 - values are delivered to `onAction(context.formValues)`.
 - use stable `fieldId` keys to keep form state predictable.
+
+## Editor completions and landmarks
+
+Use `registerEditorCompletionProvider` for short-lived plain-text suggestions. The
+provider receives the current document, selection, element type, query text, and a
+host-owned replacement range. Return an empty list when the context does not apply.
+
+Use `registerEditorLandmarkProvider` for persistent navigation points. Build panel
+rows and landmark ticks from the same document index so labels, order, and jump
+positions stay consistent. Plugins contributing completions or landmarks must include
+`onStartup` in `activationEvents` so their providers are available whenever the editor
+needs them. See `examples/plugins/character-manager/src/main.ts` for a completion
+provider.
 
 ## 12. Step-by-step walkthrough: `review-notes`
 

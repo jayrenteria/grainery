@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import { nextRequestId, parseHostMessage } from './rpc';
+import { validatePanelContent } from './validation';
 import {
   ScreenplayDocument,
   createScreenplayDocument,
@@ -10,6 +11,12 @@ import type {
   Disposable,
   DocumentTransform,
   DocumentTransformContext,
+  EditorCompletionContext,
+  EditorCompletionItem,
+  EditorCompletionProvider,
+  EditorLandmark,
+  EditorLandmarkContext,
+  EditorLandmarkProvider,
   Exporter,
   ExporterContext,
   GraineryPlugin,
@@ -47,6 +54,8 @@ const exporterHandlers = new Map<string, Exporter['handler']>();
 const importerHandlers = new Map<string, Importer['handler']>();
 const statusBadgeHandlers = new Map<string, StatusBadge['handler']>();
 const inlineAnnotationHandlers = new Map<string, InlineAnnotationProvider['handler']>();
+const editorCompletionHandlers = new Map<string, EditorCompletionProvider['handler']>();
+const editorLandmarkHandlers = new Map<string, EditorLandmarkProvider['handler']>();
 const uiControlTriggerHandlers = new Map<
   string,
   NonNullable<UIControlDefinition['onTrigger']>
@@ -410,6 +419,38 @@ function createPluginApi(manifest: PluginManifest): PluginApi {
         inlineAnnotationHandlers.delete(provider.id);
       });
     },
+    registerEditorCompletionProvider(provider) {
+      throwIfInvalidPluginId();
+      editorCompletionHandlers.set(provider.id, provider.handler);
+      postWorkerMessage({
+        type: 'worker:register-editor-completion-provider',
+        pluginId: currentPluginId,
+        provider: {
+          id: provider.id,
+          title: provider.title,
+          priority: provider.priority,
+        },
+      });
+      return createRegistrationDisposable('editor-completion-provider', provider.id, () => {
+        editorCompletionHandlers.delete(provider.id);
+      });
+    },
+    registerEditorLandmarkProvider(provider) {
+      throwIfInvalidPluginId();
+      editorLandmarkHandlers.set(provider.id, provider.handler);
+      postWorkerMessage({
+        type: 'worker:register-editor-landmark-provider',
+        pluginId: currentPluginId,
+        provider: {
+          id: provider.id,
+          title: provider.title,
+          priority: provider.priority,
+        },
+      });
+      return createRegistrationDisposable('editor-landmark-provider', provider.id, () => {
+        editorLandmarkHandlers.delete(provider.id);
+      });
+    },
     registerUIControl(control) {
       throwIfInvalidPluginId();
 
@@ -530,10 +571,12 @@ async function loadPlugin(entrySource: string, _manifest: PluginManifest): Promi
 async function evaluateUIState(
   controlIds: string[],
   panelIds: string[],
+  landmarkProviderIds: string[],
   context: UIControlStateContext
 ): Promise<UIEvaluateResponse> {
   const controls: Record<string, { visible: boolean; disabled: boolean; active: boolean; text?: string | null }> = {};
   const panels: Record<string, UIPanelContent> = {};
+  const landmarks: Record<string, EditorLandmark[]> = {};
   const panelFormValues =
     (context.metadata?.panelFormValues as Record<string, Record<string, string>> | undefined) ?? {};
 
@@ -573,13 +616,34 @@ async function evaluateUIState(
 
     const content = await renderHandler(panelContext);
     if (content) {
+      validatePanelContent(content, `UI panel '${panelId}'`);
       panels[panelId] = content;
     }
+  }
+
+  for (const providerId of landmarkProviderIds) {
+    const handler = editorLandmarkHandlers.get(providerId);
+    if (!handler) {
+      continue;
+    }
+
+    const landmarkContext: EditorLandmarkContext = {
+      document: context.document,
+      screenplay: context.screenplay,
+      documentMode: context.documentMode,
+      currentElementType: context.currentElementType,
+      selectionFrom: context.selectionFrom,
+      selectionTo: context.selectionTo,
+      metadata: context.metadata,
+    };
+    const result = await handler(landmarkContext);
+    landmarks[providerId] = Array.isArray(result) ? result.slice(0, 1_000) : [];
   }
 
   return {
     controls,
     panels,
+    landmarks,
   };
 }
 
@@ -663,6 +727,30 @@ async function handleInvokeMessage(
         respond(true, output);
         return;
       }
+      case 'editor-completions': {
+        const handler = editorCompletionHandlers.get(message.id);
+        if (!handler) {
+          respond(true, []);
+          return;
+        }
+
+        const result = await handler(enrichContext<EditorCompletionContext>(message.payload));
+        const output = Array.isArray(result) ? (result as EditorCompletionItem[]).slice(0, 12) : [];
+        respond(true, output);
+        return;
+      }
+      case 'editor-landmarks': {
+        const handler = editorLandmarkHandlers.get(message.id);
+        if (!handler) {
+          respond(true, []);
+          return;
+        }
+
+        const result = await handler(enrichContext<EditorLandmarkContext>(message.payload));
+        const output = Array.isArray(result) ? (result as EditorLandmark[]).slice(0, 1_000) : [];
+        respond(true, output);
+        return;
+      }
       case 'ui-control': {
         const handler = uiControlTriggerHandlers.get(message.id);
         if (!handler) {
@@ -682,13 +770,18 @@ async function handleInvokeMessage(
         }
 
         const result = await handler(enrichContext<UIPanelActionContext>(message.payload));
-        respond(true, result ?? { action: null } satisfies UIPanelActionResult);
+        const output = result ?? { action: null } satisfies UIPanelActionResult;
+        if (output.content) {
+          validatePanelContent(output.content, `UI panel '${message.id}' action`);
+        }
+        respond(true, output);
         return;
       }
       case 'ui-evaluate': {
         const payload = message.payload as {
           controlIds: string[];
           panelIds: string[];
+          landmarkProviderIds?: string[];
           panelFormValues?: Record<string, Record<string, string>>;
           context: UIControlStateContext;
         };
@@ -696,6 +789,7 @@ async function handleInvokeMessage(
         const evaluated = await evaluateUIState(
           payload.controlIds ?? [],
           payload.panelIds ?? [],
+          payload.landmarkProviderIds ?? [],
           enrichContext<UIControlStateContext>({
             ...payload.context,
             metadata: {
@@ -735,6 +829,8 @@ async function handleShutdown(): Promise<void> {
   importerHandlers.clear();
   statusBadgeHandlers.clear();
   inlineAnnotationHandlers.clear();
+  editorCompletionHandlers.clear();
+  editorLandmarkHandlers.clear();
   uiControlTriggerHandlers.clear();
   uiControlVisibleHandlers.clear();
   uiControlDisabledHandlers.clear();

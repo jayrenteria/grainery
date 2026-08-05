@@ -48,6 +48,7 @@ Plugin UI host:
 - `src/components/PluginUI/PluginUIHost.tsx`
 - `src/components/PluginUI/PluginToolbar.tsx`
 - `src/components/PluginUI/PluginSidePanel.tsx`
+- `src/components/PluginUI/PluginLandmarkRail.tsx`
 - `src/plugins/ui/icons.tsx`
 - `src/styles/plugin-ui.css`
 
@@ -64,6 +65,8 @@ Manifest and validation:
 Examples:
 - `examples/plugins/wordcount/`
 - `examples/plugins/element-toolbar/`
+- `examples/plugins/scene-outline/`
+- `examples/plugins/character-manager/`
 - `examples/plugins/review-notes/`
 
 
@@ -74,8 +77,9 @@ Examples:
 3. Optional permissions must remain deny-by-default.
 4. UI definitions must be ignored unless `ui:mount` is granted.
 5. Inline annotation providers require `editor:annotations`.
-6. Zip install expects `grainery-plugin.manifest.json` at archive root.
-7. Worker crashes/timeouts must not crash editor host.
+6. Completion and landmark content must remain plain-text, host-rendered, validated, and capped.
+7. Zip install expects `grainery-plugin.manifest.json` at archive root.
+8. Worker crashes/timeouts must not crash editor host.
 
 ## Extension Points (v1.2)
 
@@ -87,9 +91,12 @@ Supported plugin registrations:
 - exporters/importers
 - status badges
 - inline annotation providers
+- editor completion providers
+- editor landmark providers and host-rendered gutter labels
 - command menu metadata, keybindings, and configuration schemas
 - UI controls (`top-bar`, `bottom-bar`, `editor-floating`)
 - single side panel with host-rendered blocks (`heading`, `text`, `divider`, `callout`, `badgeList`, `progress`, `list`, `keyValue`, `input`, `textarea`, `actions`)
+- host-rendered completion popup and right-side landmark rail
 
 Not supported:
 

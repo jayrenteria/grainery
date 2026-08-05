@@ -308,7 +308,26 @@ export class ScreenplayDocument {
     const index = this.findBlockIndex(ref);
     if (index >= 0) {
       const block = this.ensureContent()[index];
-      block.content = text ? [{ type: 'text', text }] : [];
+      block.content = replaceTextPreservingMarks(block, text);
+    }
+    return this;
+  }
+
+  updateBlockAttrs(ref: ScreenplayBlockRef, patch: Record<string, unknown>): this {
+    const index = this.findBlockIndex(ref);
+    if (index >= 0) {
+      const block = this.ensureContent()[index];
+      const nextAttrs = { ...(block.attrs ?? {}) };
+
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === undefined || value === null) {
+          delete nextAttrs[key];
+        } else {
+          nextAttrs[key] = cloneJson(value);
+        }
+      }
+
+      block.attrs = Object.keys(nextAttrs).length > 0 ? nextAttrs : undefined;
     }
     return this;
   }
@@ -414,6 +433,69 @@ function readNodeText(node: JSONContent | undefined): string {
 
   const children = Array.isArray(node.content) ? node.content : [];
   return children.map(readNodeText).join('');
+}
+
+function collectTextStyleSpans(
+  node: JSONContent | undefined,
+  spans: Array<{ length: number; marks?: JSONContent['marks'] }>
+): void {
+  if (!node) {
+    return;
+  }
+
+  if (typeof node.text === 'string') {
+    if (node.text.length > 0) {
+      spans.push({
+        length: node.text.length,
+        marks: Array.isArray(node.marks) && node.marks.length > 0
+          ? cloneJson(node.marks)
+          : undefined,
+      });
+    }
+    return;
+  }
+
+  for (const child of Array.isArray(node.content) ? node.content : []) {
+    collectTextStyleSpans(child, spans);
+  }
+}
+
+function replaceTextPreservingMarks(node: JSONContent, text: string): JSONContent[] {
+  if (!text) {
+    return [];
+  }
+
+  const spans: Array<{ length: number; marks?: JSONContent['marks'] }> = [];
+  collectTextStyleSpans(node, spans);
+  const sourceLength = spans.reduce((total, span) => total + span.length, 0);
+  if (sourceLength === 0) {
+    return [{ type: 'text', text }];
+  }
+
+  const content: JSONContent[] = [];
+  let sourceOffset = 0;
+  let targetOffset = 0;
+
+  for (let index = 0; index < spans.length; index += 1) {
+    const span = spans[index];
+    sourceOffset += span.length;
+    const targetEnd = index === spans.length - 1
+      ? text.length
+      : Math.round((sourceOffset / sourceLength) * text.length);
+
+    if (targetEnd <= targetOffset) {
+      continue;
+    }
+
+    content.push({
+      type: 'text',
+      text: text.slice(targetOffset, targetEnd),
+      ...(span.marks ? { marks: cloneJson(span.marks) } : {}),
+    });
+    targetOffset = targetEnd;
+  }
+
+  return content;
 }
 
 function getNodeSize(node: JSONContent | undefined): number {

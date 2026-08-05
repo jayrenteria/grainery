@@ -24,6 +24,8 @@ Plugin SDK methods:
 
 - `registerUIControl(control)`
 - `registerUIPanel(panel)`
+- `registerEditorCompletionProvider(provider)`
+- `registerEditorLandmarkProvider(provider)`
 
 Control mounts:
 
@@ -73,6 +75,9 @@ Panel content model (v1 primitives):
 - `maxHeight` optionally caps the host-rendered scroll region
 - `scrollToActionId` optionally centers a nested action when that target changes
 
+`actions` blocks can set `layout: 'stack'` for full-width vertical controls, and
+individual action items can set `fullWidth: true`.
+
 ## Inline annotations
 
 Plugins can register inline range highlights rendered by the host editor layer:
@@ -95,6 +100,36 @@ Notes:
 - annotations are hidden when plugin is disabled or lacks required permissions
 - plugins still cannot inject DOM into editor content
 - `ui:mount` is not required for annotation-only plugins
+
+## Editor completions
+
+Completion providers return plain-text choices for a host-supplied replacement
+range. The host renders and positions the menu and applies accepted text, so plugin
+workers never receive DOM or direct editor access.
+
+Permission gate:
+
+- requires `document:read`, `editor:commands`, and optional `ui:mount`
+
+Each returned item has a stable `id`, `label`, and `insertText`; `detail` is optional.
+The host validates and caps results and ignores stale responses. Plugins contributing
+completion providers must include `onStartup` in `activationEvents`.
+
+## Editor landmarks
+
+Landmark providers return document-relative navigation points. The host renders an
+always-available right rail, hover/focus tooltips, click-to-jump behavior, and
+optional left/right gutter labels.
+
+Permission gate:
+
+- requires `document:read` and optional `ui:mount`
+
+Each landmark has a stable `id`, `position`, and `label`. Optional fields include
+`from`, `to`, `shortLabel`, `gutterLabel`, and `active`; a gutter label is rendered
+on both sides of its matching editor node. Ranges and labels are validated and
+capped before rendering. Plugins contributing landmark providers must include
+`onStartup` in `activationEvents`.
 
 ## `when` expressions
 

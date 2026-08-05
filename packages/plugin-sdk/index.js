@@ -30,6 +30,14 @@ export function defineInlineAnnotationProvider(provider) {
   return provider;
 }
 
+export function defineEditorCompletionProvider(provider) {
+  return provider;
+}
+
+export function defineEditorLandmarkProvider(provider) {
+  return provider;
+}
+
 export function defineUIControl(control) {
   return control;
 }

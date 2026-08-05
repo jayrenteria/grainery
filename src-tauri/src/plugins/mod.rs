@@ -56,6 +56,10 @@ pub struct PluginContributions {
     #[serde(default)]
     pub inline_annotation_providers: Vec<ContributedInlineAnnotationProvider>,
     #[serde(default)]
+    pub editor_completion_providers: Vec<ContributedEditorProvider>,
+    #[serde(default)]
+    pub editor_landmark_providers: Vec<ContributedEditorProvider>,
+    #[serde(default)]
     pub ui_controls: Vec<ContributedUiControl>,
     #[serde(default)]
     pub ui_panels: Vec<ContributedUiPanel>,
@@ -165,6 +169,16 @@ pub struct ContributedStatusBadge {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContributedInlineAnnotationProvider {
+    pub id: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub priority: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContributedEditorProvider {
     pub id: String,
     #[serde(default)]
     pub title: Option<String>,
@@ -652,6 +666,19 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         }
     }
 
+    if (!manifest.contributes.editor_completion_providers.is_empty()
+        || !manifest.contributes.editor_landmark_providers.is_empty())
+        && !manifest
+            .activation_events
+            .iter()
+            .any(|event| event == "onStartup")
+    {
+        return Err(
+            "Editor completion and landmark providers require activationEvents to include onStartup"
+                .to_string(),
+        );
+    }
+
     for command in &manifest.contributes.commands {
         if !validate_local_contribution_id(&command.id) {
             return Err(format!("Invalid command contribution id '{}'", command.id));
@@ -796,6 +823,24 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), String> {
         if !validate_local_contribution_id(&provider.id) {
             return Err(format!(
                 "Invalid inline annotation provider contribution id '{}'",
+                provider.id
+            ));
+        }
+    }
+
+    for provider in &manifest.contributes.editor_completion_providers {
+        if !validate_local_contribution_id(&provider.id) {
+            return Err(format!(
+                "Invalid editor completion provider contribution id '{}'",
+                provider.id
+            ));
+        }
+    }
+
+    for provider in &manifest.contributes.editor_landmark_providers {
+        if !validate_local_contribution_id(&provider.id) {
+            return Err(format!(
+                "Invalid editor landmark provider contribution id '{}'",
                 provider.id
             ));
         }

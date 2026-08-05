@@ -4,7 +4,7 @@
   <p><strong>A quiet, minimal screenwriting app that keeps formatting out of your way.</strong></p>
 
   <p>
-    <img alt="Version" src="https://img.shields.io/badge/version-1.6.1-4f7a5f?style=flat-square" />
+    <img alt="Version" src="https://img.shields.io/badge/version-1.6.2-4f7a5f?style=flat-square" />
     <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2-24c8db?style=flat-square" />
     <img alt="React" src="https://img.shields.io/badge/React-19-61dafb?style=flat-square" />
     <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178c6?style=flat-square" />
@@ -86,7 +86,7 @@ Grainery includes a plugin system designed around writer trust and host-rendered
 | Writing | Element loop rules, commands, command menus, keybindings |
 | Documents | `post-open`, `pre-save`, and `pre-export` transforms |
 | Files | Importers and exporters |
-| Interface | Status badges, inline annotations, toolbar controls, side panels |
+| Interface | Status badges, inline annotations, character completions, editor landmarks, toolbar controls, side panels |
 | Storage | Plugin-scoped document data and lightweight global preferences |
 
 Plugin manifests use `grainery-plugin.manifest.json` and must target `engine.pluginApi: "^1.2.0"`.
@@ -97,6 +97,7 @@ Earlier plugin API ranges are not supported. Optional permissions should include
 - [`examples/plugins/wordcount/`](examples/plugins/wordcount/)
 - [`examples/plugins/element-toolbar/`](examples/plugins/element-toolbar/)
 - [`examples/plugins/scene-outline/`](examples/plugins/scene-outline/)
+- [`examples/plugins/character-manager/`](examples/plugins/character-manager/)
 - [`examples/plugins/review-notes/`](examples/plugins/review-notes/)
 
 ### Plugin Docs

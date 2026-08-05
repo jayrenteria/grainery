@@ -63,7 +63,12 @@ import {
   type ElementLoopPreferences,
 } from './lib/elementLoopPreferences';
 import { PluginManager } from './plugins';
-import type { RenderedInlineAnnotation, RenderedStatusBadge } from './plugins';
+import type {
+  EditorCompletionContext,
+  RenderedEditorLandmark,
+  RenderedInlineAnnotation,
+  RenderedStatusBadge,
+} from './plugins';
 import { PluginUIHost } from './components/PluginUI';
 import './styles/screenplay.css';
 
@@ -219,6 +224,7 @@ function App() {
   const [editorVersion, setEditorVersion] = useState(0);
   const [statusBadges, setStatusBadges] = useState<RenderedStatusBadge[]>([]);
   const [inlineAnnotations, setInlineAnnotations] = useState<RenderedInlineAnnotation[]>([]);
+  const [editorLandmarks, setEditorLandmarks] = useState<RenderedEditorLandmark[]>([]);
   const [isResolvingInitialOpen, setIsResolvingInitialOpen] = useState(true);
   const [keymapHintsEnabled, setKeymapHintsEnabled] = useState(getStoredKeymapHintsEnabled);
   const [keymapHintsAlwaysVisible, setKeymapHintsAlwaysVisible] = useState(
@@ -384,6 +390,15 @@ function App() {
   }
 
   const pluginManager = pluginManagerRef.current;
+
+  const resolveEditorCompletions = useCallback(
+    (context: EditorCompletionContext) => pluginManager.evaluateEditorCompletions(context),
+    [pluginManager]
+  );
+
+  const handleEditorLandmarksChange = useCallback((landmarks: RenderedEditorLandmark[]) => {
+    setEditorLandmarks(landmarks);
+  }, []);
 
   const editorAdapter = useMemo(
     () => ({
@@ -1249,6 +1264,7 @@ function App() {
           selectionFrom: selection.from,
           selectionTo: selection.to,
           metadata: {
+            documentId: document.meta.id,
             filename: document.meta.filename,
           },
         });
@@ -1305,6 +1321,10 @@ function App() {
       cancelled = true;
     };
   }, [document.meta.filename, document.meta.id, editorVersion, pluginManager, pluginStateVersion]);
+
+  useEffect(() => {
+    setEditorLandmarks([]);
+  }, [document.meta.id]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1583,6 +1603,7 @@ function App() {
               documentMode={document.documentMode}
               initialContent={editorContentRef.current}
               inlineAnnotations={inlineAnnotations}
+              editorLandmarks={editorLandmarks}
               onChange={handleEditorChange}
               resolveElementLoop={(context) => pluginManager.resolveElementLoop(context)}
               elementLoopPreferences={elementLoopPreferences}
@@ -1594,6 +1615,7 @@ function App() {
               }}
               showKeymapHint={keymapHintsEnabled || activeTourMode !== null}
               keepKeymapHintVisible={keymapHintsAlwaysVisible || activeTourMode !== null}
+              resolveEditorCompletions={resolveEditorCompletions}
             />
 
             <SettingsButton
@@ -1602,12 +1624,15 @@ function App() {
             />
 
             <PluginUIHost
+              key={document.meta.id}
               pluginManager={pluginManager}
               pluginStateVersion={pluginStateVersion}
               editorVersion={editorVersion}
+              documentId={document.meta.id}
               document={editorContentRef.current}
               documentMode={document.documentMode}
               editorAdapter={editorAdapter}
+              onLandmarksChange={handleEditorLandmarksChange}
             />
 
             {statusBadges.length > 0 && (

@@ -184,6 +184,10 @@
   @apply mt-2 flex flex-wrap gap-1;
 }
 
+.plugin-panel-actions-stack {
+  @apply flex-col;
+}
+
 .plugin-panel-actions .btn {
   @apply h-auto min-h-9 max-w-full overflow-hidden whitespace-normal px-2 py-1.5 text-left;
 }
@@ -207,4 +211,98 @@
 
 .plugin-panel-textarea {
   @apply min-h-20 resize-y;
+}
+
+.plugin-completion-menu {
+  @apply fixed z-[110] w-[18rem] overflow-hidden rounded-md border border-base-300/70;
+  @apply bg-base-100/98 shadow-xl backdrop-blur-sm;
+}
+
+.plugin-completion-item {
+  @apply flex min-h-9 w-full items-center justify-between gap-3 px-3 py-2 text-left;
+  @apply text-sm text-base-content/85 transition-colors;
+}
+
+.plugin-completion-item.is-active,
+.plugin-completion-item:hover {
+  @apply bg-primary/15 text-primary;
+}
+
+.plugin-completion-label {
+  @apply truncate font-semibold uppercase;
+}
+
+.plugin-completion-detail {
+  @apply shrink-0 text-[10px] uppercase tracking-wide text-base-content/50;
+}
+
+.plugin-completion-hint {
+  @apply border-t border-base-300/60 px-3 py-1.5 text-[9px] uppercase tracking-wide text-base-content/45;
+}
+
+.plugin-landmark-rail {
+  @apply fixed bottom-14 right-1 top-20 z-[83] w-5;
+  pointer-events: none;
+}
+
+.plugin-landmark-track {
+  @apply relative h-full w-full rounded-full bg-base-300/20;
+}
+
+.plugin-landmark-tick {
+  @apply absolute right-0 h-2 w-5 -translate-y-1/2;
+  pointer-events: auto;
+}
+
+.plugin-landmark-tick-mark {
+  @apply absolute right-0 top-1/2 h-px w-2.5 -translate-y-1/2 rounded-full bg-base-content/45;
+  @apply transition-all;
+}
+
+.plugin-landmark-tick:hover .plugin-landmark-tick-mark,
+.plugin-landmark-tick:focus-visible .plugin-landmark-tick-mark {
+  @apply w-4 bg-primary;
+}
+
+.plugin-landmark-tick.is-active .plugin-landmark-tick-mark {
+  @apply h-0.5 w-5 bg-primary;
+}
+
+.plugin-landmark-tooltip {
+  @apply pointer-events-none absolute right-6 top-1/2 hidden max-w-[18rem] -translate-y-1/2;
+  @apply whitespace-normal rounded-sm border border-base-300/70 bg-base-100 px-2 py-1 text-right;
+  @apply text-[10px] font-semibold uppercase leading-tight tracking-wide text-base-content shadow-md;
+}
+
+.plugin-landmark-tick:hover .plugin-landmark-tooltip,
+.plugin-landmark-tick:focus-visible .plugin-landmark-tooltip {
+  @apply block;
+}
+
+.plugin-gutter-label-host {
+  position: relative;
+}
+
+.plugin-gutter-label {
+  @apply absolute top-0 select-none font-mono text-[10pt] font-normal text-base-content/70;
+  line-height: inherit;
+  pointer-events: none;
+}
+
+.plugin-gutter-label-left {
+  right: calc(100% + 0.22in);
+}
+
+.plugin-gutter-label-right {
+  left: calc(100% + 0.22in);
+}
+
+@media (max-width: 760px) {
+  .plugin-landmark-rail {
+    @apply right-0 w-4;
+  }
+
+  .plugin-landmark-tooltip {
+    @apply max-w-[min(16rem,70vw)];
+  }
 }
