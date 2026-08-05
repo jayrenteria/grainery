@@ -269,7 +269,7 @@
 }
 
 .plugin-landmark-tooltip {
-  @apply pointer-events-none absolute right-6 top-1/2 hidden max-w-[18rem] -translate-y-1/2;
+  @apply pointer-events-none absolute right-6 top-1/2 hidden w-max max-w-[28rem] -translate-y-1/2;
   @apply whitespace-normal rounded-sm border border-base-300/70 bg-base-100 px-2 py-1 text-right;
   @apply text-[10px] font-semibold uppercase leading-tight tracking-wide text-base-content shadow-md;
 }
@@ -303,6 +303,6 @@
   }
 
   .plugin-landmark-tooltip {
-    @apply max-w-[min(16rem,70vw)];
+    @apply max-w-[min(20rem,80vw)];
   }
 }

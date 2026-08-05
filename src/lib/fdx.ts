@@ -190,7 +190,12 @@ function renderFdxTextNodes(node: JSONContent, options: { uppercase?: boolean } 
 }
 
 function paragraphOpen(node: JSONContent, type: string): string {
-  return `<Paragraph Type="${type}" id="${generateUUID()}" Alignment="${paragraphAlignment(node)}"${paragraphSpacingAttrs(node)}>`;
+  const sceneNumber = type === 'Scene Heading' ? node.attrs?.sceneNumber : null;
+  const numberAttribute =
+    typeof sceneNumber === 'string' || typeof sceneNumber === 'number'
+      ? ` Number="${escapeXml(String(sceneNumber))}"`
+      : '';
+  return `<Paragraph Type="${type}" id="${generateUUID()}" Alignment="${paragraphAlignment(node)}"${numberAttribute}${paragraphSpacingAttrs(node)}>`;
 }
 
 function formatTitlePage(tp: TitlePageData): string {
