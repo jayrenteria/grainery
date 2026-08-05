@@ -53,9 +53,16 @@ function getSteps(documentMode: DocumentMode): TourStep[] {
     },
     {
       title: 'Keyboard hints stay close',
-      body: 'These hints change with the current element. They fade after five seconds; move your pointer over the bottom-center of the editor to reveal them again.',
+      body: 'These hints change with the current element. They fade after five seconds by default; turn on Keep keyboard hints visible in Settings → Editor to pin them.',
       target: '[data-tour="keymap-hint"]',
     },
+    ...(documentMode === 'screenplay'
+      ? [{
+          title: 'Continue dialogue naturally',
+          body: 'After Dialogue, press Enter. From the empty Action, press Shift+Tab to add a Parenthetical, then Enter to continue Dialogue. Press Tab instead when the speech is finished and you want the normal element loop.',
+          target: '[data-tour="keymap-hint"]',
+        }]
+      : []),
     {
       title: `${modeLabel} elements`,
       body: 'Press Tab to cycle forward through element types, or Shift+Tab to move backward.',

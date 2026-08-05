@@ -14,11 +14,17 @@ import {
 } from '../../lib/elementLoopPreferences';
 import type { DocumentMode, ScreenplayElementType, TitlePageData } from '../../lib/types';
 import type {
+  InstalledPlugin,
   OptionalPermission,
   PluginPermissionGrant,
 } from '../../plugins';
 import { PluginManager } from '../../plugins';
-import { PERMISSION_DESCRIPTIONS } from '../../plugins/permissions';
+import {
+  buildPluginPermissionPrompt,
+  getOptionalPermissionsToPrompt,
+  PERMISSION_DESCRIPTIONS,
+  PERMISSION_LABELS,
+} from '../../plugins/permissions';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -29,6 +35,8 @@ interface SettingsModalProps {
   pluginStateVersion: number;
   keymapHintsEnabled: boolean;
   onKeymapHintsEnabledChange: (enabled: boolean) => void;
+  keymapHintsAlwaysVisible: boolean;
+  onKeymapHintsAlwaysVisibleChange: (alwaysVisible: boolean) => void;
   recentDocumentsPanelEnabled: boolean;
   onRecentDocumentsPanelEnabledChange: (enabled: boolean) => void;
   autoSaveEnabled: boolean;
@@ -123,6 +131,36 @@ function updatePermission(
   });
 }
 
+async function promptForOptionalPermissions(
+  pluginManager: PluginManager,
+  plugin: InstalledPlugin,
+  permissions: OptionalPermission[]
+): Promise<void> {
+  let nextGrants = plugin.grantedPermissions;
+  let changed = false;
+
+  for (const permission of permissions) {
+    const prompt = buildPluginPermissionPrompt(plugin, permission);
+    const allowed = await confirm(prompt.message, {
+      title: prompt.title,
+      kind: plugin.trust === 'verified' ? 'info' : 'warning',
+      okLabel: 'Allow',
+      cancelLabel: 'Don’t Allow',
+    });
+
+    if (!allowed) {
+      continue;
+    }
+
+    nextGrants = updatePermission(nextGrants, permission, true);
+    changed = true;
+  }
+
+  if (changed) {
+    await pluginManager.updatePermissions(plugin.id, nextGrants);
+  }
+}
+
 function cloneModeElementLoopPreferences(
   preferences: ModeElementLoopPreferences
 ): ModeElementLoopPreferences {
@@ -162,6 +200,8 @@ export function SettingsModal({
   pluginStateVersion,
   keymapHintsEnabled,
   onKeymapHintsEnabledChange,
+  keymapHintsAlwaysVisible,
+  onKeymapHintsAlwaysVisibleChange,
   recentDocumentsPanelEnabled,
   onRecentDocumentsPanelEnabledChange,
   autoSaveEnabled,
@@ -296,6 +336,7 @@ export function SettingsModal({
 
   const handleInstallFromFile = () => {
     void runBusy(async () => {
+      const previouslyInstalled = pluginManager.getInstalledPlugins();
       const path = await open({
         multiple: false,
         filters: [
@@ -310,7 +351,11 @@ export function SettingsModal({
         return;
       }
 
-      await pluginManager.installFromFile(path);
+      const installed = await pluginManager.installFromFile(path);
+      const previous = previouslyInstalled.find((plugin) => plugin.id === installed.id);
+      const permissionsToPrompt = getOptionalPermissionsToPrompt(installed, previous);
+
+      await promptForOptionalPermissions(pluginManager, installed, permissionsToPrompt);
     });
   };
 
@@ -446,6 +491,23 @@ export function SettingsModal({
                         className="toggle toggle-sm"
                         checked={keymapHintsEnabled}
                         onChange={(event) => onKeymapHintsEnabledChange(event.target.checked)}
+                      />
+                    </span>
+                  </label>
+
+                  <label className="settings-editor-option">
+                    <span className="settings-editor-option-copy">
+                      <span>Keep keyboard hints visible</span>
+                      <small>Prevent keyboard hints from fading after a few seconds.</small>
+                    </span>
+                    <span className="settings-editor-option-control">
+                      <span aria-hidden="true">{keymapHintsAlwaysVisible ? 'On' : 'Off'}</span>
+                      <input
+                        type="checkbox"
+                        className="toggle toggle-sm"
+                        checked={keymapHintsAlwaysVisible}
+                        disabled={!keymapHintsEnabled}
+                        onChange={(event) => onKeymapHintsAlwaysVisibleChange(event.target.checked)}
                       />
                     </span>
                   </label>
@@ -886,7 +948,7 @@ export function SettingsModal({
                           {plugin.manifest.optionalPermissions.length > 0 && (
                             <div className="settings-plugin-permissions">
                               <div className="settings-plugin-subhead">
-                                Optional permissions
+                                Plugin access
                               </div>
                               <div className="settings-plugin-permission-grid">
                                 {plugin.manifest.optionalPermissions.map((permission) => {
@@ -900,16 +962,18 @@ export function SettingsModal({
                                     >
                                       <span className="min-w-0">
                                         <span>
-                                          {permission}{' '}
+                                          {PERMISSION_LABELS[permission]}{' '}
                                           <span className={granted ? 'text-success' : 'text-warning'}>
-                                            {granted ? 'Allowed' : 'Denied'}
+                                            {granted ? 'Allowed' : 'Not allowed'}
                                           </span>
                                         </span>
                                         <small>
                                           {PERMISSION_DESCRIPTIONS[permission]}
                                         </small>
                                         <small>
-                                          Rationale: {rationale || 'Not provided by author.'}
+                                          {rationale
+                                            ? `Why the plugin needs this: ${rationale}`
+                                            : 'The plugin did not explain why it needs this.'}
                                         </small>
                                       </span>
                                       <input

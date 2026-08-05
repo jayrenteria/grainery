@@ -1,5 +1,6 @@
 import type { DocumentMode, RecentFileEntry } from '../../lib/types';
 import { SettingsButton } from '../Settings';
+import packageJson from '../../../package.json';
 
 const DOCUMENT_MODE_LABELS: Record<DocumentMode, string> = {
   screenplay: 'Screenplay',
@@ -60,10 +61,6 @@ function getDirectoryPath(path: string): string {
   }
 
   return segments.slice(0, -1).join('/');
-}
-
-function getApplicationVersion(): string {
-  return '1.5';
 }
 
 export function StartScreen({
@@ -173,7 +170,7 @@ export function StartScreen({
           )}
         </section>
       </main>
-      <p className="start-screen-version">GRAINERY {getApplicationVersion()}</p>
+      <p className="start-screen-version">GRAINERY {packageJson.version}</p>
     </div>
   );
 }

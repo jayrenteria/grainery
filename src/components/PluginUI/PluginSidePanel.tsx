@@ -1,4 +1,5 @@
 import { useEffect, useRef, type CSSProperties } from 'react';
+import { toCssFontFamily } from '../../lib/textStyles';
 import { PluginIcon } from '../../plugins/ui/icons';
 import type { EvaluatedUIPanel, UIPanelActionItem, UIPanelBlock } from '../../plugins';
 
@@ -18,16 +19,6 @@ function sanitizeInputValue(value: string, maxLength: number): string {
   return normalized.slice(0, maxLength);
 }
 
-function quotedFontFamily(value: string): string {
-  const family = value
-    .replace(/[\u0000\r\n\f]/g, ' ')
-    .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
-    .trim()
-    .slice(0, 128);
-  return family ? `"${family}", ui-sans-serif, system-ui, sans-serif` : 'inherit';
-}
-
 function actionPreviewStyle(action: UIPanelActionItem): CSSProperties | undefined {
   const preview = action.preview;
   if (!preview) {
@@ -36,7 +27,7 @@ function actionPreviewStyle(action: UIPanelActionItem): CSSProperties | undefine
 
   const style: CSSProperties = {};
   if (typeof preview.fontFamily === 'string') {
-    style.fontFamily = quotedFontFamily(preview.fontFamily);
+    style.fontFamily = toCssFontFamily(preview.fontFamily) ?? 'inherit';
   }
   if (typeof preview.fontWeight === 'number' && Number.isFinite(preview.fontWeight)) {
     style.fontWeight = Math.min(1000, Math.max(1, Math.round(preview.fontWeight)));
@@ -50,7 +41,7 @@ function actionPreviewStyle(action: UIPanelActionItem): CSSProperties | undefine
   }
 
   style.fontSize = '0.95rem';
-  style.lineHeight = 1.1;
+  style.lineHeight = 1.35;
   return style;
 }
 
@@ -70,6 +61,9 @@ function renderBlock(
   onAction: (panelId: string, actionId: string) => void,
   onFormValueChange: (panelId: string, fieldId: string, value: string) => void
 ) {
+  const isSceneOutlinePanel =
+    panelId.endsWith(':scene-outline-panel') || panelId === 'scene-outline-panel';
+
   switch (block.type) {
     case 'heading': {
       const HeadingTag = block.level === 4 ? 'h4' : block.level === 3 ? 'h3' : 'h2';
@@ -199,12 +193,12 @@ function renderBlock(
                       : action.variant === 'ghost'
                         ? 'btn-ghost'
                         : 'btn-neutral'
-                } ${action.fullWidth || block.layout === 'stack' ? 'w-full justify-start' : ''}`}
+                } ${action.fullWidth || block.layout === 'stack' || isSceneOutlinePanel ? 'w-full justify-start' : ''} ${isSceneOutlinePanel ? 'font-bold uppercase' : ''}`}
                 onMouseDown={(event) => {
                   event.preventDefault();
                 }}
                 onClick={() => onAction(panelId, action.id)}
-                style={previewStyle}
+                title={action.label}
               >
                 <span className="plugin-panel-action-label" style={previewStyle}>
                   {action.label}
