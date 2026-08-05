@@ -146,6 +146,18 @@ function validatePanelBlock(block: UIPanelBlock, scope: string): void {
     }
   }
 
+  if (block.type === 'scroll') {
+    if (!Array.isArray(block.blocks)) {
+      throw new Error(`${scope} scroll block must include blocks[]`);
+    }
+    if (block.scrollToActionId !== undefined) {
+      assertValidLocalId(block.scrollToActionId, `${scope} scroll target`);
+    }
+    for (const child of block.blocks) {
+      validatePanelBlock(child, scope);
+    }
+  }
+
   if (block.type === 'actions') {
     if (!Array.isArray(block.actions)) {
       throw new Error(`${scope} actions block must include actions[]`);

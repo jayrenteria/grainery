@@ -68,6 +68,11 @@ Panel content model (v1 primitives):
 - flow through `onAction(context.formValues)` when an actions block button is clicked
 - preserve typed values across panel rerenders unless the plugin returns explicit replacement defaults
 
+`scroll` fields:
+
+- `maxHeight` optionally caps the host-rendered scroll region
+- `scrollToActionId` optionally centers a nested action when that target changes
+
 ## Inline annotations
 
 Plugins can register inline range highlights rendered by the host editor layer:

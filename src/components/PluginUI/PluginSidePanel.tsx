@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
+import { toCssFontFamily } from '../../lib/textStyles';
 import { PluginIcon } from '../../plugins/ui/icons';
 import type { EvaluatedUIPanel, UIPanelActionItem, UIPanelBlock } from '../../plugins';
 
@@ -18,16 +20,6 @@ function sanitizeInputValue(value: string, maxLength: number): string {
   return normalized.slice(0, maxLength);
 }
 
-function quotedFontFamily(value: string): string {
-  const family = value
-    .replace(/[\u0000\r\n\f]/g, ' ')
-    .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
-    .trim()
-    .slice(0, 128);
-  return family ? `"${family}", ui-sans-serif, system-ui, sans-serif` : 'inherit';
-}
-
 function actionPreviewStyle(action: UIPanelActionItem): CSSProperties | undefined {
   const preview = action.preview;
   if (!preview) {
@@ -36,7 +28,7 @@ function actionPreviewStyle(action: UIPanelActionItem): CSSProperties | undefine
 
   const style: CSSProperties = {};
   if (typeof preview.fontFamily === 'string') {
-    style.fontFamily = quotedFontFamily(preview.fontFamily);
+    style.fontFamily = toCssFontFamily(preview.fontFamily) ?? 'inherit';
   }
   if (typeof preview.fontWeight === 'number' && Number.isFinite(preview.fontWeight)) {
     style.fontWeight = Math.min(1000, Math.max(1, Math.round(preview.fontWeight)));
@@ -50,7 +42,7 @@ function actionPreviewStyle(action: UIPanelActionItem): CSSProperties | undefine
   }
 
   style.fontSize = '0.95rem';
-  style.lineHeight = 1.1;
+  style.lineHeight = 1.35;
   return style;
 }
 
@@ -93,6 +85,7 @@ function renderBlock(
           key={`${panelId}-scroll-${index}`}
           className="plugin-panel-scroll"
           style={{ maxHeight }}
+          data-scroll-to-action-id={block.scrollToActionId}
         >
           {block.blocks.map((child, childIndex) =>
             renderBlock(
@@ -194,7 +187,8 @@ function renderBlock(
                   event.preventDefault();
                 }}
                 onClick={() => onAction(panelId, action.id)}
-                style={previewStyle}
+                data-plugin-action-id={action.id}
+                title={action.label}
               >
                 <span className="plugin-panel-action-label" style={previewStyle}>
                   {action.label}
@@ -280,6 +274,37 @@ export function PluginSidePanel({
   onAction,
   onFormValueChange,
 }: PluginSidePanelProps) {
+  const panelRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const panelElement = panelRef.current;
+    if (!panelElement) {
+      return;
+    }
+
+    for (const container of panelElement.querySelectorAll<HTMLElement>(
+      '.plugin-panel-scroll[data-scroll-to-action-id]'
+    )) {
+      const targetId = container.dataset.scrollToActionId;
+      const target = Array.from(
+        container.querySelectorAll<HTMLButtonElement>('[data-plugin-action-id]')
+      ).find((action) => action.dataset.pluginActionId === targetId);
+      if (!target) {
+        continue;
+      }
+
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      container.scrollTop = Math.max(
+        0,
+        container.scrollTop
+          + targetRect.top
+          - containerRect.top
+          - (container.clientHeight - targetRect.height) / 2
+      );
+    }
+  }, [panel]);
+
   if (!panel) {
     return null;
   }
@@ -287,7 +312,7 @@ export function PluginSidePanel({
   const width = panel.defaultWidth ?? 280;
 
   return (
-    <aside className="plugin-side-panel" style={{ width }} aria-label={`${panel.title} panel`}>
+    <aside ref={panelRef} className="plugin-side-panel" style={{ width }} aria-label={`${panel.title} panel`}>
       <header className="plugin-side-panel-header">
         <div className="plugin-side-panel-title-wrap">
           <PluginIcon icon={panel.icon ?? 'panel'} className="h-4 w-4" />

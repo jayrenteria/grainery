@@ -359,13 +359,14 @@ Enforcements:
 
 ### Permission UX
 
-Optional permissions are deny-by-default. When a worker requests an optional permission at runtime, the frontend prompt includes:
+Optional permissions are deny-by-default. Permission prompts use plain-language titles and explain
+what the plugin will be able to do. Internal permission ids, plugin ids, versions, and raw allow/deny
+state are intentionally omitted. Plugins installed outside Grainery's verified catalog include a
+short source warning, and every prompt tells the user where to change the choice later.
 
-- plugin name, id, and version;
-- permission id and host-authored description;
-- current allow/deny state;
-- author-provided `permissionRationales[permission]` text when present;
-- install trust state.
+Fresh installs prompt for each declared optional permission immediately after installation. Updates
+prompt only for newly introduced optional permissions; previously recorded allow/deny choices are
+preserved. Choosing **Don’t Allow** leaves the capability unavailable and editable later in Settings.
 
 Denied runtime permission requests and denied host operations are persisted as diagnostics.
 

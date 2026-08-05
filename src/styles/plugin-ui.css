@@ -185,11 +185,11 @@
 }
 
 .plugin-panel-actions .btn {
-  @apply h-auto min-h-7 max-w-full whitespace-normal text-left leading-tight;
+  @apply h-auto min-h-9 max-w-full overflow-hidden whitespace-normal px-2 py-1.5 text-left;
 }
 
 .plugin-panel-action-label {
-  @apply inline-block max-w-full break-words;
+  @apply inline-block max-w-full break-words py-0.5;
 }
 
 .plugin-panel-field {

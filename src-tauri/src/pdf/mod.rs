@@ -5,7 +5,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufWriter;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 // Screenplay formatting constants (in points, 72 points = 1 inch)
 const PAGE_WIDTH: f32 = 612.0; // 8.5 inches
@@ -90,6 +90,13 @@ struct TextStyle {
 struct StyledSegment {
     text: String,
     style: TextStyle,
+}
+
+struct PdfFontVariants {
+    regular: IndirectFontRef,
+    bold: IndirectFontRef,
+    italic: IndirectFontRef,
+    bold_italic: IndirectFontRef,
 }
 
 #[derive(Debug)]
@@ -282,7 +289,9 @@ pub struct PdfGenerator {
     bold_font: IndirectFontRef,
     italic_font: IndirectFontRef,
     bold_italic_font: IndirectFontRef,
+    custom_font_fallback: Option<PdfFontVariants>,
     external_fonts: HashMap<String, IndirectFontRef>,
+    external_font_paths: HashMap<String, Option<PathBuf>>,
     external_font_metrics: HashMap<String, Option<ExternalFontMetrics>>,
     is_sans: bool,
     char_width: f32,
@@ -342,7 +351,9 @@ impl PdfGenerator {
             bold_font,
             italic_font,
             bold_italic_font,
+            custom_font_fallback: None,
             external_fonts: HashMap::new(),
+            external_font_paths: HashMap::new(),
             external_font_metrics: HashMap::new(),
             is_sans: is_freewrite,
             char_width,
@@ -386,6 +397,25 @@ impl PdfGenerator {
         )
     }
 
+    fn external_font_path(
+        &mut self,
+        cache_key: &str,
+        font_family: &str,
+        requested_weight: u16,
+        requested_style: &str,
+    ) -> Option<PathBuf> {
+        if !self.external_font_paths.contains_key(cache_key) {
+            let path = fonts::resolve_system_font(
+                font_family,
+                Some(requested_weight),
+                Some(requested_style),
+            );
+            self.external_font_paths.insert(cache_key.to_string(), path);
+        }
+
+        self.external_font_paths.get(cache_key).cloned().flatten()
+    }
+
     fn font_for(&mut self, style: &TextStyle) -> IndirectFontRef {
         if let Some((font_family, requested_weight, requested_style)) =
             Self::external_font_request(style)
@@ -396,17 +426,22 @@ impl PdfGenerator {
                 return font.clone();
             }
 
-            if let Some(path) = fonts::resolve_system_font(
-                font_family,
-                Some(requested_weight),
-                Some(requested_style),
-            ) {
+            if let Some(path) =
+                self.external_font_path(&cache_key, font_family, requested_weight, requested_style)
+            {
                 if let Ok(file) = File::open(path) {
                     if let Ok(font) = self.doc.add_external_font(file) {
                         self.external_fonts.insert(cache_key, font.clone());
                         return font;
                     }
                 }
+            }
+
+            // Standard PDF Helvetica is available independently of the host OS. Its
+            // AFM widths are also used below, keeping missing-font rendering and
+            // layout calculations in agreement.
+            if let Some(font) = self.custom_font_fallback_for(style) {
+                return font;
             }
         }
 
@@ -418,18 +453,44 @@ impl PdfGenerator {
         }
     }
 
+    fn custom_font_fallback_for(&mut self, style: &TextStyle) -> Option<IndirectFontRef> {
+        if self.custom_font_fallback.is_none() {
+            let regular = self.doc.add_builtin_font(BuiltinFont::Helvetica).ok()?;
+            let bold = self.doc.add_builtin_font(BuiltinFont::HelveticaBold).ok()?;
+            let italic = self
+                .doc
+                .add_builtin_font(BuiltinFont::HelveticaOblique)
+                .ok()?;
+            let bold_italic = self
+                .doc
+                .add_builtin_font(BuiltinFont::HelveticaBoldOblique)
+                .ok()?;
+            self.custom_font_fallback = Some(PdfFontVariants {
+                regular,
+                bold,
+                italic,
+                bold_italic,
+            });
+        }
+
+        let fonts = self.custom_font_fallback.as_ref()?;
+        Some(match (style.bold, style.italic) {
+            (true, true) => fonts.bold_italic.clone(),
+            (true, false) => fonts.bold.clone(),
+            (false, true) => fonts.italic.clone(),
+            (false, false) => fonts.regular.clone(),
+        })
+    }
+
     fn external_font_metrics_for(&mut self, style: &TextStyle) -> Option<&ExternalFontMetrics> {
         let (font_family, requested_weight, requested_style) = Self::external_font_request(style)?;
         let cache_key =
             Self::external_font_cache_key(font_family, requested_weight, requested_style);
 
         if !self.external_font_metrics.contains_key(&cache_key) {
-            let metrics = fonts::resolve_system_font(
-                font_family,
-                Some(requested_weight),
-                Some(requested_style),
-            )
-            .and_then(|path| ExternalFontMetrics::from_path(&path));
+            let metrics = self
+                .external_font_path(&cache_key, font_family, requested_weight, requested_style)
+                .and_then(|path| ExternalFontMetrics::from_path(&path));
             self.external_font_metrics
                 .insert(cache_key.clone(), metrics);
         }
@@ -1390,6 +1451,13 @@ mod tests {
         format!(r#"{{"type":"{}","content":[{}]}}"#, node_type, content)
     }
 
+    fn custom_font_node(node_type: &str, text: &str, font_family: &str, size_pt: f32) -> String {
+        format!(
+            r#"{{"type":"{}","content":[{{"type":"text","text":"{}","marks":[{{"type":"fontFamily","attrs":{{"fontFamily":"{}","fontWeight":400,"fontStyle":"normal"}}}},{{"type":"textSize","attrs":{{"sizePt":{}}}}}]}}]}}"#,
+            node_type, text, font_family, size_pt
+        )
+    }
+
     fn generate(content_nodes: &[String], mode: &str, filename: &str) -> Vec<u8> {
         let content = format!(
             r#"{{"type":"doc","content":[{}]}}"#,
@@ -1498,6 +1566,37 @@ mod tests {
         assert!(
             !raw.contains("Helvetica"),
             "screenplay PDFs should not use Helvetica"
+        );
+    }
+
+    #[test]
+    fn missing_custom_font_uses_helvetica_for_rendering_and_measurement() {
+        let missing_family = "Grainery Definitely Missing Font 7fd8d43b";
+        let style = TextStyle {
+            font_family: Some(missing_family.to_string()),
+            size_pt: Some(20.0),
+            ..TextStyle::default()
+        };
+        let mut generator = PdfGenerator::new("Fallback Metrics", "screenplay").unwrap();
+        let measured_width = generator.glyph_width_pt('W', &style, FONT_SIZE);
+        let expected_width = helvetica_width_units('W', false) as f32 * 20.0 / 1000.0;
+        assert!((measured_width - expected_width).abs() < 0.001);
+
+        let nodes = vec![custom_font_node(
+            "action",
+            "Missing custom face",
+            missing_family,
+            20.0,
+        )];
+        let bytes = generate(
+            &nodes,
+            "screenplay",
+            "grainery-screenplay-missing-font-test.pdf",
+        );
+        let raw = String::from_utf8_lossy(&bytes);
+        assert!(
+            raw.contains("Helvetica"),
+            "missing custom fonts should render with built-in Helvetica"
         );
     }
 }

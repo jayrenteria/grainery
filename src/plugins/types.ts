@@ -566,7 +566,7 @@ export type UIPanelBlock =
   | { type: 'heading'; text: string; level?: 2 | 3 | 4 }
   | { type: 'text'; text: string }
   | { type: 'divider' }
-  | { type: 'scroll'; maxHeight?: number; blocks: UIPanelBlock[] }
+  | { type: 'scroll'; maxHeight?: number; scrollToActionId?: string; blocks: UIPanelBlock[] }
   | { type: 'callout'; tone?: 'info' | 'success' | 'warning' | 'danger'; title?: string; text: string }
   | { type: 'badgeList'; items: Array<{ label: string; value?: string; tone?: 'neutral' | 'info' | 'success' | 'warning' | 'danger' }> }
   | { type: 'progress'; label: string; value: number; max?: number; tone?: 'neutral' | 'primary' | 'success' | 'warning' | 'danger' }
