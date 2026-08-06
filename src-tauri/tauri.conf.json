@@ -50,6 +50,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["grainery"]
+      }
+    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhGQTk2MTdDMURDMzJBQzUKUldURktzTWRmR0dwajlaNHhJQlRGalZFUkJ0VHhCWkp5ZC94dXFYSHA4T2FGNU04VzB3ZjQ1VjIK",
       "endpoints": [

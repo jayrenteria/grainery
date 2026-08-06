@@ -65,10 +65,12 @@ import {
 import { PluginManager } from './plugins';
 import type {
   EditorCompletionContext,
+  PluginRegistryEntry,
   RenderedEditorLandmark,
   RenderedInlineAnnotation,
   RenderedStatusBadge,
 } from './plugins';
+import { PERMISSION_DESCRIPTIONS, PERMISSION_LABELS } from './plugins';
 import { PluginUIHost } from './components/PluginUI';
 import './styles/screenplay.css';
 
@@ -82,6 +84,12 @@ const AUTO_SAVE_PREFERENCES_STORAGE_KEY = 'grainery-autosave-preferences';
 const ELEMENT_LOOP_PREFERENCES_STORAGE_KEY = 'grainery-element-loop-preferences-v1';
 const TOUR_COMPLETED_STORAGE_KEY_PREFIX = 'grainery-tour-completed-v1-';
 const START_SCREEN_TOUR_STORAGE_KEY = 'grainery-tour-completed-v1-start-screen';
+const OFFICIAL_PLUGIN_REGISTRY_URL = 'https://plugins.grainery.xyz/registry/v1/index.json';
+
+interface PluginInstallRequest {
+  pluginId: string;
+  version: string;
+}
 
 interface PreparedDocument {
   doc: ScreenplayDocument;
@@ -91,6 +99,33 @@ interface PreparedDocument {
 interface AutoSavePreferences {
   enabled: boolean;
   intervalMs: number;
+}
+
+function pluginInstallConfirmation(entry: PluginRegistryEntry): string {
+  const corePermissions = entry.manifest.permissions.length
+    ? entry.manifest.permissions.map((permission) => `- ${permission}`).join('\n')
+    : '- None';
+  const optionalPermissions = entry.manifest.optionalPermissions.length
+    ? entry.manifest.optionalPermissions
+        .map((permission) => {
+          const rationale = entry.manifest.permissionRationales?.[permission]
+            ?? PERMISSION_DESCRIPTIONS[permission];
+          return `- ${PERMISSION_LABELS[permission]}: ${rationale}`;
+        })
+        .join('\n')
+    : '- None';
+
+  return [
+    `Install ${entry.name} ${entry.version}?`,
+    '',
+    'This version is listed in Grainery\'s official plugin registry. Grainery verifies its signed package before installing it.',
+    '',
+    'Core permissions:',
+    corePermissions,
+    '',
+    'Optional permissions:',
+    optionalPermissions,
+  ].join('\n');
 }
 
 function getPreviousNodeType(editor: Editor): string | null {
@@ -255,6 +290,9 @@ function App() {
   const isDirtyRef = useRef(isDirty);
   const showSettingsRef = useRef(showSettings);
   const isClosingRef = useRef(false);
+  const pluginInstallQueueRef = useRef<PluginInstallRequest[]>([]);
+  const isHandlingPluginInstallRef = useRef(false);
+  const pendingPluginInstallsRef = useRef(new Set<string>());
 
   const clearQueuedAutoSave = useCallback(() => {
     if (autoSaveTimerRef.current) {
@@ -390,6 +428,86 @@ function App() {
   }
 
   const pluginManager = pluginManagerRef.current;
+
+  const handlePluginInstallRequest = useCallback(
+    async (request: PluginInstallRequest) => {
+      const requestKey = `${request.pluginId}@${request.version}`;
+      try {
+        const entries = await pluginManager.fetchRegistryIndex(OFFICIAL_PLUGIN_REGISTRY_URL);
+        const entry = entries.find(
+          (candidate) => candidate.id === request.pluginId && candidate.version === request.version
+        );
+        if (!entry) {
+          throw new Error(`Plugin ${request.pluginId} ${request.version} is not available.`);
+        }
+
+        const confirmed = await askDialog(pluginInstallConfirmation(entry), {
+          title: 'Install Grainery plugin?',
+          kind: 'info',
+          okLabel: 'Install',
+          cancelLabel: 'Cancel',
+        });
+        if (!confirmed) {
+          return;
+        }
+
+        await pluginManager.installFromRegistry(
+          OFFICIAL_PLUGIN_REGISTRY_URL,
+          request.pluginId,
+          request.version,
+          entry
+        );
+        setPluginStateVersion((current) => current + 1);
+        await messageDialog(`${entry.name} ${entry.version} was installed.`, {
+          title: 'Plugin installed',
+          kind: 'info',
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await messageDialog(`Could not install this plugin. ${message}`, {
+          title: 'Plugin installation failed',
+          kind: 'error',
+        });
+      } finally {
+        pendingPluginInstallsRef.current.delete(requestKey);
+      }
+    },
+    [pluginManager]
+  );
+
+  const processPluginInstallQueue = useCallback(async () => {
+    if (isHandlingPluginInstallRef.current) {
+      return;
+    }
+
+    isHandlingPluginInstallRef.current = true;
+    try {
+      while (pluginInstallQueueRef.current.length > 0) {
+        const request = pluginInstallQueueRef.current.shift();
+        if (request) {
+          await handlePluginInstallRequest(request);
+        }
+      }
+    } finally {
+      isHandlingPluginInstallRef.current = false;
+    }
+  }, [handlePluginInstallRequest]);
+
+  const queuePluginInstallRequest = useCallback(
+    (request: PluginInstallRequest) => {
+      if (!request?.pluginId || !request.version) {
+        return;
+      }
+      const requestKey = `${request.pluginId}@${request.version}`;
+      if (pendingPluginInstallsRef.current.has(requestKey)) {
+        return;
+      }
+      pendingPluginInstallsRef.current.add(requestKey);
+      pluginInstallQueueRef.current.push(request);
+      void processPluginInstallQueue();
+    },
+    [processPluginInstallQueue]
+  );
 
   const resolveEditorCompletions = useCallback(
     (context: EditorCompletionContext) => pluginManager.evaluateEditorCompletions(context),
@@ -1507,6 +1625,34 @@ function App() {
       void unlisten.then((fn) => fn());
     };
   }, [requestAppExit]);
+
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+    let cancelled = false;
+
+    void (async () => {
+      const unlisten = await listen<PluginInstallRequest>('plugin-install-request', (event) => {
+        queuePluginInstallRequest(event.payload);
+      });
+      if (cancelled) {
+        unlisten();
+        return;
+      }
+      dispose = unlisten;
+
+      const requests = await invoke<PluginInstallRequest[]>('consume_pending_plugin_installs');
+      if (!cancelled) {
+        if (Array.isArray(requests)) {
+          requests.forEach(queuePluginInstallRequest);
+        }
+      }
+    })().catch((error) => console.error('Failed to initialize plugin install links:', error));
+
+    return () => {
+      cancelled = true;
+      dispose?.();
+    };
+  }, [queuePluginInstallRequest]);
 
   // Open files when the app is launched via file association / OS open-file events.
   useEffect(() => {

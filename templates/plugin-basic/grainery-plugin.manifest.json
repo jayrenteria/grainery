@@ -53,10 +53,5 @@
     "uiControls": [],
     "uiPanels": [],
     "transforms": []
-  },
-  "signature": {
-    "keyId": "local-dev",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-    "sig": "PLACEHOLDER"
   }
 }
