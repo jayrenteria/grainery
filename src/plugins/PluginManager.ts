@@ -355,12 +355,14 @@ export class PluginManager {
   async installFromRegistry(
     registryUrl: string,
     pluginId: string,
-    version: string | null
+    version: string | null,
+    expectedEntry?: PluginRegistryEntry
   ): Promise<InstalledPlugin> {
     const plugin = await invoke<InstalledPlugin>('plugin_install_from_registry', {
       registryUrl,
       pluginId,
       version,
+      expectedEntry,
     });
 
     await this.reloadInstalledPlugins();

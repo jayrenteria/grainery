@@ -7,9 +7,11 @@ use std::path::Path;
 use std::sync::Mutex;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{Emitter, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_deep_link::DeepLinkExt;
 #[cfg(desktop)]
 use tauri_plugin_window_state::{StateFlags, DEFAULT_FILENAME};
 
+mod deep_link;
 mod fonts;
 mod pdf;
 mod plugins;
@@ -128,6 +130,13 @@ fn consume_pending_open_files(state: tauri::State<'_, PendingOpenFiles>) -> Vec<
 }
 
 #[tauri::command]
+fn consume_pending_plugin_installs(
+    state: tauri::State<'_, deep_link::PendingPluginInstalls>,
+) -> Vec<deep_link::PluginInstallRequest> {
+    state.take()
+}
+
+#[tauri::command]
 fn exit_app(app: tauri::AppHandle, state: tauri::State<'_, ExitControl>) {
     if let Ok(mut allow_exit) = state.allow_exit.lock() {
         *allow_exit = true;
@@ -177,13 +186,40 @@ fn has_saved_window_state(app: &tauri::AppHandle) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(desktop)]
+    {
+        // The single-instance plugin must precede deep-link so warm links reach this process.
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }));
+    }
+
+    let app = builder
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(PendingOpenFiles::default())
+        .manage(deep_link::PendingPluginInstalls::default())
         .manage(ExitControl::default())
         .setup(|app| {
+            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            app.deep_link().register_all()?;
+
+            if let Some(urls) = app.deep_link().get_current()? {
+                deep_link::handle_urls(app.handle(), urls);
+            }
+
+            let deep_link_app = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                deep_link::handle_urls(&deep_link_app, event.urls());
+            });
+
             #[cfg(desktop)]
             app.handle().plugin(
                 tauri_plugin_window_state::Builder::default()
@@ -370,6 +406,7 @@ pub fn run() {
             file_exists,
             get_update_target,
             consume_pending_open_files,
+            consume_pending_plugin_installs,
             exit_app,
             set_titlebar_theme_color,
             export_pdf,
