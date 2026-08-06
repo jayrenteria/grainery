@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "com.grainery.scene-outline",
   "name": "Scene Manager",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Numbers scenes and adds an always-visible scene map with jump navigation.",
   "engine": {
-    "grainery": ">=1.5.9",
+    "grainery": ">=1.6.2",
     "pluginApi": "^1.2.0"
   },
   "entry": "dist/main.js",

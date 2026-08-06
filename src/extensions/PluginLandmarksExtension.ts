@@ -1,6 +1,6 @@
 import { Extension, type Editor } from '@tiptap/core';
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import type { RenderedEditorLandmark } from '../plugins';
 
 interface GutterLandmark {
@@ -19,6 +19,12 @@ interface PluginLandmarksState {
   landmarks: GutterLandmark[];
   decorations: DecorationSet;
   needsRebuild: boolean;
+  viewportRevision: number;
+}
+
+interface ViewportAnchor {
+  container: HTMLElement;
+  top: number;
 }
 
 type PluginLandmarksAction =
@@ -29,6 +35,7 @@ const DEFAULT_STATE: PluginLandmarksState = {
   landmarks: [],
   decorations: DecorationSet.empty,
   needsRebuild: false,
+  viewportRevision: 0,
 };
 
 export const pluginLandmarksPluginKey = new PluginKey<PluginLandmarksState>('pluginLandmarks');
@@ -156,6 +163,72 @@ function createGutterDecorations(
   return DecorationSet.create(doc, decorations);
 }
 
+function getScrollContainer(view: EditorView): HTMLElement | null {
+  const candidate = view.dom.closest('.paginated-editor-container');
+  if (
+    !candidate ||
+    typeof (candidate as HTMLElement).scrollTop !== 'number' ||
+    typeof (candidate as HTMLElement).scrollTo !== 'function'
+  ) {
+    return null;
+  }
+
+  return candidate as HTMLElement;
+}
+
+function captureViewportAnchor(view: EditorView): ViewportAnchor | null {
+  const container = getScrollContainer(view);
+  if (!container) {
+    return null;
+  }
+
+  try {
+    return {
+      container,
+      top: view.coordsAtPos(view.state.selection.head).top,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function restoreViewportAnchor(view: EditorView, anchor: ViewportAnchor | null): void {
+  if (!anchor || getScrollContainer(view) !== anchor.container) {
+    return;
+  }
+
+  try {
+    const currentTop = view.coordsAtPos(view.state.selection.head).top;
+    const nextScrollTop = anchor.container.scrollTop + currentTop - anchor.top;
+    if (!Number.isFinite(nextScrollTop)) {
+      return;
+    }
+
+    anchor.container.scrollTo({
+      top: Math.max(0, nextScrollTop),
+      behavior: 'auto',
+    });
+  } catch {
+    // Ignore transient coordinate errors while ProseMirror updates the view.
+  }
+}
+
+function restoreViewportAnchorAfterUpdate(
+  view: EditorView,
+  anchor: ViewportAnchor | null
+): void {
+  restoreViewportAnchor(view, anchor);
+
+  const ownerWindow = view.dom.ownerDocument?.defaultView;
+  if (!ownerWindow?.requestAnimationFrame) {
+    return;
+  }
+
+  ownerWindow.requestAnimationFrame(() => {
+    restoreViewportAnchor(view, anchor);
+  });
+}
+
 export const PluginLandmarksExtension = Extension.create({
   name: 'pluginLandmarks',
 
@@ -211,6 +284,7 @@ export const PluginLandmarksExtension = Extension.create({
                 landmarks,
                 decorations: createGutterDecorations(tr.doc, landmarks),
                 needsRebuild: false,
+                viewportRevision: previous.viewportRevision + 1,
               };
             }
 
@@ -239,6 +313,29 @@ export const PluginLandmarksExtension = Extension.create({
             const pluginState = pluginLandmarksPluginKey.getState(state) ?? DEFAULT_STATE;
             return pluginState.decorations;
           },
+        },
+        view: (view) => {
+          let viewportAnchor = captureViewportAnchor(view);
+
+          return {
+            update: (nextView, previousState) => {
+              const previous = pluginLandmarksPluginKey.getState(previousState) ?? DEFAULT_STATE;
+              const current =
+                pluginLandmarksPluginKey.getState(nextView.state) ?? DEFAULT_STATE;
+
+              if (
+                (!previous.needsRebuild && current.needsRebuild) ||
+                previous.viewportRevision !== current.viewportRevision
+              ) {
+                restoreViewportAnchorAfterUpdate(nextView, viewportAnchor);
+              }
+
+              viewportAnchor = captureViewportAnchor(nextView);
+            },
+            destroy: () => {
+              viewportAnchor = null;
+            },
+          };
         },
       }),
     ];

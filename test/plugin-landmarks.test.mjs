@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test, { after } from 'node:test';
 import { Schema } from '@tiptap/pm/model';
-import { EditorState } from '@tiptap/pm/state';
+import { EditorState, TextSelection } from '@tiptap/pm/state';
 import ts from 'typescript';
 
 const compiledExtensionDirectory = mkdtempSync(join(process.cwd(), '.grainery-landmarks-'));
@@ -115,6 +115,50 @@ function widgetTypesByKey(decorations) {
       .filter((decoration) => decoration.widget)
       .map((decoration) => [decoration.spec.key, decoration.type])
   );
+}
+
+function createScrollableView(state, initialScrollTop = 5_000) {
+  const animationFrames = [];
+  const container = {
+    scrollTop: initialScrollTop,
+    scrollTo({ top }) {
+      this.scrollTop = top;
+    },
+  };
+  const documentTop = 5_200;
+  const view = {
+    state,
+    dom: {
+      ownerDocument: {
+        defaultView: {
+          requestAnimationFrame(callback) {
+            animationFrames.push(callback);
+          },
+        },
+      },
+      closest(selector) {
+        return selector === '.paginated-editor-container' ? container : null;
+      },
+    },
+    coordsAtPos() {
+      return {
+        top: documentTop - container.scrollTop,
+        bottom: documentTop - container.scrollTop + 20,
+        left: 0,
+        right: 0,
+      };
+    },
+  };
+
+  return {
+    container,
+    flushAnimationFrames() {
+      for (const callback of animationFrames.splice(0)) {
+        callback();
+      }
+    },
+    view,
+  };
 }
 
 test('maps existing gutter widgets through ordinary document edits', () => {
@@ -245,4 +289,78 @@ test('rebuilds the correct gutter set after a scene is deleted', () => {
   state = setLandmarks(state, createLandmarks(state.doc));
 
   assert.equal(decorationsFor(plugin, state).find().length, (SCENE_COUNT - 1) * 3);
+});
+
+test('preserves the viewport when deleting a decorated scene heading', () => {
+  const plugin = createPlugin();
+  let state = EditorState.create({ doc: createDocument(), plugins: [plugin] });
+  const initial = createLandmarks(state.doc);
+  state = setLandmarks(state, initial);
+  const scene = initial[80];
+  state = state.apply(
+    state.tr.setSelection(TextSelection.create(state.doc, scene.from + 1))
+  );
+
+  const { container, flushAnimationFrames, view } = createScrollableView(state);
+  const pluginView = plugin.spec.view(view);
+  const previousState = state;
+  state = state.apply(state.tr.delete(scene.from, scene.to));
+  view.state = state;
+  container.scrollTop = 0;
+
+  pluginView.update(view, previousState);
+
+  assert.equal(container.scrollTop, 5_000);
+  container.scrollTop = 0;
+  flushAnimationFrames();
+  assert.equal(container.scrollTop, 5_000);
+  assert.equal(pluginLandmarksPluginKey.getState(state).needsRebuild, true);
+  pluginView.destroy();
+});
+
+test('preserves the viewport while rebuilding provider landmarks', () => {
+  const plugin = createPlugin();
+  const commands = createCommands();
+  let state = EditorState.create({ doc: createDocument(2), plugins: [plugin] });
+  const initial = createLandmarks(state.doc);
+  state = setLandmarks(state, initial);
+
+  const { container, flushAnimationFrames, view } = createScrollableView(state);
+  const pluginView = plugin.spec.view(view);
+  const previousState = state;
+  commands.setPluginLandmarks([
+    { ...initial[0], gutterLabel: 'A1' },
+    initial[1],
+  ])({
+    state,
+    tr: state.tr,
+    dispatch: (transaction) => {
+      state = state.apply(transaction);
+      view.state = state;
+      container.scrollTop = 0;
+    },
+  });
+  pluginView.update(view, previousState);
+
+  assert.equal(container.scrollTop, 5_000);
+  container.scrollTop = 0;
+  flushAnimationFrames();
+  assert.equal(container.scrollTop, 5_000);
+  pluginView.destroy();
+});
+
+test('does not require an editor view while setting provider landmarks', () => {
+  const plugin = createPlugin();
+  const commands = createCommands();
+  let state = EditorState.create({ doc: createDocument(2), plugins: [plugin] });
+
+  assert.doesNotThrow(() => {
+    commands.setPluginLandmarks(createLandmarks(state.doc))({
+      state,
+      tr: state.tr,
+      dispatch: (transaction) => {
+        state = state.apply(transaction);
+      },
+    });
+  });
 });
