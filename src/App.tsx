@@ -781,23 +781,6 @@ function App() {
     [document.meta.filename, isDirty, queueAutoSave]
   );
 
-  const handleNew = useCallback(async (documentMode: DocumentMode = 'screenplay') => {
-    if (view === 'editor' && isDirty) {
-      const discard = await confirmUnsavedChanges();
-      if (!discard) return;
-    }
-
-    const nextDoc = createNewDocument(documentMode);
-    setDocument(nextDoc);
-    editorContentRef.current = nextDoc.document;
-    setIsDirty(false);
-    setIsRecentDocumentsPanelOpen(false);
-    setView('editor');
-    startTourIfNeeded(documentMode);
-    setStartScreenError(null);
-    await updateWindowTitle(null);
-  }, [isDirty, startTourIfNeeded, view]);
-
   const handleOpen = useCallback(async () => {
     if (view === 'editor' && isDirty) {
       const discard = await confirmUnsavedChanges();
@@ -958,6 +941,49 @@ function App() {
       return false;
     }
   }, [document, refreshRecentFiles, runTransformHook]);
+
+  const handleNew = useCallback(async (documentMode: DocumentMode = 'screenplay') => {
+    if (view === 'editor' && isDirty) {
+      const documentType = documentMode === 'freewrite' ? 'free write' : documentMode;
+      const shouldSave = await askDialog(
+        `You have unsaved changes. Save before starting a new ${documentType}?`,
+        {
+          title: 'Unsaved Changes',
+          kind: 'warning',
+          okLabel: 'Save',
+          cancelLabel: "Don't Save",
+        }
+      );
+
+      if (shouldSave) {
+        if (!(await saveCurrentDocument())) return;
+      } else {
+        const shouldDiscard = await askDialog(
+          `Start a new ${documentType} without saving your changes?`,
+          {
+            title: 'Unsaved Changes',
+            kind: 'warning',
+            okLabel: 'Start New',
+            cancelLabel: 'Cancel',
+          }
+        );
+        if (!shouldDiscard) return;
+      }
+    }
+
+    const nextDoc = createNewDocument(documentMode);
+    editorContentRef.current = nextDoc.document;
+    clearQueuedAutoSave();
+    editorRef.current = null;
+    setDocument(nextDoc);
+    setIsDirty(false);
+    setIsRecentDocumentsPanelOpen(false);
+    setActiveTourMode(null);
+    setView('editor');
+    startTourIfNeeded(documentMode);
+    setStartScreenError(null);
+    await updateWindowTitle(null);
+  }, [clearQueuedAutoSave, isDirty, saveCurrentDocument, startTourIfNeeded, view]);
 
   const confirmQuitWithUnsavedChanges = useCallback(async (): Promise<boolean> => {
     if (!(viewRef.current === 'editor' && isDirtyRef.current)) {
@@ -1745,7 +1771,7 @@ function App() {
             )}
 
             <ScreenplayEditor
-              key={document.meta.id}
+              documentId={document.meta.id}
               documentMode={document.documentMode}
               initialContent={editorContentRef.current}
               inlineAnnotations={inlineAnnotations}

@@ -64,6 +64,7 @@ import type {
 } from '../../plugins';
 
 interface ScreenplayEditorProps {
+  documentId: string;
   initialContent?: JSONContent;
   inlineAnnotations?: RenderedInlineAnnotation[];
   editorLandmarks?: RenderedEditorLandmark[];
@@ -167,6 +168,7 @@ function getPreviousNodeType(editor: Editor): string | null {
 }
 
 export function ScreenplayEditor({
+  documentId,
   initialContent,
   inlineAnnotations = [],
   editorLandmarks = [],
@@ -418,7 +420,7 @@ export function ScreenplayEditor({
         return false;
       },
     },
-  });
+  }, [documentId, documentMode]);
 
   useEffect(() => {
     completionResolverRef.current = resolveEditorCompletions;
