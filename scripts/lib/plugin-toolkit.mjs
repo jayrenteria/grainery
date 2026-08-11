@@ -5,6 +5,11 @@ import { spawnSync } from 'node:child_process';
 export const MANIFEST_FILE_NAME = 'grainery-plugin.manifest.json';
 export const REQUIRED_PLUGIN_API_RANGE = '^1.2.0';
 export const PLUGIN_ARCHIVE_EXTENSION = '.grainery-plugin.zip';
+export const MAX_PLUGIN_ARCHIVE_BYTES = 10 * 1024 * 1024;
+export const MAX_PLUGIN_UNCOMPRESSED_BYTES = 50 * 1024 * 1024;
+export const MAX_PLUGIN_FILE_BYTES = 10 * 1024 * 1024;
+export const MAX_PLUGIN_ARCHIVE_ENTRIES = 256;
+export const MAX_PLUGIN_MANIFEST_BYTES = 256 * 1024;
 
 export const CORE_PERMISSIONS = new Set([
   'document:read',
@@ -24,6 +29,7 @@ export const OPTIONAL_PERMISSIONS = new Set([
 
 export const DOCUMENT_HOOKS = new Set(['post-open', 'pre-save', 'pre-export']);
 export const LOCAL_ID_RE = /^[a-zA-Z0-9._-]+$/;
+export const PLUGIN_ID_RE = /^(?!\.{1,2}$)[a-z0-9._-]{1,64}$/;
 export const BUILTIN_ICONS = new Set([
   'scene-heading',
   'action',
@@ -109,7 +115,7 @@ export function isValidLocalId(value) {
 }
 
 export function isValidPluginId(value) {
-  return isValidLocalId(value);
+  return typeof value === 'string' && PLUGIN_ID_RE.test(value);
 }
 
 export function isValidActivationEvent(value) {
@@ -507,7 +513,7 @@ export function validatePluginManifest(manifest, options = {}) {
   }
 
   if (!isValidPluginId(manifest.id)) {
-    pushError(errors, 'id must match ^[a-zA-Z0-9._-]+$, be <=64 chars, and must not include :');
+    pushError(errors, "id must be 1-64 lowercase [a-z0-9._-] characters and cannot be '.' or '..'");
   }
 
   if (!isNonEmptyString(manifest.name)) {
@@ -650,9 +656,21 @@ export function validatePluginManifest(manifest, options = {}) {
     }
   }
 
-  if (!manifest.signature || typeof manifest.signature !== 'object' || Array.isArray(manifest.signature)) {
-    pushError(errors, 'signature object is required');
-  } else {
+  if (manifest.signature !== undefined) {
+    pushWarning(
+      warnings,
+      'manifest.signature does not establish registry trust; Grainery verifies the detached registry signature over the final archive hash'
+    );
+
+    if (!manifest.signature || typeof manifest.signature !== 'object' || Array.isArray(manifest.signature)) {
+      pushError(errors, 'signature must be an object when provided');
+      return {
+        valid: errors.length === 0,
+        errors,
+        warnings,
+      };
+    }
+
     validateNoUnknownKeys(manifest.signature, new Set(['keyId', 'sha256', 'sig']), errors, 'signature');
     if (!isNonEmptyString(manifest.signature.keyId)) {
       pushError(errors, 'signature.keyId is required');
@@ -717,14 +735,52 @@ export function listArchiveEntries(archivePath) {
 
   return result.stdout
     .split(/\r?\n/)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+    .filter((entry) => entry.length > 0);
+}
+
+function listArchiveDetails(archivePath) {
+  const result = spawnSync('unzip', ['-Z', '-l', archivePath], {
+    encoding: 'utf8',
+    maxBuffer: 5 * 1024 * 1024,
+  });
+
+  if (result.status !== 0) {
+    const message = result.stderr.trim() || result.stdout.trim() || 'Failed to inspect archive entries';
+    throw new Error(message);
+  }
+
+  const pattern = /^([dl-][rwxstST-]{9})\s+\S+\s+\S+\s+(\d+)\s+\S+\s+(\d+)\s+(\S+)\s+\S+\s+\S+\s+(.*)$/;
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => pattern.exec(line))
+    .filter(Boolean)
+    .map((match) => ({
+      permissions: match[1],
+      uncompressedSize: Number(match[2]),
+      compressedSize: Number(match[3]),
+      compression: match[4],
+      name: match[5],
+    }));
+}
+
+function archiveContainsEncryptedEntries(archivePath) {
+  const result = spawnSync('unzip', ['-Z', '-v', archivePath], {
+    encoding: 'utf8',
+    maxBuffer: 5 * 1024 * 1024,
+  });
+
+  if (result.status !== 0) {
+    const message = result.stderr.trim() || result.stdout.trim() || 'Failed to inspect archive security';
+    throw new Error(message);
+  }
+
+  return /file security status:\s+encrypted/i.test(result.stdout);
 }
 
 function readArchiveEntry(archivePath, entryName) {
   const result = spawnSync('unzip', ['-p', archivePath, entryName], {
     encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024,
+    maxBuffer: MAX_PLUGIN_MANIFEST_BYTES + 1,
   });
 
   if (result.status !== 0) {
@@ -732,11 +788,31 @@ function readArchiveEntry(archivePath, entryName) {
     throw new Error(message);
   }
 
+  if (Buffer.byteLength(result.stdout) > MAX_PLUGIN_MANIFEST_BYTES) {
+    throw new Error(`Plugin manifest exceeds ${MAX_PLUGIN_MANIFEST_BYTES} bytes`);
+  }
+
   return result.stdout;
 }
 
-function archiveEntryIsUnsafe(entry) {
-  return entry.startsWith('/') || entry.includes('..') || entry.includes('\\');
+function normalizeArchiveEntry(entry) {
+  if (
+    !entry ||
+    entry.includes('\0') ||
+    entry.includes('\\') ||
+    entry.startsWith('/') ||
+    /^[A-Za-z]:/.test(entry)
+  ) {
+    return null;
+  }
+
+  const parts = entry.split('/');
+  if (parts.some((part) => part === '.' || part === '..')) {
+    return null;
+  }
+
+  const normalized = parts.filter(Boolean).join('/');
+  return normalized || null;
 }
 
 export function checkPluginArchive(target) {
@@ -758,9 +834,22 @@ export function checkPluginArchive(target) {
     pushWarning(warnings, `Plugin archive should use ${PLUGIN_ARCHIVE_EXTENSION}`);
   }
 
+  const archiveStats = fs.statSync(archivePath);
+  if (!archiveStats.isFile()) {
+    pushError(errors, 'Archive is not a regular file');
+  }
+  if (archiveStats.size > MAX_PLUGIN_ARCHIVE_BYTES) {
+    pushError(errors, `Archive exceeds ${MAX_PLUGIN_ARCHIVE_BYTES} bytes`);
+  }
+
   let entries = [];
+  let details = [];
   try {
     entries = listArchiveEntries(archivePath);
+    details = listArchiveDetails(archivePath);
+    if (archiveContainsEncryptedEntries(archivePath)) {
+      pushError(errors, 'Archive contains encrypted entries');
+    }
   } catch (error) {
     return {
       valid: false,
@@ -774,14 +863,55 @@ export function checkPluginArchive(target) {
   if (entries.length === 0) {
     pushError(errors, 'Archive is empty');
   }
+  if (entries.length > MAX_PLUGIN_ARCHIVE_ENTRIES) {
+    pushError(errors, `Archive contains more than ${MAX_PLUGIN_ARCHIVE_ENTRIES} entries`);
+  }
+  if (details.length !== entries.length) {
+    pushError(errors, 'Archive entry metadata is incomplete');
+  }
 
+  const normalizedEntries = new Set();
+  const caseFoldedEntries = new Set();
   for (const entry of entries) {
-    if (archiveEntryIsUnsafe(entry)) {
+    const normalized = normalizeArchiveEntry(entry);
+    if (!normalized) {
       pushError(errors, `Archive entry is unsafe: ${entry}`);
+      continue;
     }
+    if (normalizedEntries.has(normalized)) {
+      pushError(errors, `Archive contains duplicate normalized path: ${normalized}`);
+    }
+    if (caseFoldedEntries.has(normalized.toLowerCase())) {
+      pushError(errors, `Archive contains case-colliding path: ${normalized}`);
+    }
+    normalizedEntries.add(normalized);
+    caseFoldedEntries.add(normalized.toLowerCase());
+
     if (entry.split('/').includes('__MACOSX') || path.basename(entry) === '.DS_Store') {
       pushWarning(warnings, `Archive contains local metadata file: ${entry}`);
     }
+  }
+
+  let totalUncompressed = 0;
+  for (const detail of details) {
+    totalUncompressed += detail.uncompressedSize;
+    if (detail.uncompressedSize > MAX_PLUGIN_FILE_BYTES) {
+      pushError(errors, `Archive entry exceeds ${MAX_PLUGIN_FILE_BYTES} bytes: ${detail.name}`);
+    }
+    if (detail.permissions.startsWith('l')) {
+      pushError(errors, `Archive entry is a symbolic link: ${detail.name}`);
+    }
+    if (detail.compression !== 'stor' && !detail.compression.startsWith('def')) {
+      pushError(errors, `Archive entry uses unsupported compression: ${detail.name}`);
+    }
+  }
+  if (totalUncompressed > MAX_PLUGIN_UNCOMPRESSED_BYTES) {
+    pushError(errors, `Archive exceeds ${MAX_PLUGIN_UNCOMPRESSED_BYTES} uncompressed bytes`);
+  }
+
+  const manifestDetail = details.find((detail) => detail.name === MANIFEST_FILE_NAME);
+  if (manifestDetail?.uncompressedSize > MAX_PLUGIN_MANIFEST_BYTES) {
+    pushError(errors, `Plugin manifest exceeds ${MAX_PLUGIN_MANIFEST_BYTES} bytes`);
   }
 
   if (!entries.includes(MANIFEST_FILE_NAME)) {
@@ -807,8 +937,14 @@ export function checkPluginArchive(target) {
     errors.push(...result.errors);
     warnings.push(...result.warnings);
 
-    if (isNonEmptyString(manifest.entry) && !entries.includes(manifest.entry)) {
-      pushError(errors, `Archive missing manifest entry file: ${manifest.entry}`);
+    if (isNonEmptyString(manifest.entry)) {
+      const normalizedEntry = normalizeArchiveEntry(manifest.entry);
+      if (normalizedEntry !== manifest.entry || !normalizedEntries.has(manifest.entry)) {
+        pushError(errors, `Archive missing normalized manifest entry file: ${manifest.entry}`);
+      }
+      if (!/\.(?:js|mjs)$/.test(manifest.entry)) {
+        pushError(errors, 'Manifest entry file must be a JavaScript module');
+      }
     }
   }
 
