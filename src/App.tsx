@@ -7,7 +7,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask as askDialog, message as messageDialog } from '@tauri-apps/plugin-dialog';
 
 import { RecentDocumentsPanel, ScreenplayEditor } from './components/Editor';
-import { SettingsButton, SettingsModal } from './components/Settings';
+import { SettingsButton, SettingsModal, type SettingsTab } from './components/Settings';
 import { StartScreen } from './components/StartScreen';
 import { UpdateDialog, type UpdateDialogStatus } from './components/Updates';
 import { ProductTour } from './components/Tour/ProductTour';
@@ -255,6 +255,7 @@ function App() {
   const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>(() => getRecentFiles());
   const [startScreenError, setStartScreenError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('theme');
   const [pluginStateVersion, setPluginStateVersion] = useState(0);
   const [editorVersion, setEditorVersion] = useState(0);
   const [statusBadges, setStatusBadges] = useState<RenderedStatusBadge[]>([]);
@@ -462,6 +463,8 @@ function App() {
           title: 'Plugin installed',
           kind: 'info',
         });
+        setSettingsTab('plugins');
+        setShowSettings(true);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await messageDialog(`Could not install this plugin. ${message}`, {
@@ -1209,6 +1212,7 @@ function App() {
 
   const handleCloseSettings = useCallback(() => {
     setShowSettings(false);
+    setSettingsTab('theme');
     if (viewRef.current === 'editor') {
       editorRef.current?.commands.focus();
     }
@@ -1216,6 +1220,7 @@ function App() {
 
   const handleStartTour = useCallback(() => {
     setShowSettings(false);
+    setSettingsTab('theme');
     setActiveTourMode(document.documentMode);
   }, [document.documentMode]);
 
@@ -1822,6 +1827,8 @@ function App() {
         {showSettings && (
           <SettingsModal
             onClose={handleCloseSettings}
+            activeTab={settingsTab}
+            onActiveTabChange={setSettingsTab}
             documentMode={document.documentMode}
             titlePage={document.titlePage}
             onTitlePageChange={handleSaveTitlePage}

@@ -28,6 +28,8 @@ import {
 
 interface SettingsModalProps {
   onClose: () => void;
+  activeTab: SettingsTab;
+  onActiveTabChange: (tab: SettingsTab) => void;
   documentMode: DocumentMode;
   titlePage: TitlePageData | null;
   onTitlePageChange: (titlePage: TitlePageData | null) => void;
@@ -48,7 +50,7 @@ interface SettingsModalProps {
   onStartTour: () => void;
 }
 
-type SettingsTab = 'theme' | 'editor' | 'smart-loop' | 'title-page' | 'plugins';
+export type SettingsTab = 'theme' | 'editor' | 'smart-loop' | 'title-page' | 'plugins';
 
 const EMPTY_TITLE_PAGE: TitlePageData = {
   title: '',
@@ -193,6 +195,8 @@ function getTransitionSubject(transition: { currentTypes?: ScreenplayElementType
 
 export function SettingsModal({
   onClose,
+  activeTab,
+  onActiveTabChange,
   documentMode,
   titlePage,
   onTitlePageChange,
@@ -213,7 +217,6 @@ export function SettingsModal({
   onStartTour,
 }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('theme');
   const [titlePageForm, setTitlePageForm] = useState<TitlePageData>(titlePage || EMPTY_TITLE_PAGE);
   const [selectedLoopMode, setSelectedLoopMode] = useState<DocumentMode>(documentMode);
   const [isBusy, setIsBusy] = useState(false);
@@ -445,7 +448,7 @@ export function SettingsModal({
                     role="tab"
                     aria-selected={activeTab === tab.id}
                     className={`settings-tab ${activeTab === tab.id ? 'is-active' : ''}`}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => onActiveTabChange(tab.id)}
                   >
                     <span aria-hidden="true" className="settings-tab-icon">{tab.icon}</span>
                     <span>{tab.label}</span>
