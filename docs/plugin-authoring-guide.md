@@ -159,17 +159,18 @@ Create `grainery-plugin.manifest.json`:
     "importers": [],
     "statusBadges": [],
     "inlineAnnotationProviders": [],
+    "editorCompletionProviders": [],
+    "editorLandmarkProviders": [],
     "uiControls": [],
     "uiPanels": [],
     "transforms": []
-  },
-  "signature": {
-    "keyId": "main-2026",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-    "sig": "PLACEHOLDER"
   }
 }
 ```
+
+Do not add `manifest.signature` when preparing a registry package. Registry trust uses a detached
+signature over the final archive hash, added by the registry after approval. An embedded manifest
+signature is accepted only for legacy sideload compatibility and never makes a plugin verified.
 
 Permission sets:
 
@@ -178,10 +179,12 @@ Permission sets:
 
 Use `permissionRationales` for every optional permission you expect users to grant. Keep the wording
 short and conversational. Grainery shows it in Settings beside a plain-language description of the
-access, while permission prompts use host-written copy that does not expose internal permission ids.
+access, and includes it in the marketplace install summary.
 
-On a fresh install, Grainery prompts for each optional permission. Plugin updates preserve existing
-choices and prompt only when the new version introduces an additional optional permission.
+For a sideload, Grainery asks about each optional permission after installation. For a marketplace
+install, the confirmation summarizes all requested access, then Grainery opens Settings -> Plugins
+after installation so the user can grant optional permissions. Existing choices are preserved when
+a plugin is replaced; newly introduced optional permissions start denied.
 
 Example:
 
@@ -382,7 +385,7 @@ provider.
 
 ## 12. Step-by-step walkthrough: `review-notes`
 
-Source: `/Users/jay/git/screenwrite/examples/plugins/review-notes/dist/main.js`
+Source: `examples/plugins/review-notes/dist/main.js`
 
 Step sequence:
 
@@ -419,6 +422,9 @@ npm run plugin:check-archive -- examples/plugins/my-plugin/com.example.my-plugin
 ```
 
 The archive must contain `grainery-plugin.manifest.json` at root, not nested under another folder. The manifest `entry` file must also exist inside the archive.
+The tooling enforces the registry limits: 10 MiB compressed, 50 MiB total uncompressed, 10 MiB per
+file, 256 entries, and a 256 KiB manifest. It also rejects unsafe paths, collisions, symlinks,
+encrypted entries, and unsupported compression.
 
 ## 14. Install and test in Grainery
 
@@ -426,19 +432,18 @@ The archive must contain `grainery-plugin.manifest.json` at root, not nested und
 2. Go to Settings -> Plugins.
 3. Click Install from file.
 4. Select your `.grainery-plugin.zip`.
-5. Enable optional permissions you need (for example `ui:mount`).
+5. Review the optional permission prompts. You can change each choice later on the plugin's Settings row.
 
-Sideloaded plugins remain marked **unverified** in Settings. That is expected for local development and private testing. Registry plugins are marked verified only after the registry signature and archive SHA-256 checks pass.
+Sideloads are recorded as `unverified`; that is expected for local development and private testing.
+Only installation through the official marketplace can create a `verified` plugin record.
 
 Smoke-test checklist:
 
 - Install succeeds with no manifest error.
 - Plugin appears in installed list.
-- Trust/source and lock verification details look correct.
-- Registered commands/exporters/importers/status badges appear.
+- Declared shortcuts invoke commands, status badges render, and each extension point you use returns valid output.
 - UI controls/panels appear only when `ui:mount` is granted.
-- Permission prompts show useful rationales and your plugin handles deny gracefully.
-- Diagnostics stay empty during normal use.
+- Permission prompts or Settings show useful rationales and your plugin handles deny gracefully.
 - Disable/uninstall removes plugin behavior immediately.
 
 ## 15. Security and quality checklist
@@ -452,18 +457,35 @@ Before sharing a plugin:
 - Avoid long-running handlers; return quickly.
 - Keep deterministic behavior for denied permissions.
 - Add clear plugin README usage notes.
-- Document support expectations: what data the plugin touches, known limitations, and how users should report diagnostics from Settings.
+- Document support expectations: what data the plugin touches, known limitations, and how users should report errors.
 
 ## 16. Publishing, signing, and updates
 
-Registry publishing requires a manifest entry, archive SHA-256, signing key id, and signature. Grainery treats registry installs as verified only when:
+Publish approved plugins through the `jayrenteria/grainery-plugin-registry` repository:
+
+1. Build, validate, package, and check the archive with Grainery's tooling.
+2. Keep `manifest.signature` out of the archive.
+3. Add the plugin metadata, README, `version.json`, and archive under
+   `registry/plugins/<plugin-id>/` using the layout documented in that repository.
+4. Open a pull request that links to the exact source revision used to build the archive and explains
+   every requested permission.
+5. Wait for validation and administrator approval. Production CI hashes and signs the approved archive;
+   authors do not receive or use the registry signing key.
+
+Published plugin ID/version pairs are immutable. Fix code with a new semantic version instead of
+replacing an existing archive. Grainery treats marketplace installs as verified only when:
 
 - the registry entry id/version matches the manifest id/version;
 - the registry signature verifies with a trusted Grainery registry key;
 - the downloaded archive SHA-256 matches the registry record;
 - the archive passes the same manifest and package validation as sideloaded plugins.
 
-Settings exposes the lock record so users can see the archive hash, signing key, source, and registry/download URLs. If the fetched registry contains a higher semver for an installed plugin, Settings shows an update action and asks for confirmation before replacing the installed package. Keep updates compatible with existing granted permissions where possible, and mention breaking changes in your README.
+Approved releases appear at `https://plugins.grainery.xyz`. The website's **Install in Grainery**
+link opens the desktop app, shows the permission summary, and installs only after signature, hash,
+manifest identity, and compatibility checks pass. Grainery then opens Settings -> Plugins so the user
+can grant optional permissions. There is not yet an in-app marketplace browser or automatic plugin
+update action; users install a newer approved version from its marketplace page. Keep updates compatible
+with existing granted permissions where possible, and mention breaking changes in your README.
 
 ## 17. Common pitfalls
 
@@ -474,6 +496,8 @@ Settings exposes the lock record so users can see the archive hash, signing key,
 - Forgetting `document:write` when using `setPluginData`.
 - Returning annotation ranges without validating stale anchors.
 - Omitting `permissionRationales`, which leaves users without author context in prompts.
+- Adding `manifest.signature` to a registry archive instead of letting the registry sign the final package.
+- Expecting `contributes.menus` or `contributes.configuration` to render UI; both are indexed but not surfaced yet.
 - Declaring optional permissions but not handling denied state.
 - Expecting direct DOM or Tauri API access from plugin code.
 - Importing SDK runtime helpers in an unbundled plugin; use `import type` with plain `tsc`.
@@ -482,4 +506,5 @@ Settings exposes the lock record so users can see the archive hash, signing key,
 
 - Internals and architecture: `docs/plugin-system.md`
 - UI extension API: `docs/plugin-ui-extension.md`
-- Schema reference: `grainery-plugin.manifest.json`
+- Manifest validator: `scripts/lib/plugin-toolkit.mjs`
+- Canonical SDK types: `src/plugins/types.ts` and `src/plugins/sdk.ts`
