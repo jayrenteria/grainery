@@ -59,8 +59,13 @@ Rust backend:
 
 Manifest and validation:
 
-- `grainery-plugin.manifest.json`
-- `scripts/validate-plugin-manifest.mjs`
+- `scripts/lib/plugin-toolkit.mjs`
+- `scripts/grainery-plugin.mjs`
+
+Registry publication:
+
+- `../grainery-plugin-registry/registry/README.md`
+- `../grainery-plugin-registry/docs/contracts/registry-v1.md`
 
 Examples:
 - `examples/plugins/wordcount/`
@@ -120,7 +125,6 @@ Not supported:
    - If you add optional/core permissions, update all of:
    - TypeScript unions (`types.ts`)
    - frontend constants (`permissions.ts`)
-   - manifest JSON schema
    - JS manifest validator
    - Rust permission checks
    - settings UI toggles
@@ -145,22 +149,25 @@ Run after plugin-system changes:
 
 ```bash
 npm run build
+npm test
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
 Validate manifests:
 
 ```bash
-npm run validate:plugin-manifest -- examples/plugins/wordcount/grainery-plugin.manifest.json
-npm run validate:plugin-manifest -- examples/plugins/element-toolbar/grainery-plugin.manifest.json
-npm run validate:plugin-manifest -- examples/plugins/review-notes/grainery-plugin.manifest.json
+npm run plugin:validate -- examples/plugins/wordcount --check-entry
+npm run plugin:validate -- examples/plugins/element-toolbar --check-entry
+npm run plugin:validate -- examples/plugins/scene-outline --check-entry
+npm run plugin:validate -- examples/plugins/character-manager --check-entry
+npm run plugin:validate -- examples/plugins/review-notes --check-entry
 ```
 
 If modifying example zips, rebuild and verify root layout:
 
 ```bash
-unzip -l examples/plugins/wordcount/wordcount.grainery-plugin.zip
-unzip -l examples/plugins/element-toolbar/element-toolbar.grainery-plugin.zip
+npm run plugin:pack -- examples/plugins/wordcount
+npm run plugin:check-archive -- examples/plugins/wordcount/com.grainery.wordcount.grainery-plugin.zip
 ```
 
 ## Manual QA Minimum
@@ -170,6 +177,7 @@ unzip -l examples/plugins/element-toolbar/element-toolbar.grainery-plugin.zip
 3. Disable/uninstall removes plugin behavior immediately.
 4. Plugin crash does not crash editor.
 5. Core writing loop (Tab/Enter/Escape) remains intact without plugins.
+6. Marketplace install confirmation, signature verification, and post-install Plugins settings work.
 
 ## Related Docs
 

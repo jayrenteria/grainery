@@ -165,8 +165,8 @@ Manifest `contributes.menus` can place declared commands into host-owned command
 - `toolbar-overflow`
 
 Menu entries reference local command ids and can include `group`, `icon`, `priority`, and `when`.
-The host indexes these entries before worker activation so a future command palette can render
-available commands without waking every plugin.
+The host indexes this metadata before worker activation, but the current app does not render plugin
+menu entries. Commands remain reachable through declared keybindings and host-rendered plugin controls.
 
 Manifest `contributes.keybindings` declares configurable shortcuts separately from command metadata:
 
@@ -191,8 +191,9 @@ Current property types are:
 - `boolean`
 - `enum`
 
-This milestone indexes and validates configuration schemas and shows them in Settings. A full editor
-for configuration values should store values through plugin-scoped global storage and remain host-rendered.
+Grainery indexes and validates configuration schemas, but the current Settings UI does not render a
+configuration editor. Plugins can expose host-rendered panel fields and store lightweight preferences
+through plugin-scoped global storage.
 
 ## Advanced custom UI
 
