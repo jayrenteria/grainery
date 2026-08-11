@@ -1,3 +1,9 @@
 [submodule "examples/plugins/system-font-styles"]
 	path = examples/plugins/system-font-styles
 	url = https://github.com/aindaco1/system-font-styles.git
+[submodule "examples/plugins/character-manager"]
+	path = examples/plugins/character-manager
+	url = https://github.com/aindaco1/character-manager.git
+[submodule "examples/plugins/scene-outline"]
+	path = examples/plugins/scene-outline
+	url = https://github.com/aindaco1/scene-manager.git
