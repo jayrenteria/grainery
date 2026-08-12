@@ -1071,7 +1071,7 @@ impl PdfGenerator {
 
         if let Some(nodes) = &content.content {
             for (index, node) in nodes.iter().enumerate() {
-                self.render_node(node, nodes.get(index + 1), document_mode);
+                self.render_node(node, &nodes[index + 1..], document_mode);
             }
         }
     }
@@ -1227,7 +1227,7 @@ impl PdfGenerator {
     fn render_node(
         &mut self,
         node: &DocumentNode,
-        next_node: Option<&DocumentNode>,
+        following_nodes: &[DocumentNode],
         _document_mode: &str,
     ) {
         let text = Self::get_node_text(node);
@@ -1307,7 +1307,9 @@ impl PdfGenerator {
                     true,
                     content_max_chars.max(1),
                 );
-                let space_needed = self.styled_lines_height(&lines, FONT_SIZE, LINE_HEIGHT);
+                let space_needed = self.styled_lines_height(&lines, FONT_SIZE, LINE_HEIGHT)
+                    + LINE_HEIGHT
+                    + self.next_kept_block_height(following_nodes);
                 if self.y_position - space_needed < MARGIN_BOTTOM {
                     self.new_page();
                 }
@@ -1368,21 +1370,10 @@ impl PdfGenerator {
                     "",
                     &suffix,
                 );
-                if let Some(dialogue) = next_node.filter(|next| {
-                    next.node_type == "dialogue" && !Self::get_node_text(next).trim().is_empty()
-                }) {
-                    let dialogue_max_chars = (DIALOGUE_WIDTH / self.char_width) as usize;
-                    let dialogue_lines = Self::styled_lines(
-                        dialogue,
-                        TextStyle::default(),
-                        false,
-                        dialogue_max_chars.max(1),
-                    );
-                    let pair_height = self.styled_lines_height(&lines, FONT_SIZE, LINE_HEIGHT)
-                        + self.styled_lines_height(&dialogue_lines, FONT_SIZE, LINE_HEIGHT);
-                    if self.y_position - pair_height < MARGIN_BOTTOM {
-                        self.new_page();
-                    }
+                let group_height = self.styled_lines_height(&lines, FONT_SIZE, LINE_HEIGHT)
+                    + self.character_following_height(following_nodes);
+                if self.y_position - group_height < MARGIN_BOTTOM {
+                    self.new_page();
                 }
                 self.write_styled_lines_aligned(
                     node,
@@ -1463,6 +1454,89 @@ impl PdfGenerator {
                 }
             }
         }
+    }
+
+    fn character_following_height(&mut self, nodes: &[DocumentNode]) -> f32 {
+        let mut height = 0.0;
+        let mut index = 0;
+        while let Some(parenthetical) = nodes
+            .get(index)
+            .filter(|node| node.node_type == "parenthetical")
+        {
+            height += self.screenplay_node_height(parenthetical);
+            index += 1;
+        }
+
+        match nodes.get(index).filter(|node| {
+            node.node_type == "dialogue" && !Self::get_node_text(node).trim().is_empty()
+        }) {
+            Some(dialogue) => height + self.screenplay_node_height(dialogue),
+            None => 0.0,
+        }
+    }
+
+    fn next_kept_block_height(&mut self, nodes: &[DocumentNode]) -> f32 {
+        for (index, node) in nodes.iter().enumerate() {
+            if node.node_type == "pageBreak" {
+                return 0.0;
+            }
+            let height = self.screenplay_node_height(node);
+            if height > 0.0 {
+                return height
+                    + if node.node_type == "character" {
+                        self.character_following_height(&nodes[index + 1..])
+                    } else {
+                        0.0
+                    };
+            }
+        }
+        0.0
+    }
+
+    fn screenplay_node_height(&mut self, node: &DocumentNode) -> f32 {
+        let text = Self::get_node_text(node);
+        if text.trim().is_empty() && node.node_type != "sceneHeading" {
+            return 0.0;
+        }
+
+        let content_width = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
+        let character_suffix = node
+            .attrs
+            .as_ref()
+            .and_then(|attrs| attrs.get("extension"))
+            .and_then(|value| value.as_str())
+            .map(|extension| format!(" ({})", extension))
+            .unwrap_or_default();
+        let (width, uppercase, prefix, suffix, before, after) = match node.node_type.as_str() {
+            "comicPage" => (content_width, true, "", "", 0.0, LINE_HEIGHT),
+            "comicPanel" => (content_width, true, "", "", LINE_HEIGHT, LINE_HEIGHT),
+            "caption" => (content_width - 36.0, false, "", "", 0.0, 0.0),
+            "soundEffect" => (content_width - 36.0, true, "", "", 0.0, 0.0),
+            "sceneHeading" => (content_width, true, "", "", LINE_HEIGHT, LINE_HEIGHT),
+            "action" => (content_width, false, "", "", LINE_HEIGHT, 0.0),
+            "character" => (
+                content_width - CHARACTER_INDENT,
+                true,
+                "",
+                character_suffix.as_str(),
+                LINE_HEIGHT,
+                0.0,
+            ),
+            "dialogue" => (DIALOGUE_WIDTH, false, "", "", 0.0, 0.0),
+            "parenthetical" => (PARENTHETICAL_WIDTH, false, "(", ")", 0.0, 0.0),
+            "transition" => (content_width, true, "", "", LINE_HEIGHT, LINE_HEIGHT),
+            "pageBreak" => return 0.0,
+            _ => (content_width, false, "", "", LINE_HEIGHT, 0.0),
+        };
+        let lines = Self::styled_lines_with_affixes(
+            node,
+            TextStyle::default(),
+            uppercase,
+            ((width / self.char_width) as usize).max(1),
+            prefix,
+            suffix,
+        );
+        before + self.styled_lines_height(&lines, FONT_SIZE, LINE_HEIGHT) + after
     }
 
     pub fn save(self, path: &str) -> Result<(), String> {
@@ -1665,16 +1739,17 @@ mod tests {
     }
 
     #[test]
-    fn keeps_character_with_following_dialogue() {
-        let dialogue = vec!["word"; 18].join(" ");
+    fn keeps_character_parentheticals_and_dialogue_together() {
         let content_json = format!(
-            r#"{{"type":"doc","content":[{},{}]}}"#,
+            r#"{{"type":"doc","content":[{},{},{},{}]}}"#,
             text_node("character", "JANE"),
-            text_node("dialogue", &dialogue),
+            text_node("parenthetical", "quietly"),
+            text_node("parenthetical", "to herself"),
+            text_node("dialogue", "Hello"),
         );
         let content: ScreenplayContent = serde_json::from_str(&content_json).unwrap();
         let mut generator = PdfGenerator::new("Character Pair", "screenplay").unwrap();
-        generator.y_position = MARGIN_BOTTOM + LINE_HEIGHT * 3.0;
+        generator.y_position = MARGIN_BOTTOM + LINE_HEIGHT * 4.0;
 
         generator.render_content(&content, "screenplay");
 
@@ -1682,6 +1757,49 @@ mod tests {
         assert_eq!(
             generator.y_position,
             PAGE_HEIGHT - MARGIN_TOP - LINE_HEIGHT * 4.0
+        );
+    }
+
+    #[test]
+    fn keeps_scene_heading_with_following_block() {
+        let action = vec!["word"; 18].join(" ");
+        let content_json = format!(
+            r#"{{"type":"doc","content":[{},{}]}}"#,
+            text_node("sceneHeading", "INT. OFFICE - DAY"),
+            text_node("action", &action),
+        );
+        let content: ScreenplayContent = serde_json::from_str(&content_json).unwrap();
+        let mut generator = PdfGenerator::new("Scene Pair", "screenplay").unwrap();
+        generator.y_position = MARGIN_BOTTOM + LINE_HEIGHT * 5.0;
+
+        generator.render_content(&content, "screenplay");
+
+        assert_eq!(generator.page_number, 2);
+        assert_eq!(
+            generator.y_position,
+            PAGE_HEIGHT - MARGIN_TOP - LINE_HEIGHT * 5.0
+        );
+    }
+
+    #[test]
+    fn keeps_scene_heading_with_following_character_group() {
+        let content_json = format!(
+            r#"{{"type":"doc","content":[{},{},{},{}]}}"#,
+            text_node("sceneHeading", "INT. OFFICE - DAY"),
+            text_node("character", "JANE"),
+            text_node("parenthetical", "quietly"),
+            text_node("dialogue", "Hello"),
+        );
+        let content: ScreenplayContent = serde_json::from_str(&content_json).unwrap();
+        let mut generator = PdfGenerator::new("Scene and Character", "screenplay").unwrap();
+        generator.y_position = MARGIN_BOTTOM + LINE_HEIGHT * 6.0;
+
+        generator.render_content(&content, "screenplay");
+
+        assert_eq!(generator.page_number, 2);
+        assert_eq!(
+            generator.y_position,
+            PAGE_HEIGHT - MARGIN_TOP - LINE_HEIGHT * 6.0
         );
     }
 

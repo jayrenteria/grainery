@@ -48,6 +48,26 @@ function wrapText(text: string, maxWidthPt: number): string[] {
   return lines;
 }
 
+function blockLines(node: ProseMirrorNode): number {
+  const text = node.textContent.trim();
+  if (!text && node.type.name !== 'sceneHeading') return 0;
+
+  switch (node.type.name) {
+    case 'comicPage': return 2;
+    case 'comicPanel': return 3;
+    case 'caption':
+    case 'soundEffect': return wrapText(text, CONTENT_WIDTH_PT).length;
+    case 'sceneHeading': return 3;
+    case 'action': return 1 + wrapText(text, CONTENT_WIDTH_PT).length;
+    case 'character': return 2;
+    case 'dialogue': return wrapText(text, DIALOGUE_WIDTH_PT).length;
+    case 'parenthetical': return wrapText(`(${text})`, PARENTHETICAL_WIDTH_PT).length;
+    case 'transition': return 3;
+    case 'pageBreak': return 0;
+    default: return 1 + wrapText(text, CONTENT_WIDTH_PT).length;
+  }
+}
+
 /**
  * Computes pagination for a ProseMirror document, mirroring the Rust PDF logic exactly.
  * This ensures WYSIWYG: what you see in the editor matches the PDF output.
@@ -72,9 +92,36 @@ export function computePagination(doc: ProseMirrorNode, _documentMode: DocumentM
     lineCursor += count;
   };
 
+  const characterFollowingLines = (characterIndex: number): number => {
+    let lines = 0;
+    let index = characterIndex + 1;
+    while (index < doc.childCount && doc.child(index).type.name === 'parenthetical') {
+      lines += blockLines(doc.child(index));
+      index += 1;
+    }
+
+    const dialogue = index < doc.childCount ? doc.child(index) : null;
+    return dialogue?.type.name === 'dialogue' && dialogue.textContent.trim()
+      ? lines + blockLines(dialogue)
+      : 0;
+  };
+
+  const nextKeptBlockLines = (index: number): number => {
+    while (index < doc.childCount) {
+      const node = doc.child(index);
+      if (node.type.name === 'pageBreak') return 0;
+      const lines = blockLines(node);
+      if (lines) {
+        return lines + (node.type.name === 'character' ? characterFollowingLines(index) : 0);
+      }
+      index += 1;
+    }
+    return 0;
+  };
+
   // Iterate through all top-level nodes
   doc.forEach((node, offset, index) => {
-    const nodePos = offset + 1; // +1 because offset is before the node, we want inside doc
+    const nodePos = offset;
     const type = node.type.name;
     const text = node.textContent.trim();
 
@@ -114,7 +161,7 @@ export function computePagination(doc: ProseMirrorNode, _documentMode: DocumentM
       case 'sceneHeading': {
         // Rust: write_blank_line(); check_page_break(2); write_line(); write_blank_line();
         consumeLines(1); // blank before
-        checkPageBreak(2, nodePos); // heading + blank after need to fit
+        checkPageBreak(2 + nextKeptBlockLines(index + 1), nodePos);
         consumeLines(1); // heading line
         consumeLines(1); // blank after
         break;
@@ -132,12 +179,7 @@ export function computePagination(doc: ProseMirrorNode, _documentMode: DocumentM
       case 'character': {
         // Rust: write_blank_line(); check_page_break(1); write_line(...)
         consumeLines(1); // blank before
-        const nextNode = index + 1 < doc.childCount ? doc.child(index + 1) : null;
-        const nextText = nextNode?.textContent.trim();
-        const dialogueLines = nextNode?.type.name === 'dialogue' && nextText
-          ? wrapText(nextText, DIALOGUE_WIDTH_PT).length
-          : 0;
-        checkPageBreak(1 + dialogueLines, nodePos);
+        checkPageBreak(1 + characterFollowingLines(index), nodePos);
         consumeLines(1); // character name line
         break;
       }

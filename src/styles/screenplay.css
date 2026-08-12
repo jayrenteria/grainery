@@ -112,6 +112,10 @@
   @apply bg-base-200 px-2 py-0.5 rounded;
 }
 
+.screenplay-editor > .page-break-auto + * {
+  margin-top: 0 !important;
+}
+
 /* Manual page break node */
 .page-break-manual {
   position: relative;
