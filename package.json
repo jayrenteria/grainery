@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "node --test test/*.test.mjs",
+    "test": "node --test test/*.test.mjs examples/plugins/system-font-styles/test/*.test.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "plugin:create": "node scripts/grainery-plugin.mjs create",
