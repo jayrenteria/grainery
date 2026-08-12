@@ -73,7 +73,7 @@ export function computePagination(doc: ProseMirrorNode, _documentMode: DocumentM
   };
 
   // Iterate through all top-level nodes
-  doc.forEach((node, offset) => {
+  doc.forEach((node, offset, index) => {
     const nodePos = offset + 1; // +1 because offset is before the node, we want inside doc
     const type = node.type.name;
     const text = node.textContent.trim();
@@ -132,7 +132,12 @@ export function computePagination(doc: ProseMirrorNode, _documentMode: DocumentM
       case 'character': {
         // Rust: write_blank_line(); check_page_break(1); write_line(...)
         consumeLines(1); // blank before
-        checkPageBreak(1, nodePos);
+        const nextNode = index + 1 < doc.childCount ? doc.child(index + 1) : null;
+        const nextText = nextNode?.textContent.trim();
+        const dialogueLines = nextNode?.type.name === 'dialogue' && nextText
+          ? wrapText(nextText, DIALOGUE_WIDTH_PT).length
+          : 0;
+        checkPageBreak(1 + dialogueLines, nodePos);
         consumeLines(1); // character name line
         break;
       }

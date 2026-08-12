@@ -1070,8 +1070,8 @@ impl PdfGenerator {
         }
 
         if let Some(nodes) = &content.content {
-            for node in nodes {
-                self.render_node(node, document_mode);
+            for (index, node) in nodes.iter().enumerate() {
+                self.render_node(node, nodes.get(index + 1), document_mode);
             }
         }
     }
@@ -1224,7 +1224,12 @@ impl PdfGenerator {
         }
     }
 
-    fn render_node(&mut self, node: &DocumentNode, _document_mode: &str) {
+    fn render_node(
+        &mut self,
+        node: &DocumentNode,
+        next_node: Option<&DocumentNode>,
+        _document_mode: &str,
+    ) {
         let text = Self::get_node_text(node);
         if text.trim().is_empty()
             && node.node_type != "pageBreak"
@@ -1363,6 +1368,22 @@ impl PdfGenerator {
                     "",
                     &suffix,
                 );
+                if let Some(dialogue) = next_node.filter(|next| {
+                    next.node_type == "dialogue" && !Self::get_node_text(next).trim().is_empty()
+                }) {
+                    let dialogue_max_chars = (DIALOGUE_WIDTH / self.char_width) as usize;
+                    let dialogue_lines = Self::styled_lines(
+                        dialogue,
+                        TextStyle::default(),
+                        false,
+                        dialogue_max_chars.max(1),
+                    );
+                    let pair_height = self.styled_lines_height(&lines, FONT_SIZE, LINE_HEIGHT)
+                        + self.styled_lines_height(&dialogue_lines, FONT_SIZE, LINE_HEIGHT);
+                    if self.y_position - pair_height < MARGIN_BOTTOM {
+                        self.new_page();
+                    }
+                }
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -1642,7 +1663,28 @@ mod tests {
             "screenplay PDFs should not use Helvetica"
         );
     }
-  
+
+    #[test]
+    fn keeps_character_with_following_dialogue() {
+        let dialogue = vec!["word"; 18].join(" ");
+        let content_json = format!(
+            r#"{{"type":"doc","content":[{},{}]}}"#,
+            text_node("character", "JANE"),
+            text_node("dialogue", &dialogue),
+        );
+        let content: ScreenplayContent = serde_json::from_str(&content_json).unwrap();
+        let mut generator = PdfGenerator::new("Character Pair", "screenplay").unwrap();
+        generator.y_position = MARGIN_BOTTOM + LINE_HEIGHT * 3.0;
+
+        generator.render_content(&content, "screenplay");
+
+        assert_eq!(generator.page_number, 2);
+        assert_eq!(
+            generator.y_position,
+            PAGE_HEIGHT - MARGIN_TOP - LINE_HEIGHT * 4.0
+        );
+    }
+
     #[test]
     fn renders_numbered_scene_headings_in_screenplay_pdf() {
         let node_json = numbered_scene_node("INT. OFFICE - DAY", 12);
