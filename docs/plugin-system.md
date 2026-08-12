@@ -67,7 +67,7 @@ Important fields:
 - `networkAllowlist`
 - `activationEvents` (required)
 - `contributes` (required)
-- `signature` metadata
+- optional legacy `signature` metadata (never establishes registry trust)
 
 ### Persisted state
 
@@ -96,7 +96,7 @@ frontend local storage and is not written into screenplay files.
 
 ### 1. Install
 
-Frontend settings UI calls Rust commands:
+The Settings sideload flow and marketplace-link flow call Rust commands:
 
 - `plugin_install_from_file`
 - `plugin_install_from_registry`
@@ -159,7 +159,7 @@ Host can invoke plugin handlers via worker RPC:
 - Exporter/importer execution
 
 Pending requests are timeout-protected and isolated per worker.
-Invocation timeouts are persisted as plugin diagnostics and shown in Settings.
+Invocation timeouts are persisted as plugin diagnostics.
 
 Handler contexts are enriched inside the worker with `context.screenplay`, a
 `ScreenplayDocument` helper around the raw TipTap JSON snapshot. The helper supports
@@ -281,9 +281,9 @@ See `docs/plugin-ui-extension.md` for the complete API and behavior details.
 
 Plugins can declare host-renderable settings metadata in `contributes.configuration`.
 Supported property types are `string`, `number`, `boolean`, and `enum`. Grainery validates
-and indexes these schemas during plugin load and shows a Settings summary. A full settings
-value editor is intentionally staged separately so values can remain host-rendered and stored
-through plugin-scoped global storage.
+and indexes these schemas during plugin load. The current Settings UI does not render a
+configuration value editor; plugins that need preferences can expose host-rendered panel fields
+and store values through plugin-scoped global storage.
 
 ## 8) Inline annotations
 
@@ -384,14 +384,15 @@ Enforcements:
 
 ### Permission UX
 
-Optional permissions are deny-by-default. Permission prompts use plain-language titles and explain
-what the plugin will be able to do. Internal permission ids, plugin ids, versions, and raw allow/deny
-state are intentionally omitted. Plugins installed outside Grainery's verified catalog include a
-short source warning, and every prompt tells the user where to change the choice later.
+Optional permissions are deny-by-default. Optional permission prompts use plain-language titles and
+explain what the plugin will be able to do. Sideload prompts include a source warning. Marketplace
+confirmation identifies the plugin and version, lists core permission IDs, and presents optional
+permissions with host labels and author rationales.
 
-Fresh installs prompt for each declared optional permission immediately after installation. Updates
-prompt only for newly introduced optional permissions; previously recorded allow/deny choices are
-preserved. Choosing **Don’t Allow** leaves the capability unavailable and editable later in Settings.
+Sideload installs prompt for each declared optional permission after installation. Marketplace
+install confirmation summarizes both core and optional access; after installation Grainery opens
+Settings -> Plugins so the user can grant optional permissions. Replacing a plugin preserves recorded
+allow/deny choices, while newly introduced optional permissions start denied.
 
 Denied runtime permission requests and denied host operations are persisted as diagnostics.
 
@@ -402,7 +403,7 @@ Denied runtime permission requests and denied host operations are persisted as d
 - Activation errors, worker crashes, permission denials, and invocation timeouts are persisted as diagnostics
 - Crash counts are persisted in plugin state; repeated crashes trigger disable logic
 - Invocation timeout guard prevents hung plugin calls
-- Settings can clear diagnostics and reset the persisted crash count after the user has reviewed them
+- Diagnostic state can be cleared through the plugin manager API, but the current Settings UI does not expose it
 
 ### App hardening
 
@@ -418,16 +419,16 @@ Denied runtime permission requests and denied host operations are persisted as d
    - Rust command: `plugin_install_from_file`
    - Trust state: `unverified`
    - Lock record stores archive SHA-256, source, enabled state, and granted permissions
-   - Sideload remains available for development/private distribution but is clearly marked unverified in Settings
+   - Sideload remains available for development/private distribution and is recorded as unverified
 
 2. **Curated registry install**
-   - UI: fetch registry + install entry
+   - UI: open an exact-version install link from `https://plugins.grainery.xyz`, confirm access, then land in Settings -> Plugins
    - Rust commands:
      - `plugin_fetch_registry_index`
      - `plugin_install_from_registry`
    - Trust state: `verified` only after trusted registry signature verification and archive SHA-256 verification
    - Lock record stores archive SHA-256, signing key id, registry URL, download URL, source, enabled state, and granted permissions
-   - Registry updates preserve compatible granted permissions and enabled state, and the UI asks for confirmation before replacing an installed package
+   - Installing a newer approved version preserves compatible granted permissions and enabled state
 
 ## Trust and signing model
 
@@ -442,11 +443,16 @@ Registry entries must include:
 
 Install rejects a registry entry when the manifest id/version differs from the registry record, the signing key is unknown, signature verification fails, or the downloaded archive hash does not match. A manifest signature in a sideloaded archive does not make the install verified; only the curated registry path can currently produce `trust: verified`.
 
-Settings shows the user-facing trust label, install source, lock hash, signature verification state, signing key id, registry URL, and download URL where available.
+The lock record persists trust, source, hash, signature status, signing key id, registry URL, and
+download URL. The current Settings UI does not expose these low-level fields.
 
 ## ZIP packaging requirement (current)
 
 The installer expects `grainery-plugin.manifest.json` at archive root.
+
+The archive is limited to 10 MiB compressed, 50 MiB total uncompressed, 10 MiB per file,
+256 entries, and a 256 KiB manifest. Paths must be relative and collision-free; symlinks,
+encrypted entries, and unsupported compression methods are rejected.
 
 Valid structure:
 
@@ -537,6 +543,8 @@ Registered in `src-tauri/src/lib.rs`:
 - `plugin_uninstall`
 - `plugin_enable_disable`
 - `plugin_update_permissions`
+- `plugin_record_diagnostic`
+- `plugin_clear_diagnostics`
 - `plugin_fetch_registry_index`
 - `plugin_host_call`
 
@@ -545,7 +553,8 @@ Registered in `src-tauri/src/lib.rs`:
 - No native Rust plugin loading
 - No custom TipTap schema/node registration from plugins
 - ZIP install requires root-level manifest
-- Curated signature key map is currently placeholder-backed in code
+- No in-app marketplace browser or automatic plugin update action
+- Settings does not yet display registry lock details, persisted diagnostics, or configuration schemas
 
 ## Troubleshooting
 

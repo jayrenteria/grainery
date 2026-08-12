@@ -7,7 +7,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask as askDialog, message as messageDialog } from '@tauri-apps/plugin-dialog';
 
 import { RecentDocumentsPanel, ScreenplayEditor } from './components/Editor';
-import { SettingsButton, SettingsModal } from './components/Settings';
+import { SettingsButton, SettingsModal, type SettingsTab } from './components/Settings';
 import { StartScreen } from './components/StartScreen';
 import { UpdateDialog, type UpdateDialogStatus } from './components/Updates';
 import { ProductTour } from './components/Tour/ProductTour';
@@ -255,6 +255,7 @@ function App() {
   const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>(() => getRecentFiles());
   const [startScreenError, setStartScreenError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('theme');
   const [pluginStateVersion, setPluginStateVersion] = useState(0);
   const [editorVersion, setEditorVersion] = useState(0);
   const [statusBadges, setStatusBadges] = useState<RenderedStatusBadge[]>([]);
@@ -462,6 +463,8 @@ function App() {
           title: 'Plugin installed',
           kind: 'info',
         });
+        setSettingsTab('plugins');
+        setShowSettings(true);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await messageDialog(`Could not install this plugin. ${message}`, {
@@ -781,23 +784,6 @@ function App() {
     [document.meta.filename, isDirty, queueAutoSave]
   );
 
-  const handleNew = useCallback(async (documentMode: DocumentMode = 'screenplay') => {
-    if (view === 'editor' && isDirty) {
-      const discard = await confirmUnsavedChanges();
-      if (!discard) return;
-    }
-
-    const nextDoc = createNewDocument(documentMode);
-    setDocument(nextDoc);
-    editorContentRef.current = nextDoc.document;
-    setIsDirty(false);
-    setIsRecentDocumentsPanelOpen(false);
-    setView('editor');
-    startTourIfNeeded(documentMode);
-    setStartScreenError(null);
-    await updateWindowTitle(null);
-  }, [isDirty, startTourIfNeeded, view]);
-
   const handleOpen = useCallback(async () => {
     if (view === 'editor' && isDirty) {
       const discard = await confirmUnsavedChanges();
@@ -958,6 +944,49 @@ function App() {
       return false;
     }
   }, [document, refreshRecentFiles, runTransformHook]);
+
+  const handleNew = useCallback(async (documentMode: DocumentMode = 'screenplay') => {
+    if (view === 'editor' && isDirty) {
+      const documentType = documentMode === 'freewrite' ? 'free write' : documentMode;
+      const shouldSave = await askDialog(
+        `You have unsaved changes. Save before starting a new ${documentType}?`,
+        {
+          title: 'Unsaved Changes',
+          kind: 'warning',
+          okLabel: 'Save',
+          cancelLabel: "Don't Save",
+        }
+      );
+
+      if (shouldSave) {
+        if (!(await saveCurrentDocument())) return;
+      } else {
+        const shouldDiscard = await askDialog(
+          `Start a new ${documentType} without saving your changes?`,
+          {
+            title: 'Unsaved Changes',
+            kind: 'warning',
+            okLabel: 'Start New',
+            cancelLabel: 'Cancel',
+          }
+        );
+        if (!shouldDiscard) return;
+      }
+    }
+
+    const nextDoc = createNewDocument(documentMode);
+    editorContentRef.current = nextDoc.document;
+    clearQueuedAutoSave();
+    editorRef.current = null;
+    setDocument(nextDoc);
+    setIsDirty(false);
+    setIsRecentDocumentsPanelOpen(false);
+    setActiveTourMode(null);
+    setView('editor');
+    startTourIfNeeded(documentMode);
+    setStartScreenError(null);
+    await updateWindowTitle(null);
+  }, [clearQueuedAutoSave, isDirty, saveCurrentDocument, startTourIfNeeded, view]);
 
   const confirmQuitWithUnsavedChanges = useCallback(async (): Promise<boolean> => {
     if (!(viewRef.current === 'editor' && isDirtyRef.current)) {
@@ -1183,6 +1212,7 @@ function App() {
 
   const handleCloseSettings = useCallback(() => {
     setShowSettings(false);
+    setSettingsTab('theme');
     if (viewRef.current === 'editor') {
       editorRef.current?.commands.focus();
     }
@@ -1190,6 +1220,7 @@ function App() {
 
   const handleStartTour = useCallback(() => {
     setShowSettings(false);
+    setSettingsTab('theme');
     setActiveTourMode(document.documentMode);
   }, [document.documentMode]);
 
@@ -1745,7 +1776,7 @@ function App() {
             )}
 
             <ScreenplayEditor
-              key={document.meta.id}
+              documentId={document.meta.id}
               documentMode={document.documentMode}
               initialContent={editorContentRef.current}
               inlineAnnotations={inlineAnnotations}
@@ -1796,6 +1827,8 @@ function App() {
         {showSettings && (
           <SettingsModal
             onClose={handleCloseSettings}
+            activeTab={settingsTab}
+            onActiveTabChange={setSettingsTab}
             documentMode={document.documentMode}
             titlePage={document.titlePage}
             onTitlePageChange={handleSaveTitlePage}
