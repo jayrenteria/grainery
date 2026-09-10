@@ -42,6 +42,8 @@ For a production build:
 npm run build
 ```
 
+For signed Mac installers and release credentials, see [macOS releases](docs/macos-releases.md).
+
 ## Writing Flow
 
 Use `Tab` to cycle through screenplay elements. Grainery keeps two simple loops:

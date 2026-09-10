@@ -52,8 +52,10 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Verify release version
-        run: node scripts/validate-release-version.mjs
+      - name: Validate release scripts
+        run: |
+          node scripts/validate-release-version.mjs
+          node --test test/macos-release.test.mjs
 
       - name: Build and publish Tauri app
         # tauri-action currently publishes tags as action-vX.Y.Z, not v1.
@@ -62,15 +64,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_API_KEY: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          APPLE_API_PRIVATE_KEY: ${{ runner.os == 'macOS' && secrets.APPLE_API_PRIVATE_KEY || '' }}
         with:
           tagName: app-v__VERSION__
           releaseName: Grainery v__VERSION__
           releaseBody: See the assets to download this version and install.
           releaseDraft: true
           prerelease: false
-          uploadUpdaterJson: true
+          includeUpdaterJson: true
           updaterJsonPreferNsis: true
-          tauriScript: npm run tauri
+          tauriScript: ${{ runner.os == 'macOS' && 'bash scripts/release-macos.sh' || 'npm run tauri' }}
           args: ${{ matrix.args }}
 
       # AppImages bundle Ubuntu's GTK/WebKit libraries. Those libraries can be
