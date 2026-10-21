@@ -866,7 +866,10 @@ fn validate_archive_entries<R: Read + Seek>(
         let file = archive
             .by_index(index)
             .map_err(|error| format!("Failed to inspect archive entry {}: {}", index, error))?;
-        let name = file.name().to_string();
+        let name = file
+            .name()
+            .map_err(|error| format!("Invalid archive entry name: {}", error))?
+            .into_owned();
         let normalized = normalize_archive_path(&name)?;
 
         if !normalized_paths.insert(normalized.clone()) {
@@ -1548,7 +1551,11 @@ fn extract_zip_to_directory<R: Read + Seek>(
         let mut file = archive
             .by_index(index)
             .map_err(|error| format!("Failed to read archive entry {}: {}", index, error))?;
-        let normalized = normalize_archive_path(file.name())?;
+        let name = file
+            .name()
+            .map_err(|error| format!("Invalid archive entry name: {}", error))?
+            .into_owned();
+        let normalized = normalize_archive_path(&name)?;
         let output_path = destination.join(normalized);
 
         if file.is_dir() {
@@ -1571,8 +1578,7 @@ fn extract_zip_to_directory<R: Read + Seek>(
         if written > MAX_PLUGIN_FILE_BYTES {
             return Err(format!(
                 "Plugin archive entry exceeds {} bytes during extraction: {}",
-                MAX_PLUGIN_FILE_BYTES,
-                file.name()
+                MAX_PLUGIN_FILE_BYTES, name
             ));
         }
         total_written = total_written
@@ -2814,6 +2820,40 @@ mod tests {
                 .unwrap_err()
                 .contains("archive exceeds")
         );
+    }
+
+    #[test]
+    fn plugin_archives_reject_symbolic_links() {
+        let archive = build_test_archive(&test_manifest(), |writer, options| {
+            writer
+                .add_symlink("assets/external", "../../outside", options)
+                .unwrap();
+        });
+        assert!(inspect_plugin_archive(&archive)
+            .unwrap_err()
+            .contains("symbolic link"));
+    }
+
+    #[test]
+    fn valid_plugin_archives_extract_expected_files() {
+        let bytes = build_test_archive(&test_manifest(), |writer, options| {
+            writer.start_file("assets/café.txt", options).unwrap();
+            writer.write_all(b"asset").unwrap();
+        });
+        inspect_plugin_archive(&bytes).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "grainery-plugin-extract-test-{}-{}",
+            std::process::id(),
+            TEMP_PATH_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let mut archive = ZipArchive::new(Cursor::new(bytes)).unwrap();
+        extract_zip_to_directory(&mut archive, &root).unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("dist/main.js")).unwrap(),
+            "export default {};"
+        );
+        assert_eq!(fs::read(root.join("assets/café.txt")).unwrap(), b"asset");
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

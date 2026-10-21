@@ -52,10 +52,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Validate release scripts
+      - name: Validate release and security checks
         run: |
+          npm audit
           node scripts/validate-release-version.mjs
-          node --test test/macos-release.test.mjs
+          node --test test/macos-release.test.mjs test/native/updater-features.test.mjs
 
       - name: Build and publish Tauri app
         # tauri-action currently publishes tags as action-vX.Y.Z, not v1.
