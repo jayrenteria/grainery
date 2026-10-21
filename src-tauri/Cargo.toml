@@ -30,15 +30,19 @@ ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 semver = "1"
 sha2 = "0.10"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 printpdf = "0.7"
 owned_ttf_parser = "0.25"
-tauri-plugin-updater = "2.10.1"
+tauri-plugin-updater = { version = "2.10.1", default-features = false, features = ["rustls-tls"] }
 tauri-plugin-process = "2.3.1"
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-window-state = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+
+[target."cfg(target_os = \"linux\")".dependencies]
+# This feature also enables Linux tar updates; Windows uses signed EXE/MSI installers.
+tauri-plugin-updater = { version = "2.10.1", default-features = false, features = ["zip"] }
 
 [target."cfg(target_os = \"macos\")".dependencies]
 cocoa = "0.26"
