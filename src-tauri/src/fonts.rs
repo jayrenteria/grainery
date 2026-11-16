@@ -20,6 +20,7 @@ pub struct SystemFontVariant {
     pub weight: u16,
     pub style: &'static str,
     pub path: PathBuf,
+    pub face_index: u32,
 }
 
 pub fn list_system_font_families() -> Vec<SystemFontFamily> {
@@ -56,10 +57,11 @@ pub fn list_system_font_families() -> Vec<SystemFontFamily> {
 }
 
 pub fn resolve_system_font(
+    families: &[SystemFontFamily],
     family_name: &str,
     weight: Option<u16>,
     style: Option<&str>,
-) -> Option<PathBuf> {
+) -> Option<SystemFontVariant> {
     let normalized_family = normalize_font_family_name(family_name);
     if normalized_family.is_empty() {
         return None;
@@ -67,7 +69,6 @@ pub fn resolve_system_font(
 
     let requested_style = style.unwrap_or("normal");
     let requested_weight = weight.unwrap_or(400);
-    let families = list_system_font_families();
     let family = families
         .iter()
         .find(|candidate| candidate.name.eq_ignore_ascii_case(&normalized_family))?;
@@ -76,11 +77,15 @@ pub fn resolve_system_font(
         .variants
         .iter()
         .min_by_key(|variant| {
-            let style_penalty = if variant.style == requested_style { 0 } else { 1000 };
+            let style_penalty = if variant.style == requested_style {
+                0
+            } else {
+                1000
+            };
             let weight_delta = variant.weight.abs_diff(requested_weight);
             style_penalty + weight_delta
         })
-        .map(|variant| variant.path.clone())
+        .cloned()
 }
 
 fn system_font_directories() -> Vec<PathBuf> {
@@ -119,6 +124,7 @@ fn system_font_directories() -> Vec<PathBuf> {
     directories
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn home_directory() -> Option<PathBuf> {
     env::var_os("HOME")
         .map(PathBuf::from)
@@ -176,13 +182,14 @@ fn collect_font_faces_from_file(path: &Path, output: &mut BTreeMap<String, Syste
             continue;
         };
 
-        collect_font_face(&face, path, output);
+        collect_font_face(&face, path, index, output);
     }
 }
 
 fn collect_font_face(
     face: &Face<'_>,
     path: &Path,
+    face_index: u32,
     output: &mut BTreeMap<String, SystemFontFamily>,
 ) {
     let Some(family) = preferred_family_name(face) else {
@@ -205,6 +212,7 @@ fn collect_font_face(
         weight,
         style,
         path: path.to_path_buf(),
+        face_index,
     };
     let key = family.to_lowercase();
     let entry = output.entry(key).or_insert_with(|| SystemFontFamily {

@@ -1,25 +1,21 @@
-#[cfg(target_os = "macos")]
-#[macro_use]
-extern crate objc;
-
 use std::fs;
 use std::path::Path;
 use std::sync::Mutex;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{Emitter, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+#[cfg(target_os = "macos")]
+use tauri::TitleBarStyle;
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_deep_link::DeepLinkExt;
 #[cfg(desktop)]
 use tauri_plugin_window_state::{StateFlags, DEFAULT_FILENAME};
 
 mod deep_link;
+mod file_io;
 mod fonts;
+mod open_files;
 mod pdf;
 mod plugins;
-
-#[derive(Default)]
-struct PendingOpenFiles {
-    paths: Mutex<Vec<String>>,
-}
+use open_files::{paths_from_arguments, PendingOpenFiles};
 
 #[derive(Default)]
 struct ExitControl {
@@ -34,82 +30,63 @@ fn apply_macos_titlebar_theme(
     blue: u8,
     dark: bool,
 ) -> Result<(), String> {
-    use cocoa::appkit::{NSColor, NSWindow, NSWindowTitleVisibility};
-    use cocoa::base::{id, nil};
-    use cocoa::foundation::NSString;
-
-    let ns_window = window.ns_window().map_err(|e| e.to_string())? as id;
-    unsafe {
-        let bg_color = NSColor::colorWithRed_green_blue_alpha_(
-            nil,
-            red as f64 / 255.0,
-            green as f64 / 255.0,
-            blue as f64 / 255.0,
-            1.0,
-        );
-        ns_window.setBackgroundColor_(bg_color);
-
-        let appearance_name = if dark {
-            "NSAppearanceNameDarkAqua"
+    window
+        .set_background_color(Some(tauri::window::Color(red, green, blue, 255)))
+        .map_err(|error| error.to_string())?;
+    window
+        .set_theme(Some(if dark {
+            tauri::Theme::Dark
         } else {
-            "NSAppearanceNameAqua"
-        };
-        let appearance_name = NSString::alloc(nil).init_str(appearance_name);
-        let appearance: id = msg_send![class!(NSAppearance), appearanceNamed: appearance_name];
-        let () = msg_send![ns_window, setAppearance: appearance];
-
-        ns_window.setTitleVisibility_(NSWindowTitleVisibility::NSWindowTitleVisible);
-    }
-
-    Ok(())
+            tauri::Theme::Light
+        }))
+        .map_err(|error| error.to_string())
 }
 
-impl PendingOpenFiles {
-    fn push_paths(&self, mut new_paths: Vec<String>) {
-        if new_paths.is_empty() {
-            return;
-        }
-
-        let mut paths = self.paths.lock().unwrap();
-        paths.append(&mut new_paths);
-    }
-
-    fn take_paths(&self) -> Vec<String> {
-        let mut paths = self.paths.lock().unwrap();
-        std::mem::take(&mut *paths)
-    }
+pub(crate) async fn run_blocking<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|error| format!("Background task failed: {}", error))?
 }
 
 #[tauri::command]
-fn save_screenplay(path: String, content: String) -> Result<(), String> {
-    fs::write(&path, &content).map_err(|e| e.to_string())
+async fn save_screenplay(path: String, content: String) -> Result<(), String> {
+    run_blocking(move || {
+        file_io::write_file_atomically(Path::new(&path), content.as_bytes())
+            .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-fn export_pdf(
+async fn export_pdf(
     content_json: String,
     title_page_json: Option<String>,
     output_path: String,
     document_title: String,
     document_mode: String,
 ) -> Result<(), String> {
-    pdf::generate_pdf(
-        &content_json,
-        title_page_json.as_deref(),
-        &output_path,
-        &document_title,
-        &document_mode,
-    )
+    run_blocking(move || {
+        pdf::generate_pdf(
+            &content_json,
+            title_page_json.as_deref(),
+            &output_path,
+            &document_title,
+            &document_mode,
+        )
+    })
+    .await
 }
 
 #[tauri::command]
-fn load_screenplay(path: String) -> Result<String, String> {
-    fs::read_to_string(&path).map_err(|e| e.to_string())
+async fn load_screenplay(path: String) -> Result<String, String> {
+    run_blocking(move || fs::read_to_string(&path).map_err(|e| e.to_string())).await
 }
 
 #[tauri::command]
-fn file_exists(path: String) -> bool {
-    Path::new(&path).exists()
+async fn file_exists(path: String) -> Result<bool, String> {
+    run_blocking(move || Ok(Path::new(&path).exists())).await
 }
 
 #[tauri::command]
@@ -191,7 +168,12 @@ pub fn run() {
     #[cfg(desktop)]
     {
         // The single-instance plugin must precede deep-link so warm links reach this process.
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            let paths = paths_from_arguments(argv, Path::new(&cwd));
+            if !paths.is_empty() {
+                app.state::<PendingOpenFiles>().push_paths(paths);
+                let _ = app.emit("app-open-file", ());
+            }
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.set_focus();
@@ -382,10 +364,7 @@ pub fn run() {
             }
 
             // Collect files passed as command line arguments (Windows/Linux and fallback on macOS).
-            let startup_paths = std::env::args()
-                .skip(1)
-                .filter(|arg| Path::new(arg).exists())
-                .collect::<Vec<_>>();
+            let startup_paths = paths_from_arguments(std::env::args(), &std::env::current_dir()?);
 
             if !startup_paths.is_empty() {
                 let pending = app.state::<PendingOpenFiles>();
@@ -425,12 +404,12 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|app_handle, event| {
+    app.run(|_app_handle, _event| {
         // Windows/Linux title-bar close is handled by the frontend close-request hook.
         // Keep the app-level quit interception for macOS app quits that bypass window close.
         #[cfg(target_os = "macos")]
-        if let tauri::RunEvent::ExitRequested { api, .. } = event {
-            let exit_control = app_handle.state::<ExitControl>();
+        if let tauri::RunEvent::ExitRequested { api, .. } = _event {
+            let exit_control = _app_handle.state::<ExitControl>();
             let mut should_allow_exit = false;
             if let Ok(mut allow_exit) = exit_control.allow_exit.lock() {
                 if *allow_exit {
@@ -441,7 +420,7 @@ pub fn run() {
 
             if !should_allow_exit {
                 api.prevent_exit();
-                if let Some(window) = app_handle.get_webview_window("main") {
+                if let Some(window) = _app_handle.get_webview_window("main") {
                     let _ = window.emit("app-quit-requested", ());
                 }
             }
@@ -449,7 +428,7 @@ pub fn run() {
         }
 
         #[cfg(any(target_os = "macos", target_os = "ios"))]
-        if let tauri::RunEvent::Opened { urls } = event {
+        if let tauri::RunEvent::Opened { urls } = _event {
             let paths = urls
                 .into_iter()
                 .filter_map(|url| {
@@ -464,13 +443,63 @@ pub fn run() {
                 .collect::<Vec<_>>();
 
             if !paths.is_empty() {
-                let pending = app_handle.state::<PendingOpenFiles>();
-                pending.push_paths(paths.clone());
-
-                if let Some(window) = app_handle.get_webview_window("main") {
-                    let _ = window.emit("app-open-file", paths);
-                }
+                let pending = _app_handle.state::<PendingOpenFiles>();
+                pending.push_paths(paths);
+                let _ = _app_handle.emit("app-open-file", ());
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blocking_tasks_run_off_caller_and_preserve_errors() {
+        let caller = std::thread::current().id();
+        tauri::async_runtime::block_on(async {
+            let worker = run_blocking(|| Ok(std::thread::current().id()))
+                .await
+                .unwrap();
+            assert_ne!(worker, caller);
+            assert_eq!(
+                run_blocking::<()>(|| Err("disk failure".into()))
+                    .await
+                    .unwrap_err(),
+                "disk failure"
+            );
+            assert!(run_blocking::<()>(|| panic!("injected task panic"))
+                .await
+                .unwrap_err()
+                .contains("Background task failed"));
+        });
+    }
+
+    #[test]
+    fn async_document_commands_keep_their_response_contracts() {
+        let path = std::env::temp_dir().join(format!(
+            "grainery-command-{}-{}.gwx",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path_string = path.to_string_lossy().into_owned();
+        tauri::async_runtime::block_on(async {
+            save_screenplay(path_string.clone(), "first".into())
+                .await
+                .unwrap();
+            save_screenplay(path_string.clone(), "second".into())
+                .await
+                .unwrap();
+            assert_eq!(
+                load_screenplay(path_string.clone()).await.unwrap(),
+                "second"
+            );
+            assert!(file_exists(path_string).await.unwrap());
+        });
+        fs::remove_file(path).unwrap();
+    }
 }

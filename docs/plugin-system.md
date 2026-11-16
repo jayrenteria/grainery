@@ -1,5 +1,19 @@
 # Grainery Plugin System
 
+## Brokered network limits
+
+Plugin `network:get_json` and `network:get_text` requests require a granted
+`network:https` permission. The initial URL and every redirect must use HTTPS,
+contain no URL credentials, and have an exact host in `networkAllowlist`.
+Requests allow at most five redirects, with a 10-second connection timeout,
+a 30-second total timeout (including the body), and a 1 MiB response limit.
+Redirect loops, unsuccessful HTTP statuses, and oversized chunked bodies fail.
+
+These restrictions apply to the Rust host-call broker. Plugin Web Workers still
+have browser networking APIs under the current Content Security Policy; worker
+isolation is not a complete malicious-plugin network sandbox.
+
+
 This document explains how the current Grainery plugin system works end-to-end: runtime model, install flows, security boundaries, extension points, and authoring conventions.
 
 ## Goals and Scope
@@ -343,6 +357,8 @@ Optional permissions:
 `ui:mount` only permits host-rendered declarative UI. It does not permit arbitrary DOM injection.
 Any future advanced custom UI must use a separate sandboxed permission gate.
 `system:fonts` only permits listing installed font family and variant metadata through the host broker. It does not grant filesystem access to font files.
+
+PDF export embeds supported TrueType faces, including the selected face in a font collection. Missing, malformed, or unsupported outline formats fall back to Helvetica for both rendering and measurement. CFF embedding, full Unicode shaping, and variable-font instancing are not supported.
 
 Core permissions are declared in manifest and validated:
 
