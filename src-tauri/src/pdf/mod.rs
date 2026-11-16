@@ -1,11 +1,11 @@
 use crate::fonts;
+mod font_data;
 use owned_ttf_parser::{AsFaceRef, OwnedFace};
 use printpdf::*;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::BufWriter;
-use std::path::{Path, PathBuf};
+use std::io::Cursor;
+use std::path::Path;
 
 // Screenplay formatting constants (in points, 72 points = 1 inch)
 const PAGE_WIDTH: f32 = 612.0; // 8.5 inches
@@ -107,8 +107,7 @@ struct ExternalFontMetrics {
 }
 
 impl ExternalFontMetrics {
-    fn from_path(path: &Path) -> Option<Self> {
-        let data = std::fs::read(path).ok()?;
+    fn from_bytes(data: Vec<u8>) -> Option<Self> {
         let face = OwnedFace::from_vec(data, 0).ok()?;
         let face_ref = face.as_face_ref();
         let units_per_em = face_ref.units_per_em() as f32;
@@ -200,60 +199,62 @@ fn helvetica_width_units(c: char, bold: bool) -> u16 {
     }
 }
 
-/// Word-wraps styled characters by character count, mirroring `wrap_text`
-fn wrap_styled(chars: &[(char, TextStyle)], max_chars: usize) -> Vec<Vec<(char, TextStyle)>> {
+/// Wrap using the same advances used for rendering, keeping inline styles.
+fn wrap_styled(
+    chars: &[(char, TextStyle)],
+    max_width: f32,
+    mut measure: impl FnMut(char, &TextStyle) -> f32,
+) -> Vec<Vec<(char, TextStyle)>> {
     let mut words: Vec<Vec<(char, TextStyle)>> = Vec::new();
-    let mut current_word: Vec<(char, TextStyle)> = Vec::new();
-
+    let mut word = Vec::new();
     for (c, style) in chars {
         if c.is_whitespace() {
-            if !current_word.is_empty() {
-                words.push(std::mem::take(&mut current_word));
+            if !word.is_empty() {
+                words.push(std::mem::take(&mut word));
             }
         } else {
-            current_word.push((*c, style.clone()));
+            word.push((*c, style.clone()));
         }
     }
-    if !current_word.is_empty() {
-        words.push(current_word);
+    if !word.is_empty() {
+        words.push(word);
     }
-
-    let mut lines: Vec<Vec<(char, TextStyle)>> = Vec::new();
+    let mut lines = Vec::new();
     let mut line: Vec<(char, TextStyle)> = Vec::new();
-
+    let mut line_width = 0.0;
     for word in words {
-        if line.is_empty() {
-            line = word;
-        } else if line.len() + 1 + word.len() <= max_chars {
-            let prev = line.last().map(|(_, s)| s.clone()).unwrap_or_default();
-            let next = word.first().map(|(_, s)| s.clone()).unwrap_or_default();
-            // Joining spaces keep decorations only when both neighbors share them
+        if let (Some((_, prev)), Some((_, next))) = (line.last(), word.first()) {
             let space_style = TextStyle {
-                bold: prev.bold,
-                italic: prev.italic,
                 underline: prev.underline && next.underline,
                 strike: prev.strike && next.strike,
-                font_family: prev.font_family.clone(),
-                font_weight: prev.font_weight,
-                font_style: prev.font_style.clone(),
-                size_pt: prev.size_pt,
+                ..prev.clone()
             };
-            line.push((' ', space_style));
-            line.extend(word);
-        } else {
-            lines.push(std::mem::take(&mut line));
-            line = word;
+            let space_width = measure(' ', &space_style);
+            let word_width: f32 = word.iter().map(|(c, style)| measure(*c, style)).sum();
+            if line_width + space_width + word_width <= max_width + 0.001 {
+                line.push((' ', space_style));
+                line_width += space_width;
+            } else {
+                lines.push(std::mem::take(&mut line));
+                line_width = 0.0;
+            }
+        }
+        for (c, style) in word {
+            let width = measure(c, &style);
+            if !line.is_empty() && line_width + width > max_width + 0.001 {
+                lines.push(std::mem::take(&mut line));
+                line_width = 0.0;
+            }
+            line.push((c, style));
+            line_width += width;
         }
     }
-
     if !line.is_empty() {
         lines.push(line);
     }
-
     if lines.is_empty() {
         lines.push(Vec::new());
     }
-
     lines
 }
 
@@ -281,6 +282,11 @@ pub struct ScreenplayContent {
     pub content: Option<Vec<DocumentNode>>,
 }
 
+struct ExternalPdfFont {
+    font: IndirectFontRef,
+    metrics: ExternalFontMetrics,
+}
+
 pub struct PdfGenerator {
     doc: PdfDocumentReference,
     current_page: PdfPageIndex,
@@ -290,13 +296,13 @@ pub struct PdfGenerator {
     italic_font: IndirectFontRef,
     bold_italic_font: IndirectFontRef,
     custom_font_fallback: Option<PdfFontVariants>,
-    external_fonts: HashMap<String, IndirectFontRef>,
-    external_font_paths: HashMap<String, Option<PathBuf>>,
-    external_font_metrics: HashMap<String, Option<ExternalFontMetrics>>,
+    external_fonts: HashMap<String, Option<ExternalPdfFont>>,
+    font_catalog: Option<Vec<fonts::SystemFontFamily>>,
     is_sans: bool,
     char_width: f32,
     y_position: f32,
     page_number: i32,
+    page_has_content: bool,
     has_title_page: bool,
 }
 
@@ -353,12 +359,12 @@ impl PdfGenerator {
             bold_italic_font,
             custom_font_fallback: None,
             external_fonts: HashMap::new(),
-            external_font_paths: HashMap::new(),
-            external_font_metrics: HashMap::new(),
+            font_catalog: None,
             is_sans: is_freewrite,
             char_width,
             y_position: PAGE_HEIGHT - MARGIN_TOP,
             page_number: 1,
+            page_has_content: false,
             has_title_page: false,
         })
     }
@@ -367,19 +373,12 @@ impl PdfGenerator {
         let font_family = style.font_family.as_deref()?;
         let requested_weight = style
             .font_weight
-            .or_else(|| if style.bold { Some(700) } else { Some(400) })
-            .unwrap_or(400);
-        let requested_style = style
-            .font_style
-            .as_deref()
-            .or_else(|| {
-                if style.italic {
-                    Some("italic")
-                } else {
-                    Some("normal")
-                }
-            })
-            .unwrap_or("normal");
+            .unwrap_or(if style.bold { 700 } else { 400 });
+        let requested_style =
+            style
+                .font_style
+                .as_deref()
+                .unwrap_or(if style.italic { "italic" } else { "normal" });
 
         Some((font_family, requested_weight, requested_style))
     }
@@ -397,54 +396,36 @@ impl PdfGenerator {
         )
     }
 
-    fn external_font_path(
-        &mut self,
-        cache_key: &str,
-        font_family: &str,
-        requested_weight: u16,
-        requested_style: &str,
-    ) -> Option<PathBuf> {
-        if !self.external_font_paths.contains_key(cache_key) {
-            let path = fonts::resolve_system_font(
-                font_family,
-                Some(requested_weight),
-                Some(requested_style),
-            );
-            self.external_font_paths.insert(cache_key.to_string(), path);
+    fn external_font_for(&mut self, style: &TextStyle) -> Option<&ExternalPdfFont> {
+        let (family, weight, font_style) = Self::external_font_request(style)?;
+        let key = Self::external_font_cache_key(family, weight, font_style);
+        if !self.external_fonts.contains_key(&key) {
+            let loaded = (|| {
+                let catalog = self
+                    .font_catalog
+                    .get_or_insert_with(fonts::list_system_font_families);
+                let variant =
+                    fonts::resolve_system_font(catalog, family, Some(weight), Some(font_style))?;
+                let data = std::fs::read(&variant.path).ok()?;
+                let bytes = font_data::standalone_font(&data, variant.face_index).ok()?;
+                let metrics = ExternalFontMetrics::from_bytes(bytes.clone())?;
+                let font = self.doc.add_external_font(Cursor::new(bytes)).ok()?;
+                Some(ExternalPdfFont { font, metrics })
+            })();
+            self.external_fonts.insert(key.clone(), loaded);
         }
-
-        self.external_font_paths.get(cache_key).cloned().flatten()
+        self.external_fonts.get(&key).and_then(Option::as_ref)
     }
 
     fn font_for(&mut self, style: &TextStyle) -> IndirectFontRef {
-        if let Some((font_family, requested_weight, requested_style)) =
-            Self::external_font_request(style)
-        {
-            let cache_key =
-                Self::external_font_cache_key(font_family, requested_weight, requested_style);
-            if let Some(font) = self.external_fonts.get(&cache_key) {
-                return font.clone();
+        if style.font_family.is_some() {
+            if let Some(loaded) = self.external_font_for(style) {
+                return loaded.font.clone();
             }
-
-            if let Some(path) =
-                self.external_font_path(&cache_key, font_family, requested_weight, requested_style)
-            {
-                if let Ok(file) = File::open(path) {
-                    if let Ok(font) = self.doc.add_external_font(file) {
-                        self.external_fonts.insert(cache_key, font.clone());
-                        return font;
-                    }
-                }
-            }
-
-            // Standard PDF Helvetica is available independently of the host OS. Its
-            // AFM widths are also used below, keeping missing-font rendering and
-            // layout calculations in agreement.
             if let Some(font) = self.custom_font_fallback_for(style) {
                 return font;
             }
         }
-
         match (style.bold, style.italic) {
             (true, true) => self.bold_italic_font.clone(),
             (true, false) => self.bold_font.clone(),
@@ -483,21 +464,7 @@ impl PdfGenerator {
     }
 
     fn external_font_metrics_for(&mut self, style: &TextStyle) -> Option<&ExternalFontMetrics> {
-        let (font_family, requested_weight, requested_style) = Self::external_font_request(style)?;
-        let cache_key =
-            Self::external_font_cache_key(font_family, requested_weight, requested_style);
-
-        if !self.external_font_metrics.contains_key(&cache_key) {
-            let metrics = self
-                .external_font_path(&cache_key, font_family, requested_weight, requested_style)
-                .and_then(|path| ExternalFontMetrics::from_path(&path));
-            self.external_font_metrics
-                .insert(cache_key.clone(), metrics);
-        }
-
-        self.external_font_metrics
-            .get(&cache_key)
-            .and_then(|metrics| metrics.as_ref())
+        self.external_font_for(style).map(|loaded| &loaded.metrics)
     }
 
     fn style_size(style: &TextStyle, fallback: f32) -> f32 {
@@ -686,6 +653,7 @@ impl PdfGenerator {
         self.current_layer = layer;
         self.y_position = PAGE_HEIGHT - MARGIN_TOP;
         self.page_number += 1;
+        self.page_has_content = false;
 
         // Add page number (top right)
         // Skip numbering on pages 1-2 when there's a title page (title page + first content page)
@@ -710,18 +678,25 @@ impl PdfGenerator {
 
         layer.use_text(
             &page_num,
-            FONT_SIZE as f32,
+            FONT_SIZE,
             Mm::from(Pt(PAGE_WIDTH - MARGIN_RIGHT - 20.0)),
             Mm::from(Pt(PAGE_HEIGHT - 36.0)), // 0.5 inch from top
             &self.font,
         );
     }
 
-    fn check_page_break(&mut self, lines_needed: i32) {
-        let space_needed = lines_needed as f32 * LINE_HEIGHT;
-        if self.y_position - space_needed < MARGIN_BOTTOM {
-            self.new_page();
+    fn ensure_space(&mut self, height: f32) {
+        if self.y_position - height < MARGIN_BOTTOM {
+            if self.page_has_content {
+                self.new_page();
+            } else {
+                self.y_position = PAGE_HEIGHT - MARGIN_TOP;
+            }
         }
+    }
+
+    fn check_page_break(&mut self, lines_needed: i32) {
+        self.ensure_space(lines_needed as f32 * LINE_HEIGHT);
     }
 
     fn write_line(&mut self, text: &str, x_offset: f32) {
@@ -744,6 +719,7 @@ impl PdfGenerator {
             &font,
         );
 
+        self.page_has_content = true;
         self.y_position -= LINE_HEIGHT;
     }
 
@@ -758,7 +734,7 @@ impl PdfGenerator {
         if let Some(content) = &node.content {
             return content
                 .iter()
-                .map(|n| Self::get_node_text(n))
+                .map(Self::get_node_text)
                 .collect::<Vec<_>>()
                 .join("");
         }
@@ -834,22 +810,26 @@ impl PdfGenerator {
     /// Extracts text with inline marks resolved against a base style,
     /// wrapped into lines of styled segments.
     fn styled_lines(
+        &mut self,
         node: &DocumentNode,
         base: TextStyle,
         uppercase: bool,
-        max_chars: usize,
+        max_width: f32,
+        fallback_size: f32,
     ) -> Vec<Vec<StyledSegment>> {
-        Self::styled_lines_with_affixes(node, base, uppercase, max_chars, "", "")
+        self.styled_lines_with_affixes(node, base, uppercase, max_width, fallback_size, ("", ""))
     }
 
     fn styled_lines_with_affixes(
+        &mut self,
         node: &DocumentNode,
         base: TextStyle,
         uppercase: bool,
-        max_chars: usize,
-        prefix: &str,
-        suffix: &str,
+        max_width: f32,
+        fallback_size: f32,
+        affixes: (&str, &str),
     ) -> Vec<Vec<StyledSegment>> {
+        let (prefix, suffix) = affixes;
         let mut chars: Vec<(char, TextStyle)> = Vec::new();
         Self::collect_styled_chars(node, base.clone(), &mut chars);
 
@@ -870,10 +850,12 @@ impl PdfGenerator {
             chars = affixed;
         }
 
-        wrap_styled(&chars, max_chars)
-            .iter()
-            .map(|line| to_segments(line))
-            .collect()
+        wrap_styled(&chars, max_width, |c, style| {
+            self.glyph_width_pt(c, style, fallback_size)
+        })
+        .iter()
+        .map(|line| to_segments(line))
+        .collect()
     }
 
     fn write_styled_lines_aligned(
@@ -890,8 +872,7 @@ impl PdfGenerator {
             lines,
             base_x,
             max_width,
-            size,
-            line_height,
+            (size, line_height),
             "left",
         );
     }
@@ -902,14 +883,11 @@ impl PdfGenerator {
         lines: &[Vec<StyledSegment>],
         base_x: f32,
         max_width: f32,
-        size: f32,
-        line_height: f32,
+        typography: (f32, f32),
         default_alignment: &str,
     ) {
-        let space_needed = self.styled_lines_height(lines, size, line_height);
-        if self.y_position - space_needed < MARGIN_BOTTOM {
-            self.new_page();
-        }
+        let (size, line_height) = typography;
+        self.prepare_styled_block(lines, size, line_height);
 
         for line in lines {
             let line_width = self.line_width_pt(line, size);
@@ -917,6 +895,20 @@ impl PdfGenerator {
                 self.aligned_x_with_default(node, base_x, max_width, line_width, default_alignment);
             self.write_styled_line(line, x, size, line_height);
         }
+    }
+
+    fn prepare_styled_block(&mut self, lines: &[Vec<StyledSegment>], size: f32, line_height: f32) {
+        let total = self.styled_lines_height(lines, size, line_height);
+        let first = lines
+            .first()
+            .map(|line| self.styled_line_advance(line, size, line_height))
+            .unwrap_or(line_height);
+        let keep = if total <= PAGE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM {
+            total
+        } else {
+            first
+        };
+        self.ensure_space(keep);
     }
 
     fn write_styled_line(
@@ -927,9 +919,7 @@ impl PdfGenerator {
         line_height: f32,
     ) {
         let line_advance = self.styled_line_advance(segments, size, line_height);
-        if self.y_position - line_advance < MARGIN_BOTTOM {
-            self.new_page();
-        }
+        self.ensure_space(line_advance);
 
         let y = self.y_position
             - Self::styled_line_baseline_adjust(segments, size, line_height, line_advance);
@@ -977,6 +967,7 @@ impl PdfGenerator {
             cursor_x += *width;
         }
 
+        self.page_has_content = true;
         self.y_position -= line_advance;
     }
 
@@ -1100,12 +1091,6 @@ impl PdfGenerator {
         }
     }
 
-    fn ensure_freewrite_space(&mut self, line_height: f32) {
-        if self.y_position - line_height < MARGIN_BOTTOM {
-            self.new_page();
-        }
-    }
-
     fn freewrite_space_before(&mut self, space: f32) {
         // Skip spacing at the top of a page
         if self.y_position < PAGE_HEIGHT - MARGIN_TOP - 0.5 {
@@ -1113,26 +1098,18 @@ impl PdfGenerator {
         }
     }
 
-    fn put_freewrite_text(&self, text: &str, x: f32, size: f32, bold: bool) {
+    fn put_freewrite_text(&self, text: &str, x: f32, y: f32, size: f32, bold: bool) {
         let font = if bold { &self.bold_font } else { &self.font };
         let layer = self
             .doc
             .get_page(self.current_page)
             .get_layer(self.current_layer);
 
-        layer.use_text(
-            text,
-            size,
-            Mm::from(Pt(x)),
-            Mm::from(Pt(self.y_position)),
-            font,
-        );
+        layer.use_text(text, size, Mm::from(Pt(x)), Mm::from(Pt(y)), font);
     }
 
     fn render_freewrite_node(&mut self, node: &DocumentNode, list_number: i32) {
         let max_width = PAGE_WIDTH - FW_MARGIN_LEFT - FW_MARGIN_RIGHT;
-        let max_chars =
-            |size: f32, width: f32| ((width / (size * HELVETICA_CHAR_WIDTH_RATIO)) as usize).max(1);
         let bold_base = TextStyle {
             bold: true,
             ..TextStyle::default()
@@ -1141,8 +1118,7 @@ impl PdfGenerator {
         match node.node_type.as_str() {
             "title" => {
                 self.freewrite_space_before(FW_TITLE_SPACE_BEFORE);
-                let lines =
-                    Self::styled_lines(node, bold_base, false, max_chars(FW_TITLE_SIZE, max_width));
+                let lines = self.styled_lines(node, bold_base, false, max_width, FW_TITLE_SIZE);
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -1155,12 +1131,7 @@ impl PdfGenerator {
             }
             "heading" => {
                 self.freewrite_space_before(FW_HEADING_SPACE_BEFORE);
-                let lines = Self::styled_lines(
-                    node,
-                    bold_base,
-                    false,
-                    max_chars(FW_HEADING_SIZE, max_width),
-                );
+                let lines = self.styled_lines(node, bold_base, false, max_width, FW_HEADING_SIZE);
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -1172,15 +1143,28 @@ impl PdfGenerator {
                 self.y_position -= FW_HEADING_SPACE_AFTER;
             }
             "bulletItem" | "numberedItem" => {
-                let lines = Self::styled_lines(
+                let lines = self.styled_lines(
                     node,
                     TextStyle::default(),
                     false,
-                    max_chars(FW_BODY_SIZE, max_width - FW_LIST_INDENT),
+                    max_width - FW_LIST_INDENT,
+                    FW_BODY_SIZE,
                 );
 
-                // Keep the marker and the first line together
-                self.ensure_freewrite_space(FW_BODY_LINE_HEIGHT);
+                self.prepare_styled_block(&lines, FW_BODY_SIZE, FW_BODY_LINE_HEIGHT);
+                let baseline_adjust = lines
+                    .first()
+                    .map(|line| {
+                        let advance =
+                            self.styled_line_advance(line, FW_BODY_SIZE, FW_BODY_LINE_HEIGHT);
+                        Self::styled_line_baseline_adjust(
+                            line,
+                            FW_BODY_SIZE,
+                            FW_BODY_LINE_HEIGHT,
+                            advance,
+                        )
+                    })
+                    .unwrap_or(0.0);
 
                 let marker = if node.node_type == "bulletItem" {
                     "\u{2022}".to_string()
@@ -1191,7 +1175,13 @@ impl PdfGenerator {
                     marker.chars().count() as f32 * FW_BODY_SIZE * HELVETICA_CHAR_WIDTH_RATIO;
                 let marker_x =
                     (FW_MARGIN_LEFT + FW_LIST_INDENT - 6.0 - marker_width).max(FW_MARGIN_LEFT);
-                self.put_freewrite_text(&marker, marker_x, FW_BODY_SIZE, false);
+                self.put_freewrite_text(
+                    &marker,
+                    marker_x,
+                    self.y_position - baseline_adjust,
+                    FW_BODY_SIZE,
+                    false,
+                );
 
                 self.write_styled_lines_aligned(
                     node,
@@ -1205,12 +1195,8 @@ impl PdfGenerator {
             }
             // "body" and anything unexpected render as plain paragraphs
             _ => {
-                let lines = Self::styled_lines(
-                    node,
-                    TextStyle::default(),
-                    false,
-                    max_chars(FW_BODY_SIZE, max_width),
-                );
+                let lines =
+                    self.styled_lines(node, TextStyle::default(), false, max_width, FW_BODY_SIZE);
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -1238,13 +1224,12 @@ impl PdfGenerator {
             return;
         }
         let content_width = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
-        let content_max_chars = (content_width / self.char_width) as usize;
 
         match node.node_type.as_str() {
             "comicPage" => {
                 self.check_page_break(2);
                 let lines =
-                    Self::styled_lines(node, TextStyle::default(), true, content_max_chars.max(1));
+                    self.styled_lines(node, TextStyle::default(), true, content_width, FONT_SIZE);
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -1259,7 +1244,7 @@ impl PdfGenerator {
                 self.write_blank_line();
                 self.check_page_break(2);
                 let lines =
-                    Self::styled_lines(node, TextStyle::default(), true, content_max_chars.max(1));
+                    self.styled_lines(node, TextStyle::default(), true, content_width, FONT_SIZE);
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -1272,8 +1257,8 @@ impl PdfGenerator {
             }
             "caption" => {
                 let max_width = content_width - 36.0;
-                let max_chars = (max_width / self.char_width) as usize;
-                let lines = Self::styled_lines(node, TextStyle::default(), false, max_chars);
+                let lines =
+                    self.styled_lines(node, TextStyle::default(), false, max_width, FONT_SIZE);
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -1285,8 +1270,8 @@ impl PdfGenerator {
             }
             "soundEffect" => {
                 let max_width = content_width - 36.0;
-                let max_chars = (max_width / self.char_width) as usize;
-                let lines = Self::styled_lines(node, TextStyle::default(), true, max_chars);
+                let lines =
+                    self.styled_lines(node, TextStyle::default(), true, max_width, FONT_SIZE);
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -1298,26 +1283,41 @@ impl PdfGenerator {
             }
             "sceneHeading" => {
                 self.write_blank_line();
-                let lines = Self::styled_lines(
+                let lines = self.styled_lines(
                     node,
                     TextStyle {
                         bold: true,
                         ..TextStyle::default()
                     },
                     true,
-                    content_max_chars.max(1),
+                    content_width,
+                    FONT_SIZE,
                 );
-                let space_needed = self.styled_lines_height(&lines, FONT_SIZE, LINE_HEIGHT)
-                    + LINE_HEIGHT
-                    + self.next_kept_block_height(following_nodes);
-                if self.y_position - space_needed < MARGIN_BOTTOM {
-                    self.new_page();
-                }
+                let heading_height = self.styled_lines_height(&lines, FONT_SIZE, LINE_HEIGHT);
+                let group_height =
+                    heading_height + LINE_HEIGHT + self.next_kept_block_height(following_nodes);
+                let space_needed = if group_height <= PAGE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM {
+                    group_height
+                } else {
+                    let first = lines
+                        .first()
+                        .map(|line| self.styled_line_advance(line, FONT_SIZE, LINE_HEIGHT))
+                        .unwrap_or(LINE_HEIGHT);
+                    let heading_keep = if heading_height <= PAGE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM
+                    {
+                        heading_height
+                    } else {
+                        first
+                    };
+                    (heading_keep + LINE_HEIGHT * 2.0).min(PAGE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM)
+                };
+                self.ensure_space(space_needed);
                 if let Some(number) = Self::scene_number(node) {
                     let baseline_adjust = lines
                         .first()
                         .map(|line| {
-                            let line_advance = self.styled_line_advance(line, FONT_SIZE, LINE_HEIGHT);
+                            let line_advance =
+                                self.styled_line_advance(line, FONT_SIZE, LINE_HEIGHT);
                             Self::styled_line_baseline_adjust(
                                 line,
                                 FONT_SIZE,
@@ -1341,7 +1341,7 @@ impl PdfGenerator {
             "action" => {
                 self.write_blank_line();
                 let lines =
-                    Self::styled_lines(node, TextStyle::default(), false, content_max_chars.max(1));
+                    self.styled_lines(node, TextStyle::default(), false, content_width, FONT_SIZE);
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -1361,20 +1361,31 @@ impl PdfGenerator {
                     .map(|extension| format!(" ({})", extension))
                     .unwrap_or_default();
                 let max_width = (content_width - CHARACTER_INDENT).max(self.char_width);
-                let max_chars = (max_width / self.char_width) as usize;
-                let lines = Self::styled_lines_with_affixes(
+                let lines = self.styled_lines_with_affixes(
                     node,
                     TextStyle::default(),
                     true,
-                    max_chars.max(1),
-                    "",
-                    &suffix,
+                    max_width,
+                    FONT_SIZE,
+                    ("", &suffix),
                 );
-                let group_height = self.styled_lines_height(&lines, FONT_SIZE, LINE_HEIGHT)
-                    + self.character_following_height(following_nodes);
-                if self.y_position - group_height < MARGIN_BOTTOM {
-                    self.new_page();
-                }
+                let own_height = self.styled_lines_height(&lines, FONT_SIZE, LINE_HEIGHT);
+                let group_height = own_height + self.character_following_height(following_nodes);
+                let keep_height = if group_height <= PAGE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM {
+                    group_height
+                } else {
+                    let first = lines
+                        .first()
+                        .map(|line| self.styled_line_advance(line, FONT_SIZE, LINE_HEIGHT))
+                        .unwrap_or(LINE_HEIGHT);
+                    let character_keep = if own_height <= PAGE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM {
+                        own_height
+                    } else {
+                        first
+                    };
+                    (character_keep + LINE_HEIGHT).min(PAGE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM)
+                };
+                self.ensure_space(keep_height);
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -1385,8 +1396,8 @@ impl PdfGenerator {
                 );
             }
             "dialogue" => {
-                let max_chars = (DIALOGUE_WIDTH / self.char_width) as usize;
-                let lines = Self::styled_lines(node, TextStyle::default(), false, max_chars.max(1));
+                let lines =
+                    self.styled_lines(node, TextStyle::default(), false, DIALOGUE_WIDTH, FONT_SIZE);
                 self.write_styled_lines_aligned(
                     node,
                     &lines,
@@ -1397,14 +1408,13 @@ impl PdfGenerator {
                 );
             }
             "parenthetical" => {
-                let max_chars = (PARENTHETICAL_WIDTH / self.char_width) as usize;
-                let lines = Self::styled_lines_with_affixes(
+                let lines = self.styled_lines_with_affixes(
                     node,
                     TextStyle::default(),
                     false,
-                    max_chars.max(1),
-                    "(",
-                    ")",
+                    PARENTHETICAL_WIDTH,
+                    FONT_SIZE,
+                    ("(", ")"),
                 );
                 self.write_styled_lines_aligned(
                     node,
@@ -1418,14 +1428,13 @@ impl PdfGenerator {
             "transition" => {
                 self.write_blank_line();
                 let lines =
-                    Self::styled_lines(node, TextStyle::default(), true, content_max_chars.max(1));
+                    self.styled_lines(node, TextStyle::default(), true, content_width, FONT_SIZE);
                 self.write_styled_lines_aligned_with_default(
                     node,
                     &lines,
                     MARGIN_LEFT,
                     content_width,
-                    FONT_SIZE,
-                    LINE_HEIGHT,
+                    (FONT_SIZE, LINE_HEIGHT),
                     "right",
                 );
                 self.write_blank_line();
@@ -1437,11 +1446,12 @@ impl PdfGenerator {
                 // Unknown node type, render as action
                 if !text.is_empty() {
                     self.write_blank_line();
-                    let lines = Self::styled_lines(
+                    let lines = self.styled_lines(
                         node,
                         TextStyle::default(),
                         false,
-                        content_max_chars.max(1),
+                        content_width,
+                        FONT_SIZE,
                     );
                     self.write_styled_lines_aligned(
                         node,
@@ -1528,26 +1538,28 @@ impl PdfGenerator {
             "pageBreak" => return 0.0,
             _ => (content_width, false, "", "", LINE_HEIGHT, 0.0),
         };
-        let lines = Self::styled_lines_with_affixes(
+        let base = TextStyle {
+            bold: node.node_type == "sceneHeading",
+            ..TextStyle::default()
+        };
+        let lines = self.styled_lines_with_affixes(
             node,
-            TextStyle::default(),
+            base,
             uppercase,
-            ((width / self.char_width) as usize).max(1),
-            prefix,
-            suffix,
+            width,
+            FONT_SIZE,
+            (prefix, suffix),
         );
         before + self.styled_lines_height(&lines, FONT_SIZE, LINE_HEIGHT) + after
     }
 
     pub fn save(self, path: &str) -> Result<(), String> {
-        let file = File::create(path).map_err(|e| format!("Failed to create file: {}", e))?;
-        let writer = BufWriter::new(file);
-
-        self.doc
-            .save(&mut std::io::BufWriter::new(writer))
-            .map_err(|e| format!("Failed to save PDF: {}", e))?;
-
-        Ok(())
+        let bytes = self
+            .doc
+            .save_to_bytes()
+            .map_err(|e| format!("Failed to serialize PDF: {}", e))?;
+        crate::file_io::write_file_atomically(Path::new(path), &bytes)
+            .map_err(|e| format!("Failed to save PDF: {}", e))
     }
 }
 
@@ -1750,6 +1762,7 @@ mod tests {
         let content: ScreenplayContent = serde_json::from_str(&content_json).unwrap();
         let mut generator = PdfGenerator::new("Character Pair", "screenplay").unwrap();
         generator.y_position = MARGIN_BOTTOM + LINE_HEIGHT * 4.0;
+        generator.page_has_content = true;
 
         generator.render_content(&content, "screenplay");
 
@@ -1771,6 +1784,7 @@ mod tests {
         let content: ScreenplayContent = serde_json::from_str(&content_json).unwrap();
         let mut generator = PdfGenerator::new("Scene Pair", "screenplay").unwrap();
         generator.y_position = MARGIN_BOTTOM + LINE_HEIGHT * 5.0;
+        generator.page_has_content = true;
 
         generator.render_content(&content, "screenplay");
 
@@ -1793,6 +1807,7 @@ mod tests {
         let content: ScreenplayContent = serde_json::from_str(&content_json).unwrap();
         let mut generator = PdfGenerator::new("Scene and Character", "screenplay").unwrap();
         generator.y_position = MARGIN_BOTTOM + LINE_HEIGHT * 6.0;
+        generator.page_has_content = true;
 
         generator.render_content(&content, "screenplay");
 
@@ -1815,6 +1830,254 @@ mod tests {
             "grainery-screenplay-scene-numbers-test.pdf",
         );
         assert!(bytes.starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn measured_wrapping_handles_large_text_long_words_and_exact_boundaries() {
+        let mut generator = PdfGenerator::new("Wrap", "screenplay").unwrap();
+        let node: DocumentNode = serde_json::from_value(serde_json::json!({
+            "type":"action", "content":[{"type":"text", "text":"word ".repeat(10), "marks":[{"type":"textSize", "attrs":{"sizePt":72}}]}]
+        })).unwrap();
+        let lines = generator.styled_lines(&node, TextStyle::default(), false, 432.0, FONT_SIZE);
+        assert!(lines.len() > 1);
+        for line in &lines {
+            assert!(generator.line_width_pt(line, FONT_SIZE) <= 432.001);
+        }
+        let chars = "aaaaa"
+            .chars()
+            .map(|c| (c, TextStyle::default()))
+            .collect::<Vec<_>>();
+        let wrapped = wrap_styled(&chars, 14.4, |_, _| 7.2);
+        assert_eq!(
+            wrapped.iter().map(Vec::len).collect::<Vec<_>>(),
+            vec![2, 2, 1]
+        );
+        assert_eq!(wrap_styled(&[], 432.0, |_, _| 7.2).len(), 1);
+        let plain: DocumentNode =
+            serde_json::from_str(&text_node("action", &vec!["word"; 18].join(" "))).unwrap();
+        assert_eq!(
+            generator
+                .styled_lines(&plain, TextStyle::default(), false, 432.0, 12.0)
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn proportional_wrapping_preserves_styles_and_alignment_bounds() {
+        let mut generator = PdfGenerator::new("Wrap", "freewrite").unwrap();
+        let node: DocumentNode = serde_json::from_str(&rich_node(
+            "body",
+            &[("WWW WWW ", &["bold", "underline"]), ("WWW", &["italic"])],
+        ))
+        .unwrap();
+        let lines = generator.styled_lines(&node, TextStyle::default(), false, 70.0, 20.0);
+        assert!(lines.len() >= 3);
+        assert!(lines
+            .iter()
+            .flatten()
+            .any(|segment| segment.style.bold && segment.style.underline));
+        assert!(lines.iter().flatten().any(|segment| segment.style.italic));
+        for line in lines {
+            let width = generator.line_width_pt(&line, 20.0);
+            assert!(width <= 70.001);
+            for alignment in ["left", "center", "right"] {
+                let x = generator.aligned_x_with_default(&node, 72.0, 70.0, width, alignment);
+                assert!(x >= 72.0 && x + width <= 142.001);
+            }
+        }
+    }
+
+    fn page_texts(bytes: &[u8]) -> Vec<Vec<Vec<u8>>> {
+        let pdf = lopdf::Document::load_mem(bytes).unwrap();
+        pdf.get_pages()
+            .values()
+            .map(|id| {
+                let data = pdf.get_page_content(*id).unwrap();
+                let content = lopdf::content::Content::decode(&data).unwrap();
+                content
+                    .operations
+                    .iter()
+                    .filter(|operation| operation.operator == "Tj")
+                    .filter_map(|operation| {
+                        operation
+                            .operands
+                            .first()?
+                            .as_str()
+                            .ok()
+                            .map(|text| text.to_vec())
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn list_marker_moves_with_its_text_and_oversized_blocks_use_the_first_page() {
+        let mut generator = PdfGenerator::new("List", "freewrite").unwrap();
+        generator.write_styled_line(
+            &[StyledSegment {
+                text: "Previous paragraph".into(),
+                style: TextStyle::default(),
+            }],
+            FW_MARGIN_LEFT,
+            FW_BODY_SIZE,
+            FW_BODY_LINE_HEIGHT,
+        );
+        generator.y_position = MARGIN_BOTTOM + FW_BODY_LINE_HEIGHT * 2.0;
+        let node: DocumentNode =
+            serde_json::from_str(&text_node("numberedItem", &vec!["word"; 50].join(" "))).unwrap();
+        generator.render_freewrite_node(&node, 1);
+        let pages = page_texts(&generator.doc.save_to_bytes().unwrap());
+        assert_eq!(pages.len(), 2);
+        assert!(pages[0].iter().any(|text| text == b"Previous paragraph"));
+        assert!(!pages[0].iter().any(|text| text == b"1."));
+        assert!(pages[1].iter().any(|text| text == b"1."));
+        assert!(pages[1].iter().any(|text| text.starts_with(b"word")));
+
+        let mut generator = PdfGenerator::new("Long dialogue", "screenplay").unwrap();
+        let content: ScreenplayContent = serde_json::from_str(&format!(
+            r#"{{"type":"doc","content":[{},{}]}}"#,
+            text_node("character", "JANE"),
+            text_node("dialogue", &vec!["word"; 1000].join(" "))
+        ))
+        .unwrap();
+        generator.render_content(&content, "screenplay");
+        let pages = page_texts(&generator.doc.save_to_bytes().unwrap());
+        assert!(pages.len() > 1);
+        assert!(pages[0].iter().any(|text| text == b"JANE"));
+        assert!(pages[0].iter().any(|text| text.starts_with(b"word")));
+    }
+
+    #[test]
+    fn page_sized_blocks_do_not_create_empty_pages_and_scene_numbers_stay_attached() {
+        let mut generator = PdfGenerator::new("Full page", "screenplay").unwrap();
+        let node: DocumentNode =
+            serde_json::from_str(&text_node("action", &"a".repeat(60 * 54))).unwrap();
+        generator.render_node(&node, &[], "screenplay");
+        assert_eq!(generator.page_number, 1);
+        assert_eq!(generator.y_position, MARGIN_BOTTOM);
+
+        let mut generator = PdfGenerator::new("Numbered scene", "screenplay").unwrap();
+        generator.write_line("Previous scene", 0.0);
+        generator.y_position = MARGIN_BOTTOM + LINE_HEIGHT * 8.0;
+        let node: DocumentNode =
+            serde_json::from_str(&numbered_scene_node(&vec!["word"; 600].join(" "), 12)).unwrap();
+        let following: DocumentNode =
+            serde_json::from_str(&text_node("action", &vec!["word"; 600].join(" "))).unwrap();
+        generator.render_node(&node, &[following], "screenplay");
+        let pages = page_texts(&generator.doc.save_to_bytes().unwrap());
+        assert_eq!(pages.len(), 2);
+        assert!(!pages[0].iter().any(|text| text == b"12"));
+        assert_eq!(
+            pages[1]
+                .iter()
+                .filter(|text| text.as_slice() == b"12")
+                .count(),
+            2
+        );
+        assert!(pages[1].iter().any(|text| text.starts_with(b"WORD")));
+    }
+
+    #[test]
+    fn collection_selection_uses_identical_metrics_and_embedded_face() {
+        let path = std::env::temp_dir().join(format!(
+            "grainery-fixture-{}-{}.ttc",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&path, font_data::tests::collection()).unwrap();
+        let variants = vec![
+            fonts::SystemFontVariant {
+                name: "Regular".into(),
+                weight: 400,
+                style: "normal",
+                path: path.clone(),
+                face_index: 0,
+            },
+            fonts::SystemFontVariant {
+                name: "Bold".into(),
+                weight: 700,
+                style: "normal",
+                path: path.clone(),
+                face_index: 1,
+            },
+        ];
+        let mut generator = PdfGenerator::new("Selected face", "screenplay").unwrap();
+        generator.font_catalog = Some(vec![fonts::SystemFontFamily {
+            name: "Fixture".into(),
+            variants,
+        }]);
+        let style = TextStyle {
+            font_family: Some("Fixture".into()),
+            bold: true,
+            ..TextStyle::default()
+        };
+        assert!((generator.glyph_width_pt('a', &style, 12.0) - 10.8).abs() < 0.001);
+        generator.write_styled_line(
+            &[StyledSegment {
+                text: "a".into(),
+                style,
+            }],
+            MARGIN_LEFT,
+            FONT_SIZE,
+            LINE_HEIGHT,
+        );
+        assert_eq!(generator.external_fonts.len(), 1);
+        let bytes = generator.doc.save_to_bytes().unwrap();
+        let pdf = lopdf::Document::load_mem(&bytes).unwrap();
+        let embedded = pdf
+            .objects
+            .values()
+            .filter_map(|object| object.as_stream().ok())
+            .find(|stream| stream.content.starts_with(&0x00010000u32.to_be_bytes()))
+            .unwrap();
+        let face = owned_ttf_parser::Face::parse(&embedded.content, 0).unwrap();
+        assert_eq!(face.weight().to_number(), 700);
+        assert_eq!(
+            face.glyph_hor_advance(face.glyph_index('a').unwrap()),
+            Some(900)
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn malformed_custom_fonts_cache_one_consistent_fallback() {
+        let path = std::env::temp_dir().join(format!(
+            "grainery-malformed-font-{}.ttf",
+            std::process::id()
+        ));
+        std::fs::write(&path, b"not a font").unwrap();
+        let mut generator = PdfGenerator::new("Fallback", "screenplay").unwrap();
+        generator.font_catalog = Some(vec![fonts::SystemFontFamily {
+            name: "Broken".into(),
+            variants: vec![fonts::SystemFontVariant {
+                name: "Regular".into(),
+                weight: 400,
+                style: "normal",
+                path: path.clone(),
+                face_index: 0,
+            }],
+        }]);
+        let style = TextStyle {
+            font_family: Some("Broken".into()),
+            ..TextStyle::default()
+        };
+        for _ in 0..2 {
+            generator.font_for(&style);
+            assert!(
+                (generator.glyph_width_pt('W', &style, 12.0)
+                    - helvetica_width_units('W', false) as f32 * 0.012)
+                    .abs()
+                    < 0.001
+            );
+        }
+        assert_eq!(generator.external_fonts.len(), 1);
+        assert!(generator.external_fonts.values().next().unwrap().is_none());
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

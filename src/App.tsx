@@ -35,6 +35,8 @@ import {
   relaunchApp,
   shouldRunStartupUpdateCheck,
 } from './lib/appUpdates';
+import { SaveFlow } from './lib/saveFlow';
+import { createFileOpenDrain } from './lib/fileOpen';
 import { getRecentFiles, removeRecentFile } from './lib/recentFiles';
 import {
   getDocumentSanitizationWarning,
@@ -250,7 +252,7 @@ function getErrorMessage(error: unknown): string {
 
 function App() {
   const [view, setView] = useState<'start' | 'editor'>('start');
-  const [document, setDocument] = useState<ScreenplayDocument>(createNewDocument);
+  const [document, setDocumentState] = useState<ScreenplayDocument>(createNewDocument);
   const [isDirty, setIsDirty] = useState(false);
   const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>(() => getRecentFiles());
   const [startScreenError, setStartScreenError] = useState<string | null>(null);
@@ -282,6 +284,13 @@ function App() {
 
   const editorRef = useRef<Editor | null>(null);
   const editorContentRef = useRef<JSONContent>(document.document);
+  const documentRef = useRef(document);
+  const saveFlowRef = useRef(new SaveFlow());
+  const setDocument = useCallback((next: ScreenplayDocument | ((previous: ScreenplayDocument) => ScreenplayDocument)) => {
+    const value = typeof next === 'function' ? next(documentRef.current) : next;
+    documentRef.current = value;
+    setDocumentState(value);
+  }, []);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const performAutoSaveRef = useRef<() => Promise<void>>(async () => undefined);
   const pluginDataRef = useRef<Record<string, unknown>>(document.pluginData ?? {});
@@ -336,6 +345,8 @@ function App() {
 
   const setPluginDataFromPlugin = useCallback(
     (pluginId: string, value: unknown) => {
+      saveFlowRef.current.changed();
+      isDirtyRef.current = true;
       setDocument((prev) => {
         const nextPluginData = { ...(prev.pluginData ?? {}) };
         if (value === null) {
@@ -356,8 +367,8 @@ function App() {
         };
       });
 
+      setIsDirty(true);
       if (!isDirty) {
-        setIsDirty(true);
         void updateWindowTitle(document.meta.filename, true);
       }
 
@@ -369,6 +380,8 @@ function App() {
 
   const applyDocumentFromPlugin = useCallback(
     (next: JSONContent) => {
+      saveFlowRef.current.changed();
+      isDirtyRef.current = true;
       const sanitized = sanitizeEditorDocument(next, document.documentMode);
       const editor = editorRef.current;
       const currentSelection = editor?.state.selection;
@@ -407,8 +420,8 @@ function App() {
         },
       }));
 
+      setIsDirty(true);
       if (!isDirty) {
-        setIsDirty(true);
         void updateWindowTitle(document.meta.filename, true);
       }
 
@@ -661,14 +674,14 @@ function App() {
     async (hook: 'post-open' | 'pre-save' | 'pre-export', content: JSONContent) => {
       try {
         return await pluginManager.runDocumentTransforms(hook, content, {
-          filename: document.meta.filename,
+          filename: documentRef.current.meta.filename,
         });
       } catch (error) {
         console.error(`[Plugins] Transform hook failed (${hook})`, error);
         return content;
       }
     },
-    [document.meta.filename, pluginManager]
+    [pluginManager]
   );
 
   const refreshRecentFiles = useCallback(() => {
@@ -699,6 +712,8 @@ function App() {
 
   const openDocumentInEditor = useCallback(
     async ({ doc, report }: PreparedDocument) => {
+      saveFlowRef.current.opened();
+      isDirtyRef.current = false;
       setDocument(doc);
       editorContentRef.current = doc.document;
       setIsDirty(false);
@@ -747,33 +762,59 @@ function App() {
     [openDocumentInEditor, prepareDocumentForEditor]
   );
 
-  const performAutoSave = useCallback(async () => {
-    if (!isDirty) return;
+  const persistCurrentDocument = useCallback((saveAs = false, automatic = false): Promise<boolean> => {
+    const requested = saveFlowRef.current.snapshot(documentRef.current.meta.id);
+    return saveFlowRef.current.enqueue(async () => {
+      if (!saveFlowRef.current.isSameDocument(requested, documentRef.current.meta.id)) return false;
+      const snapshot = saveFlowRef.current.snapshot(requested.documentId);
+      const current = documentRef.current;
+      const content = editorContentRef.current;
+      clearQueuedAutoSave();
 
-    try {
-      const transformed = await runTransformHook('pre-save', editorContentRef.current);
-      editorContentRef.current = transformed;
+      try {
+        const transformed = await runTransformHook('pre-save', content);
+        const savedDoc = await (saveAs ? saveFileAs : saveFile)(current, transformed);
+        if (!savedDoc || !saveFlowRef.current.isSameDocument(snapshot, documentRef.current.meta.id)) return false;
 
-      const savedDoc = await saveFile(document, transformed);
-      if (savedDoc) {
-        setDocument(savedDoc);
-        setIsDirty(false);
-        await updateWindowTitle(savedDoc.meta.filename);
+        const unchanged = saveFlowRef.current.isCurrent(snapshot, documentRef.current.meta.id);
+        // Save As still adopts its path when edits arrived while the dialog/write was pending.
+        setDocument(unchanged ? savedDoc : {
+          ...documentRef.current,
+          meta: { ...documentRef.current.meta, filename: savedDoc.meta.filename, filePath: savedDoc.meta.filePath },
+        });
+        if (unchanged) editorContentRef.current = savedDoc.document;
+        isDirtyRef.current = !unchanged;
+        setIsDirty(!unchanged);
+        refreshRecentFiles();
+        await updateWindowTitle(savedDoc.meta.filename, !unchanged);
+        if (!unchanged) queueAutoSave();
+        return unchanged && saveFlowRef.current.isCurrent(snapshot, documentRef.current.meta.id);
+      } catch (error) {
+        console.error('Failed to save file:', error);
+        if (!automatic) {
+          await messageDialog(`Failed to save file. ${getErrorMessage(error)}`, {
+            title: 'Save Failed', kind: 'error',
+          });
+        }
+        return false;
       }
-    } catch (error) {
-      console.error('Auto-save failed:', error);
-    }
-  }, [document, isDirty, runTransformHook]);
+    });
+  }, [clearQueuedAutoSave, queueAutoSave, refreshRecentFiles, runTransformHook, setDocument]);
 
+  const performAutoSave = useCallback(async () => {
+    if (isDirtyRef.current) await persistCurrentDocument(false, true);
+  }, [persistCurrentDocument]);
   useEffect(() => {
     performAutoSaveRef.current = performAutoSave;
   }, [performAutoSave]);
 
   const handleEditorChange = useCallback(
     (content: JSONContent) => {
+      saveFlowRef.current.changed();
+      isDirtyRef.current = true;
       editorContentRef.current = content;
+      setIsDirty(true);
       if (!isDirty) {
-        setIsDirty(true);
         void updateWindowTitle(document.meta.filename, true);
       }
 
@@ -908,42 +949,12 @@ function App() {
   );
 
   const handleSave = useCallback(async () => {
-    try {
-      const transformed = await runTransformHook('pre-save', editorContentRef.current);
-      editorContentRef.current = transformed;
+    await persistCurrentDocument();
+  }, [persistCurrentDocument]);
 
-      const savedDoc = await saveFile(document, transformed);
-      if (savedDoc) {
-        setDocument(savedDoc);
-        setIsDirty(false);
-        refreshRecentFiles();
-        await updateWindowTitle(savedDoc.meta.filename);
-      }
-    } catch (error) {
-      console.error('Failed to save file:', error);
-    }
-  }, [document, refreshRecentFiles, runTransformHook]);
-
-  const saveCurrentDocument = useCallback(async (): Promise<boolean> => {
-    try {
-      const transformed = await runTransformHook('pre-save', editorContentRef.current);
-      editorContentRef.current = transformed;
-
-      const savedDoc = await saveFile(document, transformed);
-      if (!savedDoc) {
-        return false;
-      }
-
-      setDocument(savedDoc);
-      setIsDirty(false);
-      refreshRecentFiles();
-      await updateWindowTitle(savedDoc.meta.filename);
-      return true;
-    } catch (error) {
-      console.error('Failed to save file:', error);
-      return false;
-    }
-  }, [document, refreshRecentFiles, runTransformHook]);
+  const saveCurrentDocument = useCallback((): Promise<boolean> => {
+    return persistCurrentDocument();
+  }, [persistCurrentDocument]);
 
   const handleNew = useCallback(async (documentMode: DocumentMode = 'screenplay') => {
     if (view === 'editor' && isDirty) {
@@ -975,6 +986,8 @@ function App() {
     }
 
     const nextDoc = createNewDocument(documentMode);
+    saveFlowRef.current.opened();
+    isDirtyRef.current = false;
     editorContentRef.current = nextDoc.document;
     clearQueuedAutoSave();
     editorRef.current = null;
@@ -1139,21 +1152,8 @@ function App() {
   }, []);
 
   const handleSaveAs = useCallback(async () => {
-    try {
-      const transformed = await runTransformHook('pre-save', editorContentRef.current);
-      editorContentRef.current = transformed;
-
-      const savedDoc = await saveFileAs(document, transformed);
-      if (savedDoc) {
-        setDocument(savedDoc);
-        setIsDirty(false);
-        refreshRecentFiles();
-        await updateWindowTitle(savedDoc.meta.filename);
-      }
-    } catch (error) {
-      console.error('Failed to save file:', error);
-    }
-  }, [document, refreshRecentFiles, runTransformHook]);
+    await persistCurrentDocument(true);
+  }, [persistCurrentDocument]);
 
   const handleExportFountain = useCallback(async () => {
     if (document.documentMode !== 'screenplay') {
@@ -1366,12 +1366,15 @@ function App() {
   }, [handleFind, handleFindNext, handleFindPrevious, handleReplace]);
 
   const handleSaveTitlePage = useCallback((titlePage: TitlePageData | null) => {
+    saveFlowRef.current.changed();
+    isDirtyRef.current = true;
     setDocument((prev) => ({
       ...prev,
       titlePage,
     }));
     setIsDirty(true);
-  }, []);
+    queueAutoSave();
+  }, [queueAutoSave, setDocument]);
 
   useEffect(() => {
     pluginManager.updateDocumentAccess({
@@ -1685,44 +1688,34 @@ function App() {
     };
   }, [queuePluginInstallRequest]);
 
-  // Open files when the app is launched via file association / OS open-file events.
+  // Keep one queue consumer even when document callbacks change.
+  const incomingOpenRef = useRef(openPathIntoEditor);
+  incomingOpenRef.current = openPathIntoEditor;
   useEffect(() => {
-    const openIncomingPaths = async (paths: string[]) => {
-      const firstPath = paths.find((path) => typeof path === 'string' && path.length > 0);
-      if (!firstPath) {
-        return;
-      }
-
-      await openPathIntoEditor(firstPath, {
-        confirmIfDirty: true,
-        errorPrefix: 'Failed to open file.',
-        showStartError: true,
-      });
-    };
-
-    const unlisten = listen<string[]>('app-open-file', (event) => {
-      if (!Array.isArray(event.payload)) {
-        return;
-      }
-
-      void openIncomingPaths(event.payload);
-    });
-
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    const drain = createFileOpenDrain(
+      () => disposed ? Promise.resolve([]) : invoke<string[]>('consume_pending_open_files'),
+      (path) => incomingOpenRef.current(path, {
+        confirmIfDirty: true, errorPrefix: 'Failed to open file.', showStartError: true,
+      })
+    );
     void (async () => {
       try {
-        const pending = await invoke<string[]>('consume_pending_open_files');
-        await openIncomingPaths(Array.isArray(pending) ? pending : []);
+        const unlisten = await listen('app-open-file', () => {
+          void drain().catch((error) => console.error('Failed to open incoming file:', error));
+        });
+        if (disposed) { unlisten(); return; }
+        stop = unlisten;
+        await drain();
       } catch (error) {
-        console.error('Failed to consume pending open files:', error);
+        console.error('Failed to initialize incoming files:', error);
       } finally {
-        setIsResolvingInitialOpen(false);
+        if (!disposed) setIsResolvingInitialOpen(false);
       }
     })();
-
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
-  }, [openPathIntoEditor]);
+    return () => { disposed = true; stop?.(); };
+  }, []);
 
   return (
     <ThemeProvider>

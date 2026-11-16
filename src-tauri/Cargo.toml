@@ -1,8 +1,8 @@
 [package]
 name = "grainery"
 version = "1.6.7"
-description = "A Tauri App"
-authors = ["you"]
+description = "A minimal screenwriting app for drafting and exporting screenplays"
+authors = ["Jay Renteria"]
 license = "MIT"
 edition = "2021"
 
@@ -43,7 +43,3 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 [target."cfg(target_os = \"linux\")".dependencies]
 # This feature also enables Linux tar updates; Windows uses signed EXE/MSI installers.
 tauri-plugin-updater = { version = "2.10.1", default-features = false, features = ["zip"] }
-
-[target."cfg(target_os = \"macos\")".dependencies]
-cocoa = "0.26"
-objc = "0.2"

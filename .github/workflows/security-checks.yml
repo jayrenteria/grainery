@@ -43,6 +43,8 @@ jobs:
           node-version: '22'
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -51,5 +53,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: node --test test/native/updater-features.test.mjs
       - run: npm run build
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
       - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - run: npm run tauri -- build --debug --no-bundle --ci -- --locked

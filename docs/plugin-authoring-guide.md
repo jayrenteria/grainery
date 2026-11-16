@@ -1,5 +1,19 @@
 # Grainery Plugin Authoring Guide
 
+## Brokered network limits
+
+Plugin `network:get_json` and `network:get_text` requests require a granted
+`network:https` permission. The initial URL and every redirect must use HTTPS,
+contain no URL credentials, and have an exact host in `networkAllowlist`.
+Requests allow at most five redirects, with a 10-second connection timeout,
+a 30-second total timeout (including the body), and a 1 MiB response limit.
+Redirect loops, unsuccessful HTTP statuses, and oversized chunked bodies fail.
+
+These restrictions apply to the Rust host-call broker. Plugin Web Workers still
+have browser networking APIs under the current Content Security Policy; worker
+isolation is not a complete malicious-plugin network sandbox.
+
+
 This guide is for developers building plugins for Grainery.
 
 If you want deep internals, read `docs/plugin-system.md`.  
@@ -453,6 +467,7 @@ Before sharing a plugin:
 - Request the minimum permissions required.
 - Provide a clear `permissionRationales` entry for every optional permission.
 - Keep `networkAllowlist` as narrow as possible.
+- System font metadata does not guarantee PDF embedding support. PDF export supports TrueType collection faces and uses a measured Helvetica fallback for missing, malformed, or unsupported fonts; CFF embedding and variable-font instancing are not supported.
 - Handle malformed document content safely.
 - Avoid long-running handlers; return quickly.
 - Keep deterministic behavior for denied permissions.
