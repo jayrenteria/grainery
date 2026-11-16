@@ -124,6 +124,7 @@ fn system_font_directories() -> Vec<PathBuf> {
     directories
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn home_directory() -> Option<PathBuf> {
     env::var_os("HOME")
         .map(PathBuf::from)
